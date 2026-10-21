@@ -103,7 +103,7 @@ export type SpecialSelection =
   | Readonly<{ kind: "rotation"; order: readonly [Special, ...Special[]] }>
   | Readonly<{ kind: "replay"; order: readonly [Special, ...Special[]] }>;
 
-type UnclaimedOrbRule = Readonly<{ kind: "heals-boss"; afterHit: TickSpan }> | Readonly<{ kind: "off" }>;
+export type UnclaimedOrbRule = Readonly<{ kind: "heals-boss"; afterHit: TickSpan }> | Readonly<{ kind: "off" }>;
 type BossHealRecipe = Readonly<{ soulSplitAfterHit: Selected<TickSpan> }>;
 type RiftRecipe = Readonly<{ spawnBeforeOnset: Selected<TickSpan>; chargeAfterSpawn: Selected<TickSpan> }>;
 
@@ -288,6 +288,37 @@ const INNER_VOID_FLOOR = choice("one-tick-grace", {
   harmless: selected<FloorRule>({ kind: "harmless" }, "assumption", "unscaled", "no capture shows inner-void damage", vod("V2", "k48 to k49")),
 });
 
+export type OrbFloor = "safe-floor" | "any-floor";
+type OrbVisual = "innerSpawn" | "outerSpawn" | "idle" | "despawn" | "tell" | "regain";
+
+type LifeforceOrbRecipe = Readonly<{
+  drainDivisor: Selected<number>;
+  orbDistance: Selected<Readonly<{ min: number; max: number }>>;
+  innerOrbFloor: Selected<"safe-floor">;
+  returnAfterStep: Selected<TickSpan>;
+  look: Readonly<Record<OrbVisual, Selected<number>>>;
+  marker: Selected<Readonly<{ dormant: string; ready: string }>>;
+}>;
+
+const spotAnim = (id: number, name: string, basis: Basis, note: string): Selected<number> =>
+  selected(id, basis, "unscaled", note, cache(`spotanim ${id} ${name}`));
+
+const LIFEFORCE_ORB: LifeforceOrbRecipe = {
+  drainDivisor: selected(2, "footage-repeated", "team-4-and-5", "every player loses floor(current HP / 2); no overhead prayer reduces it", vod("V1", "G37 through Protect from Magic, G68 through Melee"), vod("V2", "k52 through Magic, k112 through Missiles"), STRATEGIES),
+  orbDistance: selected({ min: 2, max: 5 }, "footage-repeated", "team-4-and-5", "a dark orb 2 to 5 tiles from its player, never under the boss; with no allowed floor that close, the nearest allowed tiles, because the wiki puts the orb on a safe tile and no capture shows a player that far from one (inferred)", vod("V1", "G39"), vod("V2", "k53"), STRATEGIES),
+  innerOrbFloor: selected("safe-floor", "footage-repeated", "team-4-and-5", "inner orbs appear off the void", vod("V1", "G39"), vod("V2", "k53")),
+  returnAfterStep: selected(span(1), "footage-repeated", "team-4-and-5", "returns exactly the HP that hit took, the tick after the player steps on the orb, and can pass max HP (58 to 114)", vod("V2", "k67 then k68, k95 then k96"), vod("V1", "G51, G79")),
+  look: {
+    innerSpawn: spotAnim(4311, "vfx_ocellus_soul_fragment_spawn_12_ticks", "inferred", "inner orb from spawn to glow; 364 client cycles, about 12 ticks"),
+    outerSpawn: spotAnim(4309, "vfx_ocellus_soul_fragment_spawn_6_ticks", "inferred", "outer orb from spawn to glow; 182 client cycles, about 6 ticks"),
+    idle: spotAnim(4310, "soul_fragment_idle", "inferred", "the glowing orb, looped"),
+    despawn: spotAnim(4312, "soul_fragment_despawn", "inferred", "the orb leaving its tile"),
+    tell: spotAnim(4313, "soul_fragment_player_idle", "assumption", "played on the player at the lifeforce tell, where the footage shows a teal swirl; the spec pairs it with the pickup"),
+    regain: spotAnim(4314, "soul_fragment_player_regain", "inferred", "the fragment returning to the player"),
+  },
+  marker: selected({ dormant: "#20251e", ready: "#7cecb2" }, "footage-repeated", "team-5", "the 2D orb: median of the darkest fifth of the new orb and the brightest fifth of the glowing one", vod("V2", "k53"), vod("V2", "k64")),
+};
+
 const pose = (id: number, name: string, basis: Basis, note: string): Selected<number> =>
   selected(id, basis, "unscaled", note, cache(`seq ${id} ${name}`));
 
@@ -371,6 +402,7 @@ export const OCELLUS_P4 = {
   rifts: RIFTS,
   geometry: GEOMETRY,
   floor: FLOOR,
+  lifeforceOrb: LIFEFORCE_ORB,
   presentation: PRESENTATION,
   gear: GEAR,
   choices: {
@@ -419,10 +451,19 @@ export const OCELLUS_P4 = {
       "cycle-3": selected<Cycle>(cycle(3), "footage-once", "team-4", "none in view before cycle 2, two before cycle 3", vod("V1", "G90-G95, G152")),
     }),
     innerVoidFloor: INNER_VOID_FLOOR,
+    orbPickupRadius: choice("on-tile", {
+      "on-tile": selected(0, "footage-repeated", "team-5", "the streamer stands on the orb tile a tick before each heal (C9)", vod("V2", "k67, k95")),
+      adjacent: selected(1, "footage-once", "team-4", "pickups read from an adjacent tile, with about 1 tile of perspective error (C9)", vod("V1", "G51, G135, G175")),
+    }),
+    outerOrbTile: choice("safe-floor", {
+      "safe-floor": selected<OrbFloor>("safe-floor", "footage-repeated", "team-4", "outer orbs on the 5x5 edge, collected without leaving the square", vod("V1", "G74, G79, G128, G135")),
+      "any-floor": selected<OrbFloor>("any-floor", "footage-repeated", "team-5", "outer orbs 4 to 6 tiles south-west, outside the 5x5; the streamer crossed the flood for them and took 59 and 49 (F1, F2)", vod("V2", "k88 to k97"), vod("V2", "k149 to k158")),
+    }),
     focus: choice("full-fight", {
       "full-fight": selected<Focus>({ kind: "full-fight" }, "assumption", "unscaled", "every mechanic acts", PRACTICE),
       "void-floor": drill("void-floor"),
       "lifeforce-orb": drill("lifeforce-orb"),
+      "orb-retrieval": drill("lifeforce-orb", "void-floor"),
       explosions: drill("explosions"),
       "transition-attacks": drill("transition-attacks"),
       rifts: drill("rifts"),
@@ -474,6 +515,8 @@ function resolveChoices(lookup: (name: ChoiceName) => string | undefined, reject
     unclaimedOuterOrb: pick("unclaimedOuterOrb"),
     riftFirstCycle: pick("riftFirstCycle"),
     innerVoidFloor: pick("innerVoidFloor"),
+    orbPickupRadius: pick("orbPickupRadius"),
+    outerOrbTile: pick("outerOrbTile"),
     focus: pick("focus"),
   };
 }

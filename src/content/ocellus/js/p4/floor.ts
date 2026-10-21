@@ -56,15 +56,17 @@ const ring = (floor.squareSide.value - size) / 2;
 if (!Number.isInteger(ring) || ring < 0) throw new RangeError(`a ${floor.squareSide.value}-tile square cannot centre on a ${size}-tile boss`);
 
 // The SDK anchors a unit on its south-west tile and extends it east and north (lower y).
-const nearSquare = TileMask.area(tile(anchor.x - ring, anchor.y - size + 1 - ring), tile(anchor.x + size - 1 + ring, anchor.y + ring));
-const platform = TileMask.area(tile(0, 0), tile(geometry.placeholderArena.value.width - 1, geometry.placeholderArena.value.height - 1));
+const aroundBoss = (grow: number) => TileMask.area(tile(anchor.x - grow, anchor.y - size + 1 - grow), tile(anchor.x + size - 1 + grow, anchor.y + grow));
+const nearSquare = aroundBoss(ring);
+export const FOOTPRINT = aroundBoss(0);
+export const PLATFORM = TileMask.area(tile(0, 0), tile(geometry.placeholderArena.value.width - 1, geometry.placeholderArena.value.height - 1));
 
 function shaped(shape: FloorShape): TileMask {
   switch (shape) {
     case "near-square":
       return nearSquare;
     case "platform-minus-near-square":
-      return platform.minus(nearSquare);
+      return PLATFORM.minus(nearSquare);
     default: {
       const unhandled: never = shape;
       return unhandled;

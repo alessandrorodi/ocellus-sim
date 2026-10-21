@@ -5,7 +5,13 @@ import { tile } from "./P4Types";
 import type { CombatStream } from "./p4/roll";
 
 export class OcellusPlayer extends Player {
-  constructor(region: Region, location: Location, private readonly combat: CombatStream, private readonly report: (input: InputObservation) => void) {
+  constructor(
+    region: Region,
+    location: Location,
+    private readonly combat: CombatStream,
+    private readonly report: (input: InputObservation) => void,
+    private readonly settle: () => void,
+  ) {
     super(region, location);
   }
 
@@ -34,6 +40,11 @@ export class OcellusPlayer extends Player {
     super.pretick();
     const after = this.protection;
     if (after !== before) this.report({ kind: "prayer-published", prayer: after });
+  }
+
+  override postAttacksEvent(): void {
+    super.postAttacksEvent();
+    this.settle();
   }
 
   override attackStep(): void {

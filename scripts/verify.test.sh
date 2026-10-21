@@ -5,8 +5,8 @@ SCRIPT="$(cd "$(dirname "$0")" && pwd)/verify.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-eval "$(grep -E '^(DRILL_QUERY|BOSS_NPC|SPAWN_TILE|WALK_CLICK_RIGHT_PX|WALK_CLICK_DOWN_PX|WALK_TARGET_TILE|CYCLE_[A-Z_]+|FOCUS_[A-Z_]+|BOSS_CLICK_[A-Z_]+|RING_CLICK_[A-Z_]+|FLOOD_[A-Z_]+|NEAR_SQUARE|VOID_[A-Z_]+|LOADOUT_[A-Z_]+|CREDIT_LINE)=' "$SCRIPT")"
-for fn in json process_start serve state doctor stop probe fight_tick_at_least drive_lead_in drive_walk drive_flood_shot drive_cycle drive_focus drive_void_floor click_at click_inventory_slot drive_loadouts drive release_browser stage_browser; do
+eval "$(grep -E '^(DRILL_QUERY|BOSS_NPC|SPAWN_TILE|WALK_CLICK_RIGHT_PX|WALK_CLICK_DOWN_PX|WALK_TARGET_TILE|CYCLE_[A-Z_]+|FOCUS_[A-Z_]+|BOSS_CLICK_[A-Z_]+|RING_CLICK_[A-Z_]+|FLOOD_[A-Z_]+|NEAR_SQUARE|VOID_[A-Z_]+|ORB_[A-Z_]+|LOADOUT_[A-Z_]+|CREDIT_LINE)=' "$SCRIPT")"
+for fn in json process_start serve state doctor stop probe fight_tick_at_least drive_lead_in drive_walk drive_flood_shot drive_cycle drive_focus drive_void_floor drive_void_shot drive_lifeforce_orb click_at click_inventory_slot drive_loadouts drive release_browser stage_browser; do
   eval "$(sed -n "/^${fn}() {\$/,/^}\$/p" "$SCRIPT")"
 done
 
@@ -90,22 +90,33 @@ fixture_logs() {
     const overheads = { 8: "deflect-melee", 33: "soul-split", 39: "deflect-range", 61: "soul-split", 68: "deflect-melee" };
     const specials = { 37: "vortex", 65: "spike-disk" };
     const at = (x, y) => ({ tile: { x, y } });
+    const cycle = Array.from({ length: 71 }, (_, t) => ({
+      tick: t,
+      beats: specials[t] ? [{ kind: "special-hit", variant: specials[t] }] : [],
+      playerAtBossStep: t <= 40 ? at(13, 11) : t === 41 ? at(13, 9) : at(12, 7),
+      playerAtPostTick: t <= 39 ? at(13, 11) : t === 40 ? at(13, 9) : at(12, 7),
+      bossHp: { atBossStep: 1355, atPostTick: 1355 },
+      combatDraws: 0,
+      inputs: t === 40 ? [{ kind: "walk-ordered", destination: { x: 12, y: 7 } }] : [],
+      events: [
+        ...(stages[t] ? [{ kind: "stage-entered", at: t, stage: stages[t] }] : []),
+        ...(overheads[t] ? [{ kind: "overhead-switched", at: t, overhead: overheads[t] }] : []),
+      ],
+    }));
     const startOn = (t) => (t <= 47 ? at(13, 11) : t === 48 ? at(13, 9) : at(12, 7));
     const endOn = (t) => (t <= 46 ? at(13, 11) : t === 47 ? at(13, 9) : at(12, 7));
     const floodHits = { 44: 9, 45: 11, 46: 10, 47: 11, 48: 10, ...(fault === "ring-hit" ? { 50: 10 } : {}) };
     const launchTick = fault === "shot-from-the-ring" ? 50 : 45;
     const landingTick = fault === "no-ranged-landing" ? null : launchTick + 3;
-    const cycle = Array.from({ length: 71 }, (_, t) => ({
+    const shot = Array.from({ length: 59 }, (_, t) => ({
       tick: t,
-      beats: specials[t] ? [{ kind: "special-hit", variant: specials[t] }] : [],
+      beats: [],
       playerAtBossStep: startOn(t),
       playerAtPostTick: endOn(t),
       bossHp: landingTick === null ? { atBossStep: 1355, atPostTick: 1355 } : { atBossStep: t <= landingTick ? 1355 : 1298, atPostTick: t < landingTick ? 1355 : 1298 },
       combatDraws: t === launchTick ? 2 : 0,
       inputs: t === 47 ? [{ kind: "walk-ordered", destination: { x: 12, y: 7 } }] : [],
       events: [
-        ...(stages[t] ? [{ kind: "stage-entered", at: t, stage: stages[t] }] : []),
-        ...(overheads[t] ? [{ kind: "overhead-switched", at: t, overhead: overheads[t] }] : []),
         ...(t === landingTick ? [{ kind: "player-hit-judged", at: t, style: "ranged", outcome: "passed", requested: 57 }] : []),
         ...(floodHits[t] ? [{ kind: "floor-hit", at: t, tile: startOn(t).tile, receipt: { applied: floodHits[t] } }] : []),
       ],
@@ -126,20 +137,59 @@ fixture_logs() {
     write("cycle-log.json", "full-fight", cycle);
     write("focus-log.json", focus, focused);
     write("void-log.json", "void-floor", standing);
+    write("void-shot-log.json", "void-floor", shot);
+    const orbReturn = fault === "late-orb-return" ? 29 : 28;
+    const orbAt = (x, y, hp) => ({ tile: { x, y }, hp });
+    const orbEvents = {
+      11: [{ kind: "lifeforce-told", at: 11, void: "inner-void" }],
+      12: [{ kind: "lifeforce-drained", at: 12, void: "inner-void", receipt: { applied: 49, afterHp: 50 } }],
+      13: [{ kind: "orb-spawned", at: 13, void: "inner-void", tile: { x: 7, y: 9 }, credit: 49 }],
+      24: [{ kind: "orb-matured", at: 24, void: "inner-void", tile: { x: 7, y: 9 } }],
+      [orbReturn]: [{ kind: "orb-returned", at: orbReturn, void: "inner-void", receipt: { afterHp: 99, applied: 49, beforeHp: 50, requested: 49 } }],
+    };
+    const orb = Array.from({ length: 31 }, (_, t) => ({ tick: t, playerAtPostTick: t < 27 ? orbAt(10, 10, 99) : orbAt(7, 9, t < orbReturn ? 50 : 99), events: orbEvents[t] ?? [] }));
+    const skipEvents = {
+      30: [{ kind: "orb-expired", at: 30, void: "inner-void" }],
+      61: [{ kind: "orb-expired", at: 61, void: "outer-void" }],
+      62: fault === "no-boss-heal" ? [] : [{ kind: "boss-healed", at: 62, cause: { kind: "unclaimed-orb" }, receipt: { afterHp: 1380, applied: 25, beforeHp: 1355, requested: 25 } }],
+    };
+    const skip = Array.from({ length: 64 }, (_, t) => ({ tick: t, playerAtPostTick: orbAt(10, 10, 99), events: skipEvents[t] ?? [] }));
+    write("orb-log.json", "lifeforce-orb", orb);
+    write("orb-skip-log.json", "lifeforce-orb", skip);
   ' "$T" "$inner_void_tick" "$focus" "$fault"
 }
 
 fixture_png() {
   command node -e '
-    const [file, voidPercent] = process.argv.slice(1);
+    const [file, voidPercent, boxTealPercent, outsideTealPercent, orbX, orbY, orbBox] = process.argv.slice(1);
     const zlib = require("zlib");
     const crc = (buf) => { let c = ~0; for (const b of buf) { c ^= b; for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xedb88320 : c >>> 1; } return ~c >>> 0; };
     const chunk = (type, data) => { const head = Buffer.alloc(8), tail = Buffer.alloc(4); head.writeUInt32BE(data.length); head.write(type, 4); tail.writeUInt32BE(crc(Buffer.concat([Buffer.from(type), data]))); return Buffer.concat([head, data, tail]); };
-    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(10, 0); ihdr.writeUInt32BE(10, 4); ihdr[8] = 8; ihdr[9] = 2;
-    const rows = Array.from({ length: 10 }, (_, y) => Buffer.from([0, ...Array.from({ length: 10 }, (_, x) => (y * 10 + x < Number(voidPercent) ? [0x1e, 0x25, 0x29] : [0x68, 0x60, 0x58])).flat()]));
-    require("fs").writeFileSync(file, Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(Buffer.concat(rows))), chunk("IEND", Buffer.alloc(0))]));
-  ' "$1" "$2"
+    const [width, height] = [1280, 800];
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4); ihdr[8] = 8; ihdr[9] = 2;
+    const offset = JSON.parse(orbBox);
+    const box = { minX: Number(orbX) + offset.minX, maxX: Number(orbX) + offset.maxX, minY: Number(orbY) + offset.minY, maxY: Number(orbY) + offset.maxY };
+    const left = {
+      void: (width * height * Number(voidPercent)) / 100,
+      box: ((box.maxX - box.minX + 1) * (box.maxY - box.minY + 1) * Number(boxTealPercent)) / 100,
+      outside: (width * height * Number(outsideTealPercent)) / 100,
+    };
+    const [VOID, TEAL, FLOOR] = [[0x1e, 0x25, 0x29], [0x7c, 0xec, 0xb2], [0x68, 0x60, 0x58]];
+    const colour = (x, y) => {
+      if (left.void-- > 0) return VOID;
+      const inBox = x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY;
+      return (inBox ? left.box-- : left.outside--) > 0 ? TEAL : FLOOR;
+    };
+    const raw = Buffer.alloc(height * (1 + width * 3));
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) raw.set(colour(x, y), y * (1 + width * 3) + 1 + x * 3);
+    require("fs").writeFileSync(file, Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]));
+  ' "$1" "$2" "${3:-0}" "${4:-0}" "$((1280 / 2 - ORB_CLICK_LEFT_PX))" "$((800 / 2 - ORB_CLICK_UP_PX))" "$ORB_BOX"
 }
+
+OK_DORMANT_TEAL=(0 2.3 0.4 0 0 0)
+OK_GLOW_TEAL=(2.4 11.1 12.7 12.9 14.4 9.2)
+NOORB_DORMANT_TEAL=(0 0 0 0 0 0.2)
+NOORB_GLOW_TEAL=(3.5 4 3.4 3.1 2.9 2.5)
 
 loadout_snapshot() {
   local n worn="$LOADOUT_RANGED_WORN" energy=100 defence=250
@@ -175,25 +225,37 @@ fake_browser() {
         echo "$n" >"$T/evals"
         [[ "$n" -ne 1 ]] || tick=6
         [[ "$n" -lt 3 ]] || { tile="$FINAL_TILE"; tick=12; fight="$PRESENT_FIGHT"; }
+        [[ "$(cat "$T/restarts" 2>/dev/null || echo 0)" -lt 3 ]] || tile='{"x":7,"y":9}'
         printf '{"data":{"result":{"ticking":true,"tick":%s,"player":%s,"destination":%s,"fight":%s}}}\n' "$tick" "$tile" "$tile" "$fight"
         ;;
       "--json eval window.__archiveOcellusProbe.log()")
+        [[ ! -e "$T/orb-skip" ]] || { cat "$T/orb-skip-log.json"; return; }
         case "$(cat "$T/restarts" 2>/dev/null || echo 0)" in
           0) cat "$T/cycle-log.json" ;;
           1) cat "$T/focus-log.json" ;;
-          *) cat "$T/void-log.json" ;;
+          2) if [[ -e "$T/void-shot" ]]; then cat "$T/void-shot-log.json"; else cat "$T/void-log.json"; fi ;;
+          *) cat "$T/orb-log.json" ;;
         esac
         ;;
+      "open "*"focus=${VOID_DRILL}") : >"$T/void-shot" ;;
+      "open "*"focus=${ORB_DRILL}") : >"$T/orb-skip" ;;
       "click #restart") echo $(($(cat "$T/restarts" 2>/dev/null || echo 0) + 1)) >"$T/restarts" ;;
       "--json get text "*) printf '{"data":{"text":"%s"}}\n' "$CREDIT_LINE" ;;
       "--json is visible "*) echo '{"data":{"visible":true}}' ;;
       "--json get box "*) echo '{"data":{"x":0,"y":0,"width":1280,"height":800}}' ;;
       "--json errors") echo '{"data":{"errors":[]}}' ;;
       "screenshot "*)
-        case "$SCREENSHOT:$(basename "$2")" in
-          ok:void-flood.png | ok:flood-ring.png) fixture_png "$2" 60 ;;
-          ok:void-inner.png) fixture_png "$2" 2 ;;
-          ok:* | novoid:*) fixture_png "$2" 0 ;;
+        local name frame
+        name="$(basename "$2")"
+        frame="${name//[^0-9]/}"
+        case "$SCREENSHOT:$name" in
+          ok:void-flood.png | ok:flood-ring.png | noorb:void-flood.png | noorb:flood-ring.png) fixture_png "$2" 60 ;;
+          ok:void-inner.png | noorb:void-inner.png) fixture_png "$2" 2 ;;
+          ok:orb-dormant-*) fixture_png "$2" 0 "${OK_DORMANT_TEAL[frame - 1]}" ;;
+          ok:orb-glow-*) fixture_png "$2" 0 "${OK_GLOW_TEAL[frame - 1]}" ;;
+          noorb:orb-dormant-*) fixture_png "$2" 0 "${NOORB_DORMANT_TEAL[frame - 1]}" ;;
+          noorb:orb-glow-*) fixture_png "$2" 0 "${NOORB_GLOW_TEAL[frame - 1]}" 1 ;;
+          ok:* | novoid:* | noorb:*) fixture_png "$2" 0 ;;
           fail:*) return 1 ;;
         esac
         ;;
@@ -283,6 +345,27 @@ void_not_drawn_fails() {
   grep -q '"innerVoidDrawn": false' "$T/drive.log" || { echo "the inner drawing check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
+orb_returned_a_tick_late_fails() {
+  setup
+  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' late-orb-return
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the orb returned two ticks after it was ready"; return 1; fi
+  grep -q '"orbReturnedTickAfterArrival": false' "$T/drive.log" || { echo "the return check did not name the failure"; cat "$T/drive.log"; return 1; }
+}
+
+skipped_orb_without_boss_heal_fails() {
+  setup
+  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' no-boss-heal
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the skipped outer orb never healed the boss"; return 1; fi
+  grep -q '"skippedOrbHealsBoss": false' "$T/drive.log" || { echo "the heal check did not name the failure"; cat "$T/drive.log"; return 1; }
+}
+
+orb_glow_not_drawn_fails() {
+  setup
+  fake_browser '{"x":13,"y":11}' noorb
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the orb kept its dormant look and the new teal was elsewhere on screen"; return 1; fi
+  grep -q '"orbGlowDrawn": false' "$T/drive.log" || { echo "the orb drawing check did not name the failure"; cat "$T/drive.log"; return 1; }
+}
+
 boss_never_drawn_fails() {
   setup
   fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '{"run":{"kind":"running","tick":70},"boss":{"npcId":16677,"visible":false}}'
@@ -334,6 +417,9 @@ for t in \
   ranged_shot_from_the_ring_fails \
   void_not_drawn_fails \
   boss_never_drawn_fails \
+  orb_returned_a_tick_late_fails \
+  skipped_orb_without_boss_heal_fails \
+  orb_glow_not_drawn_fails \
   loadout_not_switched_fails \
   division_not_spent_fails \
   division_extra_drains_fail; do

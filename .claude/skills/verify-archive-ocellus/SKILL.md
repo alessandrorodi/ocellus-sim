@@ -72,18 +72,23 @@ Each run writes to `.verify/<UTC timestamp>/` (gitignored; override with `VERIFY
 | `after.json`, `after.png` | State and screenshot after the walk |
 | `console.log`, `page-errors.json` | Browser console and uncaught page errors of the first page |
 | `boss.png` | The default 3D view once the boss is present (P4 tick 12 or later) |
-| `attack-click.json`, `ring-click.json`, `flood-ring.png` | Canvas pixels of the boss click from the flood at P4 tick 44 and of the ring click after the bow fires, and the screen at tick 52 with the player in the safe ring |
+| `cycle-ring-click.json` | Canvas pixel of the click at P4 tick 39 that walks the player into the ring before the flood |
 | `cycle-snapshot.json`, `cycle.json` | Probe snapshot and fight log once P4 tick 70 has run |
 | `focus.json`, `focus.png` | Fight log and screen after the focus control reloaded the drill on `transition-attacks` |
 | `focus-console.log`, `focus-page-errors.json` | Console and page errors of the reloaded page |
 | `void-inner.png`, `void-flood.png`, `void-floor.json` | The `void-floor` drill reloaded with the player standing on spawn: the inner square at P4 tick 12, the flood at 45, and the fight log once the flood has killed the player |
 | `void-console.log`, `void-page-errors.json` | Console and page errors of the `void-floor` page |
+| `attack-click.json`, `ring-click.json`, `flood-ring.png`, `void-shot.json` | The `void-floor` drill reloaded with the player walked to (13, 11): canvas pixels of the boss click from the flood at P4 tick 44 and of the ring click after the bow fires, the screen at tick 52 with the player in the safe ring, and the fight log at tick 58 |
+| `void-shot-console.log`, `void-shot-page-errors.json` | Console and page errors of the reloaded `void-floor` page |
+| `orb-hit.png`, `orb-dormant-1.png` to `orb-dormant-6.png`, `orb-glow-1.png` to `orb-glow-6.png`, `orb-click.json`, `orb.json` | The `lifeforce-orb` drill with the player on spawn: the screen at the lifeforce hit, six frames of the dormant orb from P4 tick 20, six of the glowing orb from tick 24, the click on the orb's tile after them with the pixel and the snapshot it set, and the fight log once the HP came back |
+| `orb-skip.png`, `orb-skip.json` | The same drill reloaded with no input: the screen and fight log at tick 63, after the unclaimed outer orb healed the boss |
+| `orb-console.log`, `orb-page-errors.json`, `orb-skip-console.log`, `orb-skip-page-errors.json` | Console and page errors of both orb pages |
 | `loadout-before.json`, `loadout-ranged.png` | Fight snapshot and screen of `?seed=1&setup=ranged` with the inventory tab open |
 | `loadout-after.json`, `loadout-melee.png` | Snapshot and screen after clicking the nine switches |
 | `loadout-spec.json`, `loadout-spec.png` | Snapshot and screen after Division on the boss |
 | `loadout-console.log`, `loadout-page-errors.json` | Console and page errors of the loadout page |
 | `loadout-selector.json`, `loadout-selector-page-errors.json` | Snapshot and page errors after the setup control reloaded the drill on `melee` |
-| `observed.json` | Lead-in, before and after state, the cycle's stage, overhead and transition attack ticks, the focused beats, the bow shot across the flood, the floor hits, the void pixel shares, the worn setups, special energy and boss Defence, and each check's result |
+| `observed.json` | Lead-in, before and after state, the cycle's stage, overhead and transition attack ticks, the focused beats, the bow shot across the flood, the floor hits, the void pixel shares, the orb events and teal shares, the worn setups, special energy and boss Defence, and each check's result |
 | `cleanup.log` | Confirmation that the recorded PID stopped |
 
 A browser proof captures the action and the resulting state, not only the last screen. A test count of zero fails the `test` stage. A page error fails the `browser` stage, and so does a failed or empty screenshot, state, console or page-error capture.
@@ -105,4 +110,4 @@ scripts/verify.sh stop
 - `scripts/verify.test.sh`: browser-free checks of `verify.sh` itself, with the dev server and agent-browser stubbed. Run it after changing `verify.sh`; CI runs it too.
 - `scripts/install-beta-sdk.sh`: installs the beta SDK packages with `--no-save`. CI calls it without `OSRS_SDK_PACKS`, so it builds from the pinned commit.
 
-The `assets` stage skips extraction when `public/osrs-assets/manifest.json` already contains `npc-16677` and a player model for every item the asset config declares, from `openrs2:2746`. The boss's P4 poses come from the presentation recipe in `OcellusTimings.ts`; a pose added there is extracted on the next rebuild. The trainer's gear item ids come from the gear recipe in the same file. Delete `public/osrs-assets/` to force a rebuild. Extracted assets are never committed.
+The `assets` stage skips extraction when `public/osrs-assets/manifest.json` already contains `npc-16677`, a player model for every item the asset config declares and every spotanim it declares, from `openrs2:2746`. The boss's P4 poses come from the presentation recipe in `OcellusTimings.ts`; a pose added there is extracted on the next rebuild. The trainer's gear item ids come from the gear recipe in the same file, and the orb spotanims from its `lifeforceOrb.look`. Delete `public/osrs-assets/` to force a rebuild. Extracted assets are never committed.

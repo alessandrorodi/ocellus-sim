@@ -94,6 +94,8 @@ export type IncomingStyle = Style | "typeless";
 export type RunEnd = "kill" | "death";
 
 export type HitReceipt = Readonly<{ requested: number; applied: number; beforeHp: number; afterHp: number; prayer: Style | null }>;
+export type HealReceipt = Readonly<{ requested: number; applied: number; beforeHp: number; afterHp: number }>;
+export type HealCause = Readonly<{ kind: "unclaimed-orb" }>;
 
 export type FightEvent =
   | Readonly<{ kind: "stage-entered"; at: Tick; stage: Stage }>
@@ -102,6 +104,13 @@ export type FightEvent =
   | Readonly<{ kind: "boss-shouted"; at: Tick; text: string }>
   | Readonly<{ kind: "player-hit-judged"; at: Tick; style: IncomingStyle; outcome: "passed" | "invulnerable"; requested: number }>
   | Readonly<{ kind: "floor-hit"; at: Tick; void: VoidKind; tile: Tile; receipt: HitReceipt }>
+  | Readonly<{ kind: "lifeforce-told"; at: Tick; void: VoidKind }>
+  | Readonly<{ kind: "lifeforce-drained"; at: Tick; void: VoidKind; receipt: HitReceipt }>
+  | Readonly<{ kind: "orb-spawned"; at: Tick; void: VoidKind; tile: Tile; credit: number }>
+  | Readonly<{ kind: "orb-matured"; at: Tick; void: VoidKind; tile: Tile }>
+  | Readonly<{ kind: "orb-returned"; at: Tick; void: VoidKind; tile: Tile; receipt: HealReceipt }>
+  | Readonly<{ kind: "orb-expired"; at: Tick; void: VoidKind; tile: Tile; credit: number }>
+  | Readonly<{ kind: "boss-healed"; at: Tick; cause: HealCause; receipt: HealReceipt }>
   | Readonly<{ kind: "run-ended"; at: Tick; reason: RunEnd }>;
 
 export type PlayerObservation = Readonly<{ tile: Tile; hp: number; prayer: Style | null }>;

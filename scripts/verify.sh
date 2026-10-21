@@ -18,6 +18,7 @@ WALK_CLICK_RIGHT_PX=160
 WALK_CLICK_DOWN_PX=50
 WALK_TARGET_TILE='{"x":13,"y":11}'
 CYCLE_LAST_HIDDEN_TICK=3
+CYCLE_RING_TICK=39
 CYCLE_LAST_TICK=70
 CYCLE_STAGE_ENTRIES='[[0,"lead-in"],[8,"inner-void"],[30,"after-inner"],[39,"outer-void"],[59,"after-outer"],[68,"inner-void"]]'
 CYCLE_OVERHEAD_SWITCHES='[[8,"deflect-melee"],[33,"soul-split"],[39,"deflect-range"],[61,"soul-split"],[68,"deflect-melee"]]'
@@ -55,6 +56,16 @@ VOID_FLOOD_SHOT_TICK=45
 VOID_FLOOR_HITS='[[44,9],[45,11],[46,10],[47,11],[48,10],[49,9],[50,9],[51,10],[52,9],[53,10],[54,1]]'
 VOID_RUN_END='[[54,"death"]]'
 VOID_PIXEL="#1e2529"
+ORB_DRILL="lifeforce-orb"
+ORB_DORMANT_TICK=20
+ORB_GLOW_TICK=24
+ORB_LAST_TICK=30
+ORB_FRAMES=6
+ORB_CLICK_LEFT_PX=155
+ORB_CLICK_UP_PX=16
+ORB_BOX='{"minX":-60,"maxX":50,"minY":-75,"maxY":5}'
+ORB_SKIP_LAST_TICK=63
+ORB_EXPECTED='{"told":[[11,"inner-void"]],"drained":[[12,49,50]],"spawned":[[13,{"x":7,"y":9},49]],"matured":[[24,{"x":7,"y":9}]],"returned":{"requested":49,"applied":49,"beforeHp":50,"afterHp":99},"skipExpired":[[30,"inner-void"],[61,"outer-void"]],"skipHeal":[[62,{"kind":"unclaimed-orb"},{"requested":25,"applied":25,"beforeHp":1355,"afterHp":1380}]]}'
 CREDIT_LINE="Created using intellectual property belonging to Jagex Limited under the terms of Jagex's Fan Content Policy. This content is not endorsed by or affiliated with Jagex."
 
 log() { echo "verify: $*"; }
@@ -81,7 +92,8 @@ manifest_ready() {
     const { assets } = await loadConfig();
     const m = JSON.parse(readFileSync(process.argv[1], "utf8"));
     const items = Object.values(assets.items).every(({ id }) => m.playerItems?.[`item:${id}`]);
-    process.exit(m.cache?.source === "openrs2:2746" && m.assets?.[`npc-${process.argv[2]}`] && items ? 0 : 1);
+    const spotAnims = Object.values(assets.spotAnims).every(({ id }) => m.spotAnims?.[id]);
+    process.exit(m.cache?.source === "openrs2:2746" && m.assets?.[`npc-${process.argv[2]}`] && items && spotAnims ? 0 : 1);
   ' "$MANIFEST" "$BOSS_NPC"
 }
 
@@ -103,7 +115,7 @@ stage_test() {
 
 stage_assets() {
   if manifest_ready; then
-    log "assets: manifest already has npc-${BOSS_NPC} and every configured item from openrs2:2746, skipping rebuild" | tee "$VERIFY_DIR/assets.log"
+    log "assets: manifest already has npc-${BOSS_NPC} and every configured item and spotanim from openrs2:2746, skipping rebuild" | tee "$VERIFY_DIR/assets.log"
     return 0
   fi
   npm run assets -- --cache-dir "$OSRS_CACHE_DIR" --reader-path "$OSRS_CACHE_READER" >"$VERIFY_DIR/assets.log" 2>&1 && manifest_ready
@@ -265,9 +277,15 @@ drive_flood_shot() {
 }
 
 drive_cycle() {
+  local box cx cy
   fight_tick_at_least 12 30000 || { log "the boss never stepped to P4 tick 12"; return 1; }
   ab screenshot "$VERIFY_DIR/boss.png" >/dev/null || { log "boss screenshot failed"; return 1; }
-  drive_flood_shot || return 1
+  fight_tick_at_least "$CYCLE_RING_TICK" 60000 || { log "the boss never stepped to P4 tick ${CYCLE_RING_TICK}"; return 1; }
+  box="$(ab --json get box "#world")"
+  cx=$(( $(json data.x <<<"$box") + $(json data.width <<<"$box") / 2 - RING_CLICK_LEFT_PX ))
+  cy=$(( $(json data.y <<<"$box") + $(json data.height <<<"$box") / 2 - RING_CLICK_UP_PX ))
+  echo "{\"x\":${cx},\"y\":${cy}}" >"$VERIFY_DIR/cycle-ring-click.json"
+  click_at "$cx" "$cy" || return 1
   fight_tick_at_least "$CYCLE_LAST_TICK" 90000 || { log "the boss never stepped to P4 tick ${CYCLE_LAST_TICK}"; return 1; }
   probe "snapshot()" >"$VERIFY_DIR/cycle-snapshot.json"
   probe "log()" >"$VERIFY_DIR/cycle.json"
@@ -283,6 +301,23 @@ drive_focus() {
   ab screenshot "$VERIFY_DIR/focus.png" >/dev/null || { log "focus screenshot failed"; return 1; }
   ab console >"$VERIFY_DIR/focus-console.log" 2>&1 || { log "console capture failed"; return 1; }
   ab --json errors | json data.errors >"$VERIFY_DIR/focus-page-errors.json" || { log "page error capture failed"; return 1; }
+}
+
+drive_void_shot() {
+  local box
+  ab open "${URL}?seed=1&focus=${VOID_DRILL}" >/dev/null || return 1
+  ab wait --fn "window.__archiveOcellusProbe?.snapshot().ticking === true && window.__archiveOcellusProbe.snapshot().tick >= 8" \
+    --timeout 90000 >/dev/null || { log "the reloaded ${VOID_DRILL} drill never started ticking"; return 1; }
+  box="$(ab --json get box "#world")"
+  click_at $(( $(json data.x <<<"$box") + $(json data.width <<<"$box") / 2 + WALK_CLICK_RIGHT_PX )) \
+    $(( $(json data.y <<<"$box") + $(json data.height <<<"$box") / 2 + WALK_CLICK_DOWN_PX )) || return 1
+  ab wait --fn "(() => { const p = window.__archiveOcellusProbe.snapshot().player, t = ${WALK_TARGET_TILE}; return p.x === t.x && p.y === t.y; })()" \
+    --timeout 15000 >/dev/null || log "the player did not reach the walk target on the reloaded drill"
+  drive_flood_shot || return 1
+  fight_tick_at_least "$FLOOD_LAST_TICK" 30000 || { log "the reloaded drill never stepped to P4 tick ${FLOOD_LAST_TICK}"; return 1; }
+  probe "log()" >"$VERIFY_DIR/void-shot.json"
+  ab console >"$VERIFY_DIR/void-shot-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/void-shot-page-errors.json" || { log "page error capture failed"; return 1; }
 }
 
 click_at() {
@@ -345,6 +380,41 @@ drive_void_floor() {
   ab --json errors | json data.errors >"$VERIFY_DIR/void-page-errors.json" || { log "page error capture failed"; return 1; }
 }
 
+drive_lifeforce_orb() {
+  local box ox oy frame
+  ab select "#focus" "$ORB_DRILL" >/dev/null && ab click "#restart" >/dev/null || { log "focus control did not accept ${ORB_DRILL}"; return 1; }
+  ab wait --fn "new URLSearchParams(location.search).get('focus') === '${ORB_DRILL}'" --timeout 30000 >/dev/null || { log "restart did not load focus=${ORB_DRILL}"; return 1; }
+  fight_tick_at_least 12 120000 || { log "the orb drill never reached the lifeforce hit"; return 1; }
+  ab screenshot "$VERIFY_DIR/orb-hit.png" >/dev/null || { log "lifeforce hit screenshot failed"; return 1; }
+  box="$(ab --json get box "#world")"
+  ox=$(( $(json data.x <<<"$box") + $(json data.width <<<"$box") / 2 - ORB_CLICK_LEFT_PX ))
+  oy=$(( $(json data.y <<<"$box") + $(json data.height <<<"$box") / 2 - ORB_CLICK_UP_PX ))
+  # The orb's teal pulses within a tick, so each look is a burst of frames. The player stays on spawn until the glow burst, because on the orb it hides the glow.
+  fight_tick_at_least "$ORB_DORMANT_TICK" 30000 || { log "the boss never stepped to P4 tick ${ORB_DORMANT_TICK}"; return 1; }
+  for frame in $(seq 1 "$ORB_FRAMES"); do
+    ab screenshot "$VERIFY_DIR/orb-dormant-${frame}.png" >/dev/null || { log "dormant orb screenshot failed"; return 1; }
+  done
+  fight_tick_at_least "$ORB_GLOW_TICK" 30000 || { log "the boss never stepped to P4 tick ${ORB_GLOW_TICK}"; return 1; }
+  for frame in $(seq 1 "$ORB_FRAMES"); do
+    ab screenshot "$VERIFY_DIR/orb-glow-${frame}.png" >/dev/null || { log "glowing orb screenshot failed"; return 1; }
+  done
+  click_at "$ox" "$oy" || return 1
+  ab wait --fn "(() => { const d = window.__archiveOcellusProbe.snapshot().destination, spawn = ${SPAWN_TILE}; return d !== null && (d.x !== spawn.x || d.y !== spawn.y); })()" \
+    --timeout 5000 >/dev/null || log "the orb click set no new destination"
+  echo "{\"x\":${ox},\"y\":${oy},\"snapshot\":$(probe "snapshot()")}" >"$VERIFY_DIR/orb-click.json"
+  fight_tick_at_least "$ORB_LAST_TICK" 30000 || { log "the boss never stepped to P4 tick ${ORB_LAST_TICK}"; return 1; }
+  probe "log()" >"$VERIFY_DIR/orb.json"
+  ab console >"$VERIFY_DIR/orb-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/orb-page-errors.json" || { log "page error capture failed"; return 1; }
+
+  ab open "${URL}?seed=1&focus=${ORB_DRILL}" >/dev/null || return 1
+  fight_tick_at_least "$ORB_SKIP_LAST_TICK" 120000 || { log "the orb-skipping drill never stepped to P4 tick ${ORB_SKIP_LAST_TICK}"; return 1; }
+  ab screenshot "$VERIFY_DIR/orb-skip.png" >/dev/null || { log "skipped orb screenshot failed"; return 1; }
+  probe "log()" >"$VERIFY_DIR/orb-skip.json"
+  ab console >"$VERIFY_DIR/orb-skip-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/orb-skip-page-errors.json" || { log "page error capture failed"; return 1; }
+}
+
 drive() {
   ab set viewport 1280 800 >/dev/null || return 1
   # A new browser's first screenshot takes about 10 s, longer than the hidden lead-in, so it goes to a blank page.
@@ -353,31 +423,34 @@ drive() {
   drive_lead_in || return 1
   ab wait --fn "window.__archiveOcellusProbe?.snapshot().ticking === true && window.__archiveOcellusProbe.snapshot().tick >= 8" \
     --timeout 90000 >/dev/null || { log "trainer never started ticking"; return 1; }
-  drive_walk && drive_cycle && drive_focus && drive_void_floor && drive_loadouts || return 1
+  drive_walk && drive_cycle && drive_focus && drive_void_floor && drive_void_shot && drive_lifeforce_orb && drive_loadouts || return 1
 
   local capture
-  for capture in hidden.json hidden.png before.json before.png after.json after.png boss.png attack-click.json ring-click.json flood-ring.png cycle-snapshot.json cycle.json console.log page-errors.json focus.json focus.png focus-console.log focus-page-errors.json \
+  for capture in hidden.json hidden.png before.json before.png after.json after.png boss.png cycle-ring-click.json cycle-snapshot.json cycle.json console.log page-errors.json focus.json focus.png focus-console.log focus-page-errors.json \
     void-inner.png void-flood.png void-floor.json void-console.log void-page-errors.json \
+    attack-click.json ring-click.json flood-ring.png void-shot.json void-shot-console.log void-shot-page-errors.json \
+    orb-hit.png $(seq -f "orb-dormant-%g.png" 1 "$ORB_FRAMES") $(seq -f "orb-glow-%g.png" 1 "$ORB_FRAMES") orb-click.json orb.json orb-console.log orb-page-errors.json orb-skip.png orb-skip.json orb-skip-console.log orb-skip-page-errors.json \
     loadout-before.json loadout-ranged.png loadout-after.json loadout-melee.png loadout-spec.json loadout-spec.png \
     loadout-console.log loadout-page-errors.json loadout-selector.json loadout-selector-page-errors.json; do
     [[ -s "$VERIFY_DIR/$capture" ]] || { log "required capture ${capture} is missing or empty"; return 1; }
   done
 
   node -e '
-    const [dir, spawn, target, bossNpc, lastHiddenTick, lastTick, stages, overheads, specials, focusKey, focusBeats, square, floodDamage, floodLast, voidHits, voidEnd, voidPixel, rangedWorn, meleeWorn, drain] = process.argv.slice(1);
+    const [dir, spawn, target, bossNpc, lastHiddenTick, lastTick, stages, overheads, specials, focusKey, focusBeats, square, floodDamage, floodLast, voidHits, voidEnd, voidPixel, rangedWorn, meleeWorn, drain, orbExpected, orbBox, orbFrames] = process.argv.slice(1);
     const fs = require("fs");
     const read = (file) => JSON.parse(fs.readFileSync(`${dir}/${file}`, "utf8"));
-    const [hidden, before, after, errors, cycle, snapshot, focus, focusErrors, voidLog, voidErrors] =
-      ["hidden.json", "before.json", "after.json", "page-errors.json", "cycle.json", "cycle-snapshot.json", "focus.json", "focus-page-errors.json", "void-floor.json", "void-page-errors.json"].map(read);
+    const [hidden, before, after, errors, cycle, snapshot, focus, focusErrors, voidLog, voidErrors, shot, shotErrors] =
+      ["hidden.json", "before.json", "after.json", "page-errors.json", "cycle.json", "cycle-snapshot.json", "focus.json", "focus-page-errors.json", "void-floor.json", "void-page-errors.json", "void-shot.json", "void-shot-page-errors.json"].map(read);
     const [dressed, switched, spec, selector, loadoutErrors, selectorErrors] =
       ["loadout-before.json", "loadout-after.json", "loadout-spec.json", "loadout-selector.json", "loadout-page-errors.json", "loadout-selector-page-errors.json"].map(read);
+    const [orbLog, orbClick, orbErrors, orbSkip, orbSkipErrors] = ["orb.json", "orb-click.json", "orb-page-errors.json", "orb-skip.json", "orb-skip-page-errors.json"].map(read);
     const [spawnTile, targetTile, nearSquare] = [JSON.parse(spawn), JSON.parse(target), JSON.parse(square)];
     const same = (a, b) => a?.x === b.x && a?.y === b.y;
     const inSquare = (t) => t.x >= nearSquare.minX && t.x <= nearSquare.maxX && t.y >= nearSquare.minY && t.y <= nearSquare.maxY;
     const upTo = (rows, last) => rows.filter((row) => row.tick <= last);
     const between = (rows, from, to) => rows.filter((row) => row.tick >= Number(from) && row.tick <= Number(to));
     const events = (rows, kind, pick) => upTo(rows, Number(lastTick)).flatMap((row) => row.events.filter((e) => e.kind === kind).map(pick));
-    function pixelShare(file) {
+    function pixelShare(file, matches, area) {
       const zlib = require("zlib");
       const buf = fs.readFileSync(`${dir}/${file}`);
       let pos = 8, width = 0, height = 0, channels = 0;
@@ -396,12 +469,25 @@ drive() {
           px[y * stride + i] = (raw[y * (stride + 1) + 1 + i] + [0, a, b, (a + b) >> 1, pa <= pb && pa <= pc ? a : pb <= pc ? b : c][raw[y * (stride + 1)]]) & 255;
         }
       }
-      const want = [1, 3, 5].map((i) => parseInt(voidPixel.slice(i, i + 2), 16));
-      let near = 0;
-      for (let i = 0; i < width * height; i++) if (want.every((v, c) => Math.abs(px[i * channels + c] - v) <= 10)) near++;
-      return Math.round((10000 * near) / (width * height)) / 100;
+      const { minX, maxX, minY, maxY } = area ?? { minX: 0, maxX: width - 1, minY: 0, maxY: height - 1 };
+      let hits = 0;
+      for (let y = minY; y <= maxY; y++) {
+        for (let x = minX; x <= maxX; x++) {
+          const i = (y * width + x) * channels;
+          if (matches(px[i], px[i + 1], px[i + 2])) hits++;
+        }
+      }
+      return Math.round((100000 * hits) / ((maxX - minX + 1) * (maxY - minY + 1))) / 1000;
     }
-    const flood = between(cycle.rows, floodDamage, floodLast);
+    const want = [1, 3, 5].map((i) => parseInt(voidPixel.slice(i, i + 2), 16));
+    const voidShare = (file) => pixelShare(file, (...rgb) => want.every((v, c) => Math.abs(rgb[c] - v) <= 10));
+    const offset = JSON.parse(orbBox);
+    const around = { minX: orbClick.x + offset.minX, maxX: orbClick.x + offset.maxX, minY: orbClick.y + offset.minY, maxY: orbClick.y + offset.maxY };
+    const orbTeal = (look) => Array.from({ length: Number(orbFrames) }, (_, i) => pixelShare(`orb-${look}-${i + 1}.png`, (r, g, b) => g >= 120 && g - r >= 60 && b - r >= 30, around));
+    const expectedOrb = JSON.parse(orbExpected);
+    const kindOf = (rows, kind) => rows.flatMap((row) => row.events.filter((e) => e.kind === kind));
+    const orbTile = expectedOrb.spawned[0][1];
+    const flood = between(shot.rows, floodDamage, floodLast);
     const floorHit = (row) => row.events.some((e) => e.kind === "floor-hit" && same(e.tile, row.playerAtBossStep.tile));
     const launch = flood.find((row) => row.combatDraws > 0);
     const landing = flood.flatMap((row) => row.events.filter((e) => e.kind === "player-hit-judged" && e.style === "ranged").map((e) => ({ ...e, bossHp: row.bossHp })))[0];
@@ -419,15 +505,30 @@ drive() {
       voidHits: voidLog.rows.flatMap((row) => row.events.filter((e) => e.kind === "floor-hit").map((e) => [e.at, e.receipt.applied])),
       voidHitTiles: [...new Set(voidLog.rows.flatMap((row) => row.events.filter((e) => e.kind === "floor-hit").map((e) => JSON.stringify(e.tile))))],
       voidRunEnd: voidLog.rows.flatMap((row) => row.events.filter((e) => e.kind === "run-ended").map((e) => [e.at, e.reason])),
-      voidPixelShare: { "before.png": pixelShare("before.png"), "void-inner.png": pixelShare("void-inner.png"), "void-flood.png": pixelShare("void-flood.png"), "flood-ring.png": pixelShare("flood-ring.png") },
+      voidPixelShare: { "before.png": voidShare("before.png"), "void-inner.png": voidShare("void-inner.png"), "void-flood.png": voidShare("void-flood.png"), "flood-ring.png": voidShare("flood-ring.png") },
       loadout: {
         worn: [dressed.player.equipped, switched.player.equipped, selector.player.equipped],
         specialEnergy: [switched.player.specialEnergy, spec.player.specialEnergy],
         bossDefence: [switched.boss.defence, spec.boss.defence],
       },
+      orb: {
+        told: kindOf(orbLog.rows, "lifeforce-told").map((e) => [e.at, e.void]),
+        drained: kindOf(orbLog.rows, "lifeforce-drained").map((e) => [e.at, e.receipt.applied, e.receipt.afterHp]),
+        spawned: kindOf(orbLog.rows, "orb-spawned").map((e) => [e.at, e.tile, e.credit]),
+        clicked: orbClick.snapshot?.destination ?? null,
+        arrivedAt: orbLog.rows.find((row) => same(row.playerAtPostTick.tile, orbTile))?.tick ?? null,
+        matured: kindOf(orbLog.rows, "orb-matured").map((e) => [e.at, e.tile]),
+        returned: kindOf(orbLog.rows, "orb-returned").map((e) => [e.at, e.receipt]),
+        skipExpired: kindOf(orbSkip.rows, "orb-expired").map((e) => [e.at, e.void]),
+        skipHeal: kindOf(orbSkip.rows, "boss-healed").map((e) => [e.at, e.cause, e.receipt]),
+        skipReturned: kindOf(orbSkip.rows, "orb-returned").length,
+        tealShare: { box: around, dormant: orbTeal("dormant"), glow: orbTeal("glow") },
+      },
     };
     const sameJson = (a, b) => require("util").isDeepStrictEqual(a, JSON.parse(b));
     const share = observed.voidPixelShare;
+    const orb = observed.orb;
+    const readyAt = Math.max(orb.arrivedAt ?? Infinity, orb.matured[0]?.[0] ?? Infinity);
     const checks = {
       spawnedOnSpawnTile: same(before.player, spawnTile),
       clickTargetedExpectedTile: same(after.destination, targetTile),
@@ -455,7 +556,14 @@ drive() {
       divisionSpentHalfTheBar: switched.player.specialEnergy === 100 && spec.player.specialEnergy === 50,
       divisionDrainedBossDefence: switched.boss.defence - spec.boss.defence === Number(drain),
       setupSelectorApplied: sameJson(selector.player.equipped, meleeWorn),
-      noPageErrors: [errors, focusErrors, voidErrors, loadoutErrors, selectorErrors].every((list) => list.length === 0),
+      orbToldAndDrained: sameJson(orb.told, JSON.stringify(expectedOrb.told)) && sameJson(orb.drained, JSON.stringify(expectedOrb.drained)),
+      orbSpawnedDormant: sameJson(orb.spawned, JSON.stringify(expectedOrb.spawned)),
+      orbClickTargetedOrb: same(orb.clicked, orbTile),
+      orbGlowsOnSchedule: sameJson(orb.matured, JSON.stringify(expectedOrb.matured)),
+      orbReturnedTickAfterArrival: orb.returned.length === 1 && orb.returned[0][0] === readyAt + 1 && sameJson(orb.returned[0][1], JSON.stringify(expectedOrb.returned)),
+      orbGlowDrawn: Math.max(...orb.tealShare.glow) - Math.max(...orb.tealShare.dormant) >= 7,
+      skippedOrbHealsBoss: sameJson(orb.skipExpired, JSON.stringify(expectedOrb.skipExpired)) && sameJson(orb.skipHeal, JSON.stringify(expectedOrb.skipHeal)) && orb.skipReturned === 0,
+      noPageErrors: [errors, focusErrors, voidErrors, shotErrors, orbErrors, orbSkipErrors, loadoutErrors, selectorErrors].every((list) => list.length === 0),
     };
     if (!checks.clickTargetedExpectedTile) {
       console.error(`verify: the click resolved to ${JSON.stringify(after.destination)}, not ${JSON.stringify(targetTile)}; the click-to-tile mapping for this viewport and camera changed`);
@@ -464,7 +572,7 @@ drive() {
     process.exit(Object.values(checks).every(Boolean) ? 0 : 1);
   ' "$VERIFY_DIR" "$SPAWN_TILE" "$WALK_TARGET_TILE" "$BOSS_NPC" "$CYCLE_LAST_HIDDEN_TICK" "$CYCLE_LAST_TICK" "$CYCLE_STAGE_ENTRIES" "$CYCLE_OVERHEAD_SWITCHES" "$CYCLE_SPECIAL_HITS" "$FOCUS_DRILL" "$FOCUS_BEATS" \
     "$NEAR_SQUARE" "$FLOOD_DAMAGE_TICK" "$FLOOD_LAST_TICK" "$VOID_FLOOR_HITS" "$VOID_RUN_END" "$VOID_PIXEL" \
-    "$LOADOUT_RANGED_WORN" "$LOADOUT_MELEE_WORN" "$LOADOUT_DIVISION_DRAIN" >"$VERIFY_DIR/observed.json"
+    "$LOADOUT_RANGED_WORN" "$LOADOUT_MELEE_WORN" "$LOADOUT_DIVISION_DRAIN" "$ORB_EXPECTED" "$ORB_BOX" "$ORB_FRAMES" >"$VERIFY_DIR/observed.json"
   local verdict=$?
   cat "$VERIFY_DIR/observed.json"
   return $verdict

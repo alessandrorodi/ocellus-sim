@@ -1,8 +1,8 @@
 import * as THREE from "three";
-import { CollisionType, Entity, GROUND_OVERLAY_Y, LineOfSightMask, Settings } from "osrs-sdk";
-import type { Location3, Model, Region } from "osrs-sdk";
+import { CacheRenderInstancedModel, CacheRenderReferences, CollisionType, Entity, GROUND_OVERLAY_Y, LineOfSightMask, Settings } from "osrs-sdk";
+import type { Location3, Model, Region, Renderable } from "osrs-sdk";
 import { OCELLUS_P4 } from "../OcellusTimings";
-import type { VoidKind } from "../P4Types";
+import type { Tile, VoidKind } from "../P4Types";
 import type { TileMask } from "../p4/floor";
 import { VOID_MASKS } from "../p4/floor";
 
@@ -198,5 +198,128 @@ export class VoidField extends Entity {
 
   protected override create3dModel(): Model {
     return new VoidFloorModel(() => this.showing);
+  }
+}
+
+const ORB_LOOK = OCELLUS_P4.lifeforceOrb.look;
+const ORB_MARKER = OCELLUS_P4.lifeforceOrb.marker.value;
+const SPAWN_LOOK: Readonly<Record<VoidKind, number>> = { "inner-void": ORB_LOOK.innerSpawn.value, "outer-void": ORB_LOOK.outerSpawn.value };
+
+type Cue = Readonly<{ spotAnim: number; loops: boolean }>;
+
+class Playing {
+  ended = false;
+  readonly model: CacheRenderInstancedModel;
+
+  constructor(renderable: Renderable, readonly cue: Cue) {
+    this.model = CacheRenderInstancedModel.forRenderable(renderable, CacheRenderReferences.spotAnim([{ id: cue.spotAnim }]), {
+      onSpotAnimComplete: () => {
+        this.ended = true;
+      },
+    });
+  }
+}
+
+/** The SDK plays a cache spotanim once, so a looping cue gets a fresh instance each time one ends. */
+class SpotAnimModel implements Model {
+  private playing: Playing | null = null;
+
+  constructor(private readonly renderable: Renderable, private readonly cue: () => Cue | null) {}
+
+  draw(scene: THREE.Scene, clockDelta: number, tickPercent: number, location: Location3, angleRadians: number, pitchRadians: number, visible: boolean, modelOffsets: Location3[]): void {
+    const cue = this.cue();
+    if (this.playing !== null && (this.playing.cue !== cue || (this.playing.ended && this.playing.cue.loops))) {
+      this.playing.model.destroy(scene);
+      this.playing = null;
+    }
+    if (this.playing === null && cue !== null) this.playing = new Playing(this.renderable, cue);
+    this.playing?.model.draw(scene, clockDelta, tickPercent, location, angleRadians, pitchRadians, visible, modelOffsets);
+  }
+
+  destroy(scene: THREE.Scene): void {
+    this.playing?.model.destroy(scene);
+  }
+
+  getWorldPosition(): THREE.Vector3 {
+    return this.playing?.model.getWorldPosition() ?? new THREE.Vector3();
+  }
+
+  async preload(): Promise<void> {}
+}
+
+export class OrbView extends Entity {
+  private shown: Readonly<{ cue: Cue; marker: string | null }> | null = null;
+
+  constructor(region: Region) {
+    super(region, { x: 0, y: 0 });
+  }
+
+  spawn(kind: VoidKind, at: Tile): void {
+    this.location = { x: at.x, y: at.y };
+    this.shown = { cue: { spotAnim: SPAWN_LOOK[kind], loops: false }, marker: ORB_MARKER.dormant };
+  }
+
+  mature(): void {
+    this.shown = { cue: { spotAnim: ORB_LOOK.idle.value, loops: true }, marker: ORB_MARKER.ready };
+  }
+
+  leave(): void {
+    this.shown = { cue: { spotAnim: ORB_LOOK.despawn.value, loops: false }, marker: null };
+  }
+
+  override get collisionType(): CollisionType {
+    return CollisionType.NONE;
+  }
+
+  override get lineOfSight(): LineOfSightMask {
+    return LineOfSightMask.NONE;
+  }
+
+  override draw(tickPercent: number, context: OffscreenCanvasRenderingContext2D): void {
+    if (!this.shown?.marker) return;
+    const scale = Settings.tileSize;
+    context.fillStyle = this.shown.marker;
+    context.beginPath();
+    context.arc((this.location.x + 0.5) * scale, (this.location.y + 0.5) * scale, scale / 3, 0, 2 * Math.PI);
+    context.fill();
+  }
+
+  protected override create3dModel(): Model {
+    return new SpotAnimModel(this, () => this.shown?.cue ?? null);
+  }
+}
+
+export class FragmentFlash extends Entity {
+  private cue: Cue | null = null;
+
+  constructor(region: Region) {
+    super(region, { x: 0, y: 0 });
+  }
+
+  tell(at: Tile): void {
+    this.play(at, ORB_LOOK.tell.value);
+  }
+
+  regain(at: Tile): void {
+    this.play(at, ORB_LOOK.regain.value);
+  }
+
+  private play(at: Tile, spotAnim: number): void {
+    this.location = { x: at.x, y: at.y };
+    this.cue = { spotAnim, loops: false };
+  }
+
+  override get collisionType(): CollisionType {
+    return CollisionType.NONE;
+  }
+
+  override get lineOfSight(): LineOfSightMask {
+    return LineOfSightMask.NONE;
+  }
+
+  override draw(): void {}
+
+  protected override create3dModel(): Model {
+    return new SpotAnimModel(this, () => this.cue);
   }
 }

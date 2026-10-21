@@ -15,10 +15,12 @@ import type {
   RunState,
   Tick,
   TickRow,
+  Tile,
   VoidKind,
 } from "../P4Types";
-import { tick, worldTick } from "../P4Types";
+import { after, tick, worldTick } from "../P4Types";
 import { VOID_MASKS, floorRule } from "../p4/floor";
+import { orbTile, reach } from "../p4/orb";
 import { rollInt } from "../p4/roll";
 import type { Moment } from "../p4/schedule";
 import { Schedule } from "../p4/schedule";
@@ -31,6 +33,13 @@ type Run =
   | Readonly<{ kind: "killed"; draft: RowDraft }>
   | Readonly<{ kind: "between"; last: Readonly<{ tick: Tick; phase: Phase }>; inputs: readonly InputObservation[] }>
   | Readonly<{ kind: "ended"; at: Tick; reason: RunEnd; phase: Phase }>;
+
+type Orb =
+  | Readonly<{ kind: "drained"; void: VoidKind; credit: number }>
+  | Readonly<{ kind: "dormant"; void: VoidKind; credit: number; tile: Tile }>
+  | Readonly<{ kind: "available"; void: VoidKind; credit: number; tile: Tile }>
+  | Readonly<{ kind: "claimed"; void: VoidKind; credit: number; tile: Tile; returnsAt: Tick }>
+  | Readonly<{ kind: "expired"; void: VoidKind; credit: number; tile: Tile }>;
 
 function incomingStyle(attackStyle: string): IncomingStyle {
   switch (attackStyle) {
@@ -48,16 +57,21 @@ function incomingStyle(attackStyle: string): IncomingStyle {
 }
 
 class P4Hit extends Projectile {
-  constructor(boss: Ocellus, private readonly player: OcellusPlayer, private readonly requested: number, private readonly settle: (receipt: HitReceipt) => void) {
-    super(null, requested, boss, player, "typeless", { setDelay: 1, visuals: { hidden: true } });
+  constructor(
+    boss: Ocellus,
+    private readonly player: OcellusPlayer,
+    private readonly amount: (beforeHp: number) => number,
+    private readonly settle: (receipt: HitReceipt) => void,
+  ) {
+    super(null, 0, boss, player, "typeless", { setDelay: 1, visuals: { hidden: true } });
   }
 
-  // The SDK clamps damage to HP when the projectile is built; hits that land earlier in the same tick can lower HP again.
   override beforeHit(): void {
     super.beforeHit();
     const beforeHp = this.player.currentStats.hitpoint;
-    this.damage = Math.min(this.requested, beforeHp);
-    this.settle({ requested: this.requested, applied: this.damage, beforeHp, afterHp: beforeHp - this.damage, prayer: this.player.protection });
+    const requested = this.amount(beforeHp);
+    this.damage = Math.min(requested, beforeHp);
+    this.settle({ requested, applied: this.damage, beforeHp, afterHp: beforeHp - this.damage, prayer: this.player.protection });
   }
 }
 
@@ -72,6 +86,7 @@ function phaseEvents(last: Phase | null, now: Phase, at: Tick): FightEvent[] {
 export class Ocellus extends Mob {
   private readonly schedule: Schedule;
   private run: Run = { kind: "waiting", inputs: [] };
+  private orbs: readonly Orb[] = [];
 
   constructor(region: Region, private readonly config: DrillConfig, private readonly target: OcellusPlayer) {
     super(region, OCELLUS_P4.geometry.bossAnchor.value);
@@ -182,6 +197,7 @@ export class Ocellus extends Mob {
           combatDraws: this.target.combatDraws - drawsAtBossStep,
         };
         const reason: RunEnd | null = run.kind === "killed" ? "kill" : died ? "death" : null;
+        if (reason === null) this.claimOrbs(row.tick, playerAtPostTick.tile);
         this.run = reason === null
           ? { kind: "between", last: { tick: row.tick, phase: row.phase }, inputs: [] }
           : { kind: "ended", at: row.tick, reason, phase: row.phase };
@@ -274,11 +290,18 @@ export class Ocellus extends Mob {
         this.strikeFloor(beat.void, at, player);
         return null;
       case "lifeforce-tell":
+        return { kind: "lifeforce-told", at, void: beat.void };
       case "lifeforce-hit":
+        this.drain(beat.void, at);
+        return null;
       case "orb-spawns":
+        return this.spawnOrb(beat.void, at, player.tile);
       case "orb-matures":
+        return this.matureOrb(beat.void, at);
       case "orb-expires":
+        return this.expireOrb(beat.void, at);
       case "unclaimed-orb-heals":
+        return this.healFromUnclaimedOuterOrb(at);
       case "explosion-mark":
       case "explosion-impact":
       case "special-tell":
@@ -298,8 +321,80 @@ export class Ocellus extends Mob {
     const rule = floorRule(kind, this.config.choices);
     if (rule.kind === "harmless" || !VOID_MASKS[kind].contains(player.tile)) return;
     const requested = rollInt(this.config.seed, "floorDamage", at, rule.perTick, 0);
-    const hit = new P4Hit(this, this.target, requested, (receipt) => this.recordEvent({ kind: "floor-hit", at, void: kind, tile: player.tile, receipt }));
+    const hit = new P4Hit(this, this.target, () => requested, (receipt) => this.recordEvent({ kind: "floor-hit", at, void: kind, tile: player.tile, receipt }));
     this.target.addProjectile(hit);
+  }
+
+  private drain(kind: VoidKind, at: Tick): void {
+    const divisor = OCELLUS_P4.lifeforceOrb.drainDivisor.value;
+    const hit = new P4Hit(this, this.target, (hp) => Math.floor(hp / divisor), (receipt) => {
+      this.orbs = [...this.orbs.filter((orb) => orb.void !== kind), { kind: "drained", void: kind, credit: receipt.applied }];
+      this.recordEvent({ kind: "lifeforce-drained", at, void: kind, receipt });
+    });
+    this.target.addProjectile(hit);
+  }
+
+  private orb(kind: VoidKind): Orb | null {
+    return this.orbs.find((orb) => orb.void === kind) ?? null;
+  }
+
+  private replaceOrb(kind: VoidKind, next: Orb | null): void {
+    this.orbs = this.orbs.flatMap((orb) => (orb.void !== kind ? [orb] : next === null ? [] : [next]));
+  }
+
+  private spawnOrb(kind: VoidKind, at: Tick, player: Tile): FightEvent | null {
+    const orb = this.orb(kind);
+    if (orb?.kind !== "drained") return null;
+    const tile = orbTile(this.config.seed, at, player, kind, this.config.choices);
+    this.replaceOrb(kind, { kind: "dormant", void: kind, credit: orb.credit, tile });
+    return { kind: "orb-spawned", at, void: kind, tile, credit: orb.credit };
+  }
+
+  private matureOrb(kind: VoidKind, at: Tick): FightEvent | null {
+    const orb = this.orb(kind);
+    if (orb?.kind !== "dormant") return null;
+    this.replaceOrb(kind, { ...orb, kind: "available" });
+    return { kind: "orb-matured", at, void: kind, tile: orb.tile };
+  }
+
+  private expireOrb(kind: VoidKind, at: Tick): FightEvent | null {
+    const orb = this.orb(kind);
+    if (orb?.kind !== "dormant" && orb?.kind !== "available") return null;
+    this.replaceOrb(kind, { kind: "expired", void: kind, credit: orb.credit, tile: orb.tile });
+    return { kind: "orb-expired", at, void: kind, tile: orb.tile, credit: orb.credit };
+  }
+
+  private healFromUnclaimedOuterOrb(at: Tick): FightEvent | null {
+    const orb = this.orb("outer-void");
+    if (orb?.kind !== "expired") return null;
+    this.replaceOrb("outer-void", null);
+    const beforeHp = this.currentStats.hitpoint;
+    const afterHp = Math.min(this.stats.hitpoint, beforeHp + orb.credit);
+    this.currentStats.hitpoint = afterHp;
+    return { kind: "boss-healed", at, cause: { kind: "unclaimed-orb" }, receipt: { requested: orb.credit, applied: afterHp - beforeHp, beforeHp, afterHp } };
+  }
+
+  private claimOrbs(at: Tick, player: Tile): void {
+    const radius = this.config.choices.orbPickupRadius.option.value;
+    const returnsAt = after(at, OCELLUS_P4.lifeforceOrb.returnAfterStep.value);
+    this.orbs = this.orbs.map((orb) => (orb.kind === "available" && reach(orb.tile, player) <= radius ? { ...orb, kind: "claimed", returnsAt } : orb));
+  }
+
+  /** Runs after the player's hits land and before the SDK latches death, so a return must not reach a player at 0 HP. */
+  settlePlayerHits(): void {
+    const run = this.run;
+    if (run.kind !== "stepping") return;
+    const at = run.draft.tick;
+    const isDue = (orb: Orb): orb is Extract<Orb, { kind: "claimed" }> => orb.kind === "claimed" && orb.returnsAt === at;
+    const due = this.orbs.filter(isDue);
+    this.orbs = this.orbs.filter((orb) => !isDue(orb));
+    for (const orb of due) {
+      const beforeHp = this.target.currentStats.hitpoint;
+      if (beforeHp <= 0) continue;
+      const afterHp = beforeHp + orb.credit;
+      this.target.currentStats.hitpoint = afterHp;
+      this.recordEvent({ kind: "orb-returned", at, void: orb.void, tile: orb.tile, receipt: { requested: orb.credit, applied: orb.credit, beforeHp, afterHp } });
+    }
   }
 
   private recordEvent(event: FightEvent): void {

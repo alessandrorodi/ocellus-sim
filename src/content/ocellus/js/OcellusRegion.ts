@@ -4,8 +4,8 @@ import type { DrillConfig } from "./OcellusTimings";
 import { OCELLUS_P4 } from "./OcellusTimings";
 import { dress } from "./OcellusLoadout";
 import { OcellusPlayer } from "./OcellusPlayer";
-import type { FightLog, FightSnapshot, TickRow } from "./P4Types";
-import { VoidField } from "./entities/P4Views";
+import type { FightEvent, FightLog, FightSnapshot, Tile, TickRow, VoidKind } from "./P4Types";
+import { FragmentFlash, OrbView, VoidField } from "./entities/P4Views";
 import { Ocellus } from "./mobs/Ocellus";
 import { voidUnder } from "./p4/floor";
 import { CombatStream } from "./p4/roll";
@@ -15,9 +15,46 @@ function itemId(item: Item | null | undefined): number | null {
   return typeof id === "number" ? id : null;
 }
 
+type Views = Readonly<{ field: VoidField; orbs: Readonly<Record<VoidKind, OrbView>>; fragment: FragmentFlash }>;
+
 type Mounted =
   | Readonly<{ kind: "unmounted" }>
-  | Readonly<{ kind: "mounted"; ocellus: Ocellus; player: OcellusPlayer; field: VoidField; rows: TickRow[] }>;
+  | Readonly<{ kind: "mounted"; ocellus: Ocellus; player: OcellusPlayer; views: Views; rows: TickRow[] }>;
+
+function present(event: FightEvent, views: Views, player: Tile): void {
+  switch (event.kind) {
+    case "lifeforce-told":
+      views.fragment.tell(player);
+      return;
+    case "orb-spawned":
+      views.orbs[event.void].spawn(event.void, event.tile);
+      return;
+    case "orb-matured":
+      views.orbs[event.void].mature();
+      return;
+    case "orb-returned":
+      views.orbs[event.void].leave();
+      views.fragment.regain(player);
+      return;
+    case "orb-expired":
+      views.orbs[event.void].leave();
+      return;
+    case "stage-entered":
+    case "overhead-switched":
+    case "boss-state-changed":
+    case "boss-shouted":
+    case "player-hit-judged":
+    case "floor-hit":
+    case "lifeforce-drained":
+    case "boss-healed":
+    case "run-ended":
+      return;
+    default: {
+      const unhandled: never = event;
+      return unhandled;
+    }
+  }
+}
 
 export class OcellusRegion extends Region {
   private mounted: Mounted = { kind: "unmounted" };
@@ -52,15 +89,21 @@ export class OcellusRegion extends Region {
   }
 
   initialiseRegion(): { player: Player } {
-    const player: OcellusPlayer = new OcellusPlayer(this, { ...OCELLUS_P4.geometry.playerSpawn.value }, new CombatStream(this.config.seed), (input) => ocellus.recordInput(input));
+    const player: OcellusPlayer = new OcellusPlayer(
+      this,
+      { ...OCELLUS_P4.geometry.playerSpawn.value },
+      new CombatStream(this.config.seed),
+      (input) => ocellus.recordInput(input),
+      () => ocellus.settlePlayerHits(),
+    );
     const ocellus: Ocellus = new Ocellus(this, this.config, player);
     dress(player, this.config.choices.setup);
-    const field = new VoidField(this);
-    this.addEntity(field);
+    const views: Views = { field: new VoidField(this), orbs: { "inner-void": new OrbView(this), "outer-void": new OrbView(this) }, fragment: new FragmentFlash(this) };
+    [views.field, views.orbs["inner-void"], views.orbs["outer-void"], views.fragment].forEach((view) => this.addEntity(view));
     this.addPlayer(player);
     this.addMob(ocellus);
     this.setBoss(ocellus);
-    this.mounted = { kind: "mounted", ocellus, player, field, rows: [] };
+    this.mounted = { kind: "mounted", ocellus, player, views, rows: [] };
     return { player };
   }
 
@@ -77,7 +120,9 @@ export class OcellusRegion extends Region {
     const row = this.mounted.ocellus.completeTick();
     if (!row) return;
     this.mounted.rows.push(row);
-    this.mounted.field.show(voidUnder(row.phase));
+    const { views } = this.mounted;
+    views.field.show(voidUnder(row.phase));
+    row.events.forEach((event) => present(event, views, row.playerAtPostTick.tile));
   }
 
   snapshot(): FightSnapshot | null {

@@ -108,6 +108,7 @@ export class Schedule {
       put(hit + recipe.orbMaturesAfterHit.value, `${kind} orb maturity`, () => ({ kind: "orb-matures", void: kind }));
       put(hit + orb.lastHealAfterHit.value, `${kind} orb expiry`, () => ({ kind: "orb-expires", void: kind }));
       if (kind === "outer-void" && unclaimed.kind === "heals-boss") {
+        if (unclaimed.afterHit <= orb.lastHealAfterHit.value) throw new RangeError(`an unclaimed outer orb must heal the boss after its last pickup at hit + ${orb.lastHealAfterHit.value}, not at hit + ${unclaimed.afterHit}`);
         put(hit + unclaimed.afterHit, "unclaimed outer orb heal", () => ({ kind: "unclaimed-orb-heals" }));
       }
       for (let pulse = 0; pulse < explosions.count; pulse++) {

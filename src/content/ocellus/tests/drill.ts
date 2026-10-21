@@ -55,6 +55,7 @@ export function startDrill(options: DrillOptions = {}) {
     playCorrectlyTo(t: number) {
       advance(t, (row) => {
         for (const event of row.events) {
+          if (event.kind === "orb-spawned") walkTo(event.tile);
           if (event.kind !== "stage-entered") continue;
           if (event.stage === "outer-void") walkTo(RING_SOUTH);
           if (event.stage === "after-outer") walkTo(SPAWN_ON_FLOOD);
