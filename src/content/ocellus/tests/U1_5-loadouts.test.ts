@@ -61,38 +61,51 @@ function clickInventory(drill: Drill, cacheItemId: number): void {
 }
 
 describe("U1.5 loadouts", () => {
-  test("each setup wears its owner-named items and keeps Ralos and the other setup's pieces as switches", () => {
+  test("each setup wears its owner-named items and carries Ralos, the other setup's pieces and the wiki's supplies", () => {
     const loadout = (setup: "ranged" | "melee") => {
       const drill = startDrill({ selection: { setup } });
       const player = drill.region.snapshot()?.player;
       drill.dispose();
-      return player && { equipped: player.equipped, switches: player.inventory.filter((id) => id !== null) };
+      return player && { equipped: player.equipped, inventory: player.inventory };
     };
     expect(loadout("ranged")).toEqual({
-      equipped: { weapon: 20997, offhand: null, helmet: 11664, chest: 13072, legs: 13073, gloves: 8842, cape: 28951, necklace: 19547, feet: 13237, ring: 28310, ammo: 11212 },
-      switches: [28922, 22325, 24419, 24420, 24421, 22981, 21295, 19553, 13239, 25485],
+      equipped: { weapon: 20997, offhand: null, helmet: 11664, chest: 13072, legs: 13073, gloves: 8842, cape: 28951, necklace: 33639, feet: 31097, ring: 28310, ammo: 11212 },
+      inventory: [28922, 22325, 24419, 24420, 24421, 22981, 21295, 29801, 25485, 12695, 22461, 6685, 3024, 12695, 22461, 6685, 3024, 6685, 6685, 6685, 3024, 6685, 6685, 6685, 3024, 6685, 6685, 3024],
     });
     expect(loadout("melee")).toEqual({
-      equipped: { weapon: 22325, offhand: null, helmet: 24419, chest: 24420, legs: 24421, gloves: 22981, cape: 21295, necklace: 19553, feet: 13239, ring: 25485, ammo: 11212 },
-      switches: [28922, 20997, 11664, 13072, 13073, 8842, 28951, 19547, 13237, 28310],
+      equipped: { weapon: 22325, offhand: null, helmet: 24419, chest: 24420, legs: 24421, gloves: 22981, cape: 21295, necklace: 29801, feet: 31097, ring: 25485, ammo: 11212 },
+      inventory: [28922, 20997, 11664, 13072, 13073, 8842, 28951, 33639, 28310, 12695, 22461, 6685, 3024, 12695, 22461, 6685, 3024, 6685, 6685, 6685, 3024, 6685, 6685, 6685, 3024, 6685, 6685, 3024],
     });
+  });
+
+  test("clicking every switch but Ralos wears the melee setup and leaves the Avernic treads on", () => {
+    const drill = startDrill({ selection: { setup: "ranged" } });
+    for (const item of [...drill.player().inventory]) {
+      if (item !== null && item.cacheItemId !== 28922) item.inventoryLeftClick(drill.player());
+    }
+    const player = drill.region.snapshot()?.player;
+    drill.dispose();
+    expect(player?.equipped).toEqual({ weapon: 22325, offhand: null, helmet: 24419, chest: 24420, legs: 24421, gloves: 22981, cape: 21295, necklace: 29801, feet: 31097, ring: 25485, ammo: 11212 });
+    expect(player?.inventory.filter((id) => id === 31097)).toEqual([]);
   });
 
   test("full elite void raises the Twisted Bow's max hit, and without the gloves the set gives nothing", () => {
     const full = startDrill();
-    expect(firstAttack(full, EAST_OF_SQUARE, RANGED_TARGET).received).toEqual([[62, "range"]]);
+    expect(firstAttack(full, EAST_OF_SQUARE, RANGED_TARGET).received).toEqual([[64, "range"]]);
     full.dispose();
 
     const noGloves = startDrill();
+    // The SDK unequips only into a free inventory slot.
+    noGloves.player().inventory[27]?.consumeItem(noGloves.player());
     noGloves.player().equipment.gloves?.unequip(noGloves.player());
-    expect(firstAttack(noGloves, EAST_OF_SQUARE, RANGED_TARGET).received).toEqual([[55, "range"]]);
+    expect(firstAttack(noGloves, EAST_OF_SQUARE, RANGED_TARGET).received).toEqual([[58, "range"]]);
     noGloves.dispose();
   });
 
   test("elite void's damage factor is floored on effective ranged strength", () => {
     const drill = startDrill();
     drill.player().currentStats.range = 93;
-    expect(firstAttack(drill, EAST_OF_SQUARE, RANGED_TARGET).received).toEqual([[58, "range"]]);
+    expect(firstAttack(drill, EAST_OF_SQUARE, RANGED_TARGET).received).toEqual([[60, "range"]]);
     drill.dispose();
   });
 
@@ -107,7 +120,7 @@ describe("U1.5 loadouts", () => {
       drill.dispose();
       return roll;
     };
-    expect([attackRoll(false), attackRoll(true)]).toEqual([30958, 27378]);
+    expect([attackRoll(false), attackRoll(true)]).toEqual([32268, 28314]);
   });
 
   test("the scythe rolls crush with Inquisitor's bonus on Jab, and slash without it on Chop", () => {

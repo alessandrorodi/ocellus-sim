@@ -5,8 +5,10 @@ import {
   Gloves,
   Helmet,
   ImageLoader,
+  ItemName,
   Legs,
   mergeProjectileOptions,
+  NecklaceOfRupture,
   Projectile,
   RangedWeapon,
   ScytheOfVitur,
@@ -21,6 +23,31 @@ import { OCELLUS_P4 } from "../OcellusTimings";
 // weapons read the worn pieces by class and fold the set bonuses into their own rolls.
 
 const { gear } = OCELLUS_P4;
+
+// Menus and the combat tab read names only from the SDK's closed ItemName enum, so the trainer's items join it.
+declare module "osrs-sdk/lib/src/sdk/ItemName" {
+  enum ItemName {
+    VOID_RANGER_HELM = "Void ranger helm",
+    ELITE_VOID_TOP = "Elite void top",
+    ELITE_VOID_ROBE = "Elite void robe",
+    VOID_KNIGHT_GLOVES = "Void knight gloves",
+    INQUISITORS_GREAT_HELM = "Inquisitor's great helm",
+    INQUISITORS_HAUBERK = "Inquisitor's hauberk",
+    INQUISITORS_PLATESKIRT = "Inquisitor's plateskirt",
+    TONALZTICS_OF_RALOS = "Tonalztics of Ralos",
+  }
+}
+
+Object.assign(ItemName, {
+  VOID_RANGER_HELM: "Void ranger helm",
+  ELITE_VOID_TOP: "Elite void top",
+  ELITE_VOID_ROBE: "Elite void robe",
+  VOID_KNIGHT_GLOVES: "Void knight gloves",
+  INQUISITORS_GREAT_HELM: "Inquisitor's great helm",
+  INQUISITORS_HAUBERK: "Inquisitor's hauberk",
+  INQUISITORS_PLATESKIRT: "Inquisitor's plateskirt",
+  TONALZTICS_OF_RALOS: "Tonalztics of Ralos",
+} as const satisfies { readonly [K in keyof typeof ItemName]?: `${(typeof ItemName)[K]}` });
 
 function bonuses(key: TrainerItemKey): UnitBonuses {
   const { attack, defence, other } = gear.items[key].stats.value;
@@ -46,6 +73,9 @@ function placeholderLabel(key: TrainerItemKey): HTMLImageElement {
 
 export class VoidRangerHelm extends Helmet {
   override inventorySprite = placeholderLabel("voidRangerHelm");
+  override get itemName(): ItemName {
+    return ItemName.VOID_RANGER_HELM;
+  }
   override get cacheItemId(): number {
     return gear.items.voidRangerHelm.itemId.value;
   }
@@ -56,6 +86,9 @@ export class VoidRangerHelm extends Helmet {
 
 export class EliteVoidTop extends Chest {
   override inventorySprite = placeholderLabel("eliteVoidTop");
+  override get itemName(): ItemName {
+    return ItemName.ELITE_VOID_TOP;
+  }
   override get cacheItemId(): number {
     return gear.items.eliteVoidTop.itemId.value;
   }
@@ -66,6 +99,9 @@ export class EliteVoidTop extends Chest {
 
 export class EliteVoidRobe extends Legs {
   override inventorySprite = placeholderLabel("eliteVoidRobe");
+  override get itemName(): ItemName {
+    return ItemName.ELITE_VOID_ROBE;
+  }
   override get cacheItemId(): number {
     return gear.items.eliteVoidRobe.itemId.value;
   }
@@ -76,6 +112,9 @@ export class EliteVoidRobe extends Legs {
 
 export class VoidKnightGloves extends Gloves {
   override inventorySprite = placeholderLabel("voidKnightGloves");
+  override get itemName(): ItemName {
+    return ItemName.VOID_KNIGHT_GLOVES;
+  }
   override get cacheItemId(): number {
     return gear.items.voidKnightGloves.itemId.value;
   }
@@ -86,6 +125,9 @@ export class VoidKnightGloves extends Gloves {
 
 export class InquisitorsGreatHelm extends Helmet {
   override inventorySprite = placeholderLabel("inquisitorsGreatHelm");
+  override get itemName(): ItemName {
+    return ItemName.INQUISITORS_GREAT_HELM;
+  }
   override get cacheItemId(): number {
     return gear.items.inquisitorsGreatHelm.itemId.value;
   }
@@ -96,6 +138,9 @@ export class InquisitorsGreatHelm extends Helmet {
 
 export class InquisitorsHauberk extends Chest {
   override inventorySprite = placeholderLabel("inquisitorsHauberk");
+  override get itemName(): ItemName {
+    return ItemName.INQUISITORS_HAUBERK;
+  }
   override get cacheItemId(): number {
     return gear.items.inquisitorsHauberk.itemId.value;
   }
@@ -106,11 +151,20 @@ export class InquisitorsHauberk extends Chest {
 
 export class InquisitorsPlateskirt extends Legs {
   override inventorySprite = placeholderLabel("inquisitorsPlateskirt");
+  override get itemName(): ItemName {
+    return ItemName.INQUISITORS_PLATESKIRT;
+  }
   override get cacheItemId(): number {
     return gear.items.inquisitorsPlateskirt.itemId.value;
   }
   override setStats(): void {
     this.bonuses = bonuses("inquisitorsPlateskirt");
+  }
+}
+
+export class OcellusNecklaceOfRupture extends NecklaceOfRupture {
+  override get cacheItemId(): number {
+    return gear.sdkCacheIds.necklaceOfRupture.value;
   }
 }
 
@@ -208,6 +262,9 @@ class DivisionGlaive extends Projectile {
 
 export class TonalzticsOfRalos extends RangedWeapon {
   override inventorySprite = placeholderLabel("tonalzticsOfRalos");
+  override get itemName(): ItemName {
+    return ItemName.TONALZTICS_OF_RALOS;
+  }
 
   override get cacheItemId(): number {
     return gear.items.tonalzticsOfRalos.itemId.value;

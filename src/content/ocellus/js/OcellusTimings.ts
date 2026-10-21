@@ -173,12 +173,13 @@ export type GearKeys = Readonly<{
   legs: "eliteVoidRobe" | "inquisitorsPlateskirt";
   gloves: "voidKnightGloves" | "ferociousGloves";
   cape: "dizanasQuiver" | "infernalCape";
-  necklace: "necklaceOfAnguish" | "amuletOfTorture";
-  feet: "pegasianBoots" | "primordialBoots";
+  necklace: "necklaceOfRupture" | "amuletOfRancour";
+  feet: "avernicTreadsMax";
   ring: "venatorRing" | "ultorRing";
   ammo: "dragonArrows";
 }>;
 export type Setup = Readonly<{ [S in GearSlot]: GearKeys[S] }>;
+export type SupplyKey = "superCombatPotion" | "bastionPotion" | "saradominBrew" | "superRestore";
 export type TrainerItemKey =
   | "voidRangerHelm"
   | "eliteVoidTop"
@@ -194,6 +195,8 @@ export type StanceSpeeds<T extends number = TickSpan> = Readonly<{ rapidSpeed: T
 
 type GearRecipe = Readonly<{
   items: Readonly<Record<TrainerItemKey, TrainerItem>>;
+  sdkCacheIds: Readonly<{ necklaceOfRupture: Selected<number> }>;
+  supplies: Selected<readonly SupplyKey[]>;
   twistedBow: Selected<StanceSpeeds<TwistedBow["attackSpeed"]>>;
   ralos: Selected<StanceSpeeds & Readonly<{ range: number; longrangeRange: number; hits: number; hitMaxFraction: number }>>;
   division: Selected<Readonly<{ energy: number; accuracyFactor: number; defenceDrainOfMagic: number }>>;
@@ -464,6 +467,11 @@ const INQUISITOR_SET = wiki(`${OSRS_WIKI}Inquisitor%27s_armour`, null);
 const TWISTED_BOW_PAGE = wiki(`${OSRS_WIKI}Twisted_bow`, 15363157);
 const RALOS_PAGE = wiki(`${OSRS_WIKI}Tonalztics_of_ralos`, 15368852);
 const SCYTHE_PAGE = wiki(`${OSRS_WIKI}Scythe_of_Vitur`, 15372833);
+const RUPTURE_PAGE = wiki(`${OSRS_WIKI}Necklace_of_rupture`, 15264776);
+const ANGUISH_PAGE = wiki(`${OSRS_WIKI}Necklace_of_anguish`, 15301384);
+const RANCOUR_PAGE = wiki(`${OSRS_WIKI}Amulet_of_rancour`, 15343231);
+const TREADS_PAGE = wiki(`${OSRS_WIKI}Avernic_treads_(max)`, 15320239);
+const RAID_INVENTORY = wiki(`${OSRS_WIKI}The_Fractured_Archive/Strategies`, 15378756);
 
 type Five = readonly [stab: number, slash: number, crush: number, magic: number, range: number];
 const stats = (attack: Five, defence: Five, other: readonly [meleeStrength: number, rangedStrength: number, magicDamage: number, prayer: number]): ItemStats => ({
@@ -487,6 +495,20 @@ const GEAR: GearRecipe = {
     inquisitorsPlateskirt: item(24421, "Inquisitor%27s_plateskirt", 15352824, stats([0, 0, 12, -9, -5], [42, 30, 49, 0, 22], [2, 0, 0, 2])),
     tonalzticsOfRalos: item(28922, "Tonalztics_of_ralos", 15368852, stats([0, 0, 0, 0, 115], [0, 0, 0, 0, 0], [0, 55, 0, 2])),
   },
+  sdkCacheIds: {
+    necklaceOfRupture: selected(33639, "spec-confirmed", "unscaled", "the SDK's class carries anguish's id 19547 as a stand-in; cache 2746 holds item 33639 with male model 61426", cache("item 33639 maleModel0 61426"), RUPTURE_PAGE),
+  },
+  supplies: selected<readonly SupplyKey[]>(
+    [
+      "superCombatPotion", "bastionPotion", "saradominBrew", "superRestore",
+      "superCombatPotion", "bastionPotion", "saradominBrew", "superRestore",
+      "saradominBrew", "saradominBrew", "saradominBrew", "superRestore",
+      "saradominBrew", "saradominBrew", "saradominBrew", "superRestore",
+      "saradominBrew", "saradominBrew", "superRestore",
+    ],
+    "spec-single", "unscaled", "slots 9 to 27 of the wiki's recommended raid inventory, in its order: 2 super combat potions, 2 ranging potions, 10 Saradomin brews and 5 super restores, with no fish; the SDK has no ranging potion, so the Bastion potion stands in, with the same Ranged boost plus a Defence boost (inferred)",
+    RAID_INVENTORY, wiki(`${OSRS_WIKI}Ranging_potion`, 15293943), wiki(`${OSRS_WIKI}Bastion_potion`, 15293966),
+  ),
   twistedBow: selected({ rapidSpeed: 5, otherSpeed: 6 }, "spec-single", "unscaled", "attack speed by stance: 5 ticks on Rapid, 6 on Accurate and Longrange", TWISTED_BOW_PAGE),
   ralos: selected({ rapidSpeed: span(6), otherSpeed: span(7), range: 7, longrangeRange: 9, hits: 2, hitMaxFraction: 0.75 }, "spec-single", "unscaled", "charged, one-handed thrown: two independent hits, each 0 to 75% of the max ranged hit", RALOS_PAGE),
   division: selected({ energy: 50, accuracyFactor: 1.5, defenceDrainOfMagic: 0.125 }, "spec-single", "unscaled", "+50% accuracy; each hit that deals damage lowers Defence by 12.5% of Magic (10% before 2026-07-22) and, on NPCs, before the second roll; the drain applies as each glaive lands, so a hit the target rejects drains nothing (inferred); rounding not stated, floored (inferred)", RALOS_PAGE),
@@ -521,14 +543,14 @@ export const OCELLUS_P4 = {
   choices: {
     setup: choice("ranged", {
       ranged: selected<Setup>(
-        { weapon: "twistedBow", helmet: "voidRangerHelm", chest: "eliteVoidTop", legs: "eliteVoidRobe", gloves: "voidKnightGloves", cape: "dizanasQuiver", necklace: "necklaceOfAnguish", feet: "pegasianBoots", ring: "venatorRing", ammo: "dragonArrows" },
-        "assumption", "unscaled", "owner-named full elite void with void gloves, ranger helm and Twisted Bow; arrows, cape, neck, feet and ring are SDK items (assumption); the default because the first void's Deflect Melee leaves ranged open",
-        owner("ranged setup"),
+        { weapon: "twistedBow", helmet: "voidRangerHelm", chest: "eliteVoidTop", legs: "eliteVoidRobe", gloves: "voidKnightGloves", cape: "dizanasQuiver", necklace: "necklaceOfRupture", feet: "avernicTreadsMax", ring: "venatorRing", ammo: "dragonArrows" },
+        "assumption", "unscaled", "owner-named full elite void with void gloves, ranger helm and Twisted Bow; the owner asked for the best-in-slot ranged necklace, which the wiki names as the Necklace of rupture, and Avernic treads (max) in both setups; arrows, cape and ring are SDK items (assumption); the default because the first void's Deflect Melee leaves ranged open",
+        owner("ranged setup"), owner("ranged necklace"), owner("boots"), ANGUISH_PAGE, RUPTURE_PAGE, TREADS_PAGE,
       ),
       melee: selected<Setup>(
-        { weapon: "scytheOfVitur", helmet: "inquisitorsGreatHelm", chest: "inquisitorsHauberk", legs: "inquisitorsPlateskirt", gloves: "ferociousGloves", cape: "infernalCape", necklace: "amuletOfTorture", feet: "primordialBoots", ring: "ultorRing", ammo: "dragonArrows" },
-        "assumption", "unscaled", "owner-named Inquisitor's armour with the Scythe of Vitur on crush; gloves, cape, neck, feet and ring are SDK items (assumption)",
-        owner("melee setup"),
+        { weapon: "scytheOfVitur", helmet: "inquisitorsGreatHelm", chest: "inquisitorsHauberk", legs: "inquisitorsPlateskirt", gloves: "ferociousGloves", cape: "infernalCape", necklace: "amuletOfRancour", feet: "avernicTreadsMax", ring: "ultorRing", ammo: "dragonArrows" },
+        "assumption", "unscaled", "owner-named Inquisitor's armour with the Scythe of Vitur on crush, the Amulet of rancour (the owner's first choice over blood fury; both are in cache 2746) and Avernic treads (max) in both setups; gloves, cape and ring are SDK items (assumption)",
+        owner("melee setup"), owner("melee amulet"), owner("boots"), RANCOUR_PAGE, TREADS_PAGE,
       ),
     }),
     bossMaxHp: choice("footage-fit", {

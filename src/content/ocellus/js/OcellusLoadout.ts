@@ -1,19 +1,21 @@
 import {
-  AmuletOfTorture,
+  AmuletOfRancour,
   AttackStyle,
   AttackStylesController,
+  AvernicTreadsMax,
+  BastionPotion,
   DizanasQuiver,
   DragonArrows,
   FerociousGloves,
   InfernalCape,
-  NecklaceOfAnguish,
-  PegasianBoots,
-  PrimordialBoots,
+  SaradominBrew,
+  SuperCombatPotion,
+  SuperRestore,
   UltorRing,
   VenatorRing,
 } from "osrs-sdk";
 import type { Item, Player, UnitEquipment } from "osrs-sdk";
-import type { GearKeys, GearSlot, ResolvedChoices, Setup } from "./OcellusTimings";
+import type { GearKeys, GearSlot, ResolvedChoices, Setup, SupplyKey } from "./OcellusTimings";
 import { GEAR_SLOTS, OCELLUS_P4 } from "./OcellusTimings";
 import {
   EliteVoidRobe,
@@ -21,6 +23,7 @@ import {
   InquisitorsGreatHelm,
   InquisitorsHauberk,
   InquisitorsPlateskirt,
+  OcellusNecklaceOfRupture,
   OcellusScythe,
   OcellusTwistedBow,
   TonalzticsOfRalos,
@@ -50,10 +53,17 @@ const ITEMS: { readonly [S in GearSlot]: { readonly [K in GearKeys[S]]: () => Sl
   legs: { eliteVoidRobe: () => new EliteVoidRobe(), inquisitorsPlateskirt: () => new InquisitorsPlateskirt() },
   gloves: { voidKnightGloves: () => new VoidKnightGloves(), ferociousGloves: () => new FerociousGloves() },
   cape: { dizanasQuiver: () => new DizanasQuiver(), infernalCape: () => new InfernalCape() },
-  necklace: { necklaceOfAnguish: () => new NecklaceOfAnguish(), amuletOfTorture: () => new AmuletOfTorture() },
-  feet: { pegasianBoots: () => new PegasianBoots(), primordialBoots: () => new PrimordialBoots() },
+  necklace: { necklaceOfRupture: () => new OcellusNecklaceOfRupture(), amuletOfRancour: () => new AmuletOfRancour() },
+  feet: { avernicTreadsMax: () => new AvernicTreadsMax() },
   ring: { venatorRing: () => new VenatorRing(), ultorRing: () => new UltorRing() },
   ammo: { dragonArrows: () => new DragonArrows() },
+};
+
+const SUPPLIES: { readonly [K in SupplyKey]: () => Item } = {
+  superCombatPotion: () => new SuperCombatPotion(),
+  bastionPotion: () => new BastionPotion(),
+  saradominBrew: () => new SaradominBrew(),
+  superRestore: () => new SuperRestore(),
 };
 
 function create<S extends GearSlot>(slot: S, key: GearKeys[S]): SlotItem<S> {
@@ -77,7 +87,8 @@ export function dress(player: Player, setup: ResolvedChoices["setup"]): void {
       if (other.value[slot] !== worn[slot]) switches.push(create(slot, other.value[slot]));
     }
   }
-  switches.forEach((item, index) => (player.inventory[index] = item));
+  const supplies = OCELLUS_P4.gear.supplies.value.map((key) => SUPPLIES[key]());
+  [...switches, ...supplies].forEach((item, index) => (player.inventory[index] = item));
   player.equipmentChanged();
   AttackStylesController.controller.setWeaponAttackStyle(new OcellusScythe(), STANCES[OCELLUS_P4.gear.scytheStance.value]);
 }

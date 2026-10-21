@@ -17,3 +17,7 @@ export const ARCHIVE_OCELLUS_ASSETS = {
   ]),
   sounds: Object.fromEntries(Object.entries(presentation.sounds).map(([cue, sound]) => [cue, { id: sound.value }])),
 } as const satisfies CacheAssets;
+
+export const ARCHIVE_OCELLUS_OVERRIDES = {
+  items: Object.fromEntries(Object.entries(gear.sdkCacheIds).map(([key, id]) => [key, { id: id.value }])),
+} as const satisfies CacheAssets;

@@ -5,8 +5,8 @@ SCRIPT="$(cd "$(dirname "$0")" && pwd)/verify.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-eval "$(grep -E '^(DRILL_QUERY|BOSS_NPC|SPAWN_TILE|WALK_[A-Z_]+|EDGE_[A-Z_]+|CYCLE_[A-Z_]+|FOCUS_[A-Z_]+|BOSS_CLICK_[A-Z_]+|RING_CLICK_[A-Z_]+|FLOOD_[A-Z_]+|NEAR_SQUARE|VOID_[A-Z_]+|ORB_[A-Z_]+|LOADOUT_[A-Z_]+|EXPLOSION_[A-Z_]+|STEP_CLICK_[A-Z_]+|DODGE_CLICK_[A-Z_]+|UNDER_BOSS_CLICK_[A-Z_]+|MARKER_SHOT_[A-Z_]+|SOUND_[A-Z_]+|SPECIAL_[A-Z_]+|PROTECT_[A-Z_]+|TELL_[A-Z_]+|TRANSITION_[A-Z_]+|LANDING_[A-Z_]+|STYLE_[A-Z_]+|CREDIT_LINE)=' "$SCRIPT")"
-for fn in json process_start serve state doctor stop probe fight_tick_at_least canvas_centre click_after_tick shot_after_tick save_sound_settings record_audio_starts step_on_marks step_south_and_back_on_marks drive_lead_in drive_walk click_past_the_edge drive_edge drive_flood_shot drive_cycle choose_focus drive_focus drive_void_floor drive_void_shot drive_lifeforce_orb drive_explosions drive_transition_attack click_at click_inventory_slot drive_loadouts drive release_browser stage_browser; do
+eval "$(grep -E '^(DRILL_QUERY|BOSS_NPC|SPAWN_TILE|WALK_[A-Z_]+|EDGE_[A-Z_]+|CYCLE_[A-Z_]+|FOCUS_[A-Z_]+|BOSS_CLICK_[A-Z_]+|RING_CLICK_[A-Z_]+|FLOOD_[A-Z_]+|NEAR_SQUARE|VOID_[A-Z_]+|ORB_[A-Z_]+|LOADOUT_[A-Z_]+|EXPLOSION_[A-Z_]+|STEP_CLICK_[A-Z_]+|DODGE_CLICK_[A-Z_]+|UNDER_BOSS_CLICK_[A-Z_]+|MARKER_SHOT_[A-Z_]+|SOUND_[A-Z_]+|SPECIAL_[A-Z_]+|PROTECT_[A-Z_]+|TELL_[A-Z_]+|TRANSITION_[A-Z_]+|LANDING_[A-Z_]+|STYLE_[A-Z_]+|SUPPLY_[A-Z_]+|KEYBIND_[A-Z_]+|CREDIT_LINE)=' "$SCRIPT")"
+for fn in json process_start serve state doctor stop probe fight_tick_at_least canvas_centre click_after_tick shot_after_tick save_sound_settings record_audio_starts step_on_marks step_south_and_back_on_marks drive_lead_in drive_walk click_past_the_edge drive_edge drive_flood_shot drive_cycle choose_focus drive_focus drive_void_floor drive_void_shot drive_lifeforce_orb drive_explosions drive_transition_attack click_at click_inventory_slot drive_loadouts right_click_inventory_slot drive_supplies bind_inventory_key drive_keybinds drive release_browser stage_browser; do
   eval "$(sed -n "/^${fn}() {\$/,/^}\$/p" "$SCRIPT")"
 done
 
@@ -80,6 +80,31 @@ interrupt_leaves_the_recorded_instance() {
   local status=$?
   [[ "$status" -eq 130 ]] || { echo "exit status $status, expected 130"; return 1; }
   [[ ! -e "$T/stop-called" ]] || { echo "stop was called for an instance this run did not start"; return 1; }
+}
+
+failed_transfer_fails_doctor() {
+  setup
+  printf 'pid=4242\nstarted=unchanged\nport=8002\nrevision=%s\n' "$(git rev-parse HEAD)" >"$STATE_FILE"
+  process_start() { echo unchanged; }
+  port_listener() { echo 4242; }
+  curl() {
+    case "$*" in
+      *manifest.json*)
+        [[ "$BROKEN" != manifest ]] || { printf '{"assets":{"npc-16677":'; return 18; }
+        printf '{"assets":{"npc-16677":{}}}'
+        ;;
+      *)
+        [[ "$BROKEN" != page ]] || { printf '<html><title>Archive Ocellus Trainer</title>'; return 18; }
+        printf '<html><title>Archive Ocellus Trainer</title></html>'
+        ;;
+    esac
+  }
+  BROKEN=none
+  doctor >"$T/doctor.log" || { echo "doctor rejected a healthy instance"; cat "$T/doctor.log"; return 1; }
+  for BROKEN in page manifest; do
+    if doctor >"$T/doctor.log"; then echo "doctor passed although the ${BROKEN} transfer failed (curl exit 18)"; return 1; fi
+    grep -q "doctor: ${BROKEN} request failed" "$T/doctor.log" || { echo "doctor did not name the failed ${BROKEN} transfer"; cat "$T/doctor.log"; return 1; }
+  done
 }
 
 fixture_logs() {
@@ -346,6 +371,48 @@ loadout_snapshot() {
   printf '{"data":{"result":{"boss":{"defence":%s},"player":{"equipped":%s,"specialEnergy":%s}}}}\n' "$defence" "$worn" "$energy"
 }
 
+supply_probe() {
+  local n
+  case "$1" in
+    inventory)
+      [[ "$FAULT" == no-supplies ]] && { echo '{"data":{"result":[28922,22325,24419,24420,24421,22981,21295,29801,25485,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]}}'; return; }
+      printf '{"data":{"result":%s}}\n' "$SUPPLY_INVENTORY"
+      ;;
+    menu)
+      n=$(($(cat "$T/menu-probes" 2>/dev/null || echo 0) + 1))
+      echo "$n" >"$T/menu-probes"
+      if [[ "$n" -gt 1 ]]; then echo '{"data":{"result":null}}'
+      elif [[ "$FAULT" == null-names ]]; then echo '{"data":{"result":["Equip null","Drop null","Examine null"]}}'
+      else printf '{"data":{"result":%s}}\n' "$SUPPLY_NAMED_MENU"
+      fi
+      ;;
+    hp)
+      local healed="$SUPPLY_HP_AFTER_BREW"
+      [[ "$FAULT" != no-heal ]] || healed=99
+      printf '{"data":{"result":[[0,99],[1,99],[2,99],[3,99],[4,%s],[5,%s]]}}\n' "$healed" "$healed"
+      ;;
+    panel)
+      local tab=SETTINGS key="$KEYBIND_DEFAULT_KEY"
+      n=$(($(cat "$T/panel-probes" 2>/dev/null || echo 0) + 1))
+      echo "$n" >"$T/panel-probes"
+      case "$n:$FAULT" in
+        1:keybinds-closed) tab=INVENTORY ;;
+        2:*) key="$KEYBIND_NEW_KEY" ;;
+        3:unsaved-key | 4:unsaved-key) tab=PRAYER ;;
+        3:*) tab=PRAYER key="$KEYBIND_NEW_KEY" ;;
+        4:*) tab=INVENTORY key="$KEYBIND_NEW_KEY" ;;
+        5:unrestored-key) key="$KEYBIND_NEW_KEY" ;;
+      esac
+      printf '{"data":{"result":{"keys":{"combat":"F5","equipment":"F1","inventory":"%s","prayer":"F3","spellbook":"F2"},"tab":"%s"}}}\n' "$key" "$tab"
+      ;;
+    saved)
+      local key="$KEYBIND_NEW_KEY"
+      [[ "$FAULT" != unsaved-key ]] || key="$KEYBIND_DEFAULT_KEY"
+      printf '{"data":{"result":"{\\"version\\":1,\\"values\\":{\\"inventory_key\\":\\"%s\\"}}"}}\n' "$key"
+      ;;
+  esac
+}
+
 fake_browser() {
   FINAL_TILE="$1"
   SCREENSHOT="${2:-ok}"
@@ -371,6 +438,12 @@ fake_browser() {
         printf '{"data":{"result":{"ticking":true,"tick":%s,"player":%s,"destination":%s,"fight":%s}}}\n' "$tick" "$tile" "$tile" "$fight"
         ;;
       "--json eval window.__cueAudio") if [[ -e "$T/special-late" ]]; then cat "$T/special-audio.json"; else cat "$T/explosion-audio.json"; fi ;;
+      "--json eval window.__archiveOcellusProbe.snapshot().fight.player.inventory") supply_probe inventory ;;
+      "--json eval window.__archiveOcellusProbe.snapshot().menu") supply_probe menu ;;
+      "--json eval window.__archiveOcellusProbe.snapshot().fight.run.tick") echo '{"data":{"result":3}}' ;;
+      "--json eval window.__archiveOcellusProbe.log().rows.map((row) => [row.tick, row.playerAtPostTick.hp])") supply_probe hp ;;
+      "--json eval window.__archiveOcellusProbe.snapshot().panel") supply_probe panel ;;
+      "--json eval localStorage.getItem('osrs-sdk:settings')") supply_probe saved ;;
       "--json eval window.__archiveOcellusProbe.log()")
         [[ ! -e "$T/special-late" ]] || { cat "$T/special-late-log.json"; return; }
         [[ ! -e "$T/special" ]] || { cat "$T/special-log.json"; return; }
@@ -681,12 +754,60 @@ edge_click_on_the_floor_fails() {
   grep -q '"edgeClickOrderedOffThePlatform": false' "$T/drive.log" || { echo "the edge order check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
+item_names_shown_as_null_fail() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' null-names
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the item menu read Equip null"; return 1; fi
+  grep -q '"itemNamedInMenu": false' "$T/drive.log" || { echo "the name check did not name the failure"; cat "$T/drive.log"; return 1; }
+}
+
+supplies_missing_fail() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' no-supplies
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed with empty supply slots"; return 1; fi
+  grep -q '"suppliesCarried": false' "$T/drive.log" || { echo "the supplies check did not name the failure"; cat "$T/drive.log"; return 1; }
+}
+
+brew_without_heal_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' no-heal
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the brew left hitpoints at 99"; return 1; fi
+  grep -q '"brewHealedNextTick": false' "$T/drive.log" || { echo "the heal check did not name the failure"; cat "$T/drive.log"; return 1; }
+}
+
+key_binding_lost_on_reload_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' unsaved-key
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the bound key was not saved"; return 1; fi
+  grep -q '"keyBoundAndSaved": false' "$T/drive.log" || { echo "the saved key check did not name the failure"; cat "$T/drive.log"; return 1; }
+  grep -q '"boundKeyOpensTabAfterReload": false' "$T/drive.log" || { echo "the reload check did not name the failure"; cat "$T/drive.log"; return 1; }
+}
+
+failed_checks() {
+  command node -e 'const { checks } = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.log(Object.keys(checks).filter((name) => !checks[name]).join(" "))' "$VERIFY_DIR/observed.json"
+}
+
+keybinds_button_not_opening_settings_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' keybinds-closed
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the Keybinds button left the inventory open"; return 1; fi
+  [[ "$(failed_checks)" == keybindsButtonOpensSettings ]] || { echo "expected only keybindsButtonOpensSettings to fail, got: $(failed_checks)"; return 1; }
+}
+
+default_key_not_restored_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' unrestored-key
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the inventory key stayed ${KEYBIND_NEW_KEY}"; return 1; fi
+  [[ "$(failed_checks)" == defaultKeyRestored ]] || { echo "expected only defaultKeyRestored to fail, got: $(failed_checks)"; return 1; }
+}
+
 failed=0
 for t in \
   refused_serve_does_not_stop_the_recorded_instance \
   own_instance_is_stopped \
   interrupt_stops_own_instance \
   interrupt_leaves_the_recorded_instance \
+  failed_transfer_fails_doctor \
   walk_to_the_documented_tile_passes \
   walk_to_a_wrong_tile_fails \
   walk_off_the_edge_fails \
@@ -724,7 +845,13 @@ for t in \
   transition_sounds_before_the_first_click_fail \
   loadout_not_switched_fails \
   division_not_spent_fails \
-  division_extra_drains_fail; do
+  division_extra_drains_fail \
+  item_names_shown_as_null_fail \
+  supplies_missing_fail \
+  brew_without_heal_fails \
+  key_binding_lost_on_reload_fails \
+  keybinds_button_not_opening_settings_fails \
+  default_key_not_restored_fails; do
   if ("$t") >"$WORK/$t.log" 2>&1; then
     echo "PASS $t"
   else

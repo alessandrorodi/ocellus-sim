@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { CacheRender, Settings, TrainerInstance, TrainerLoadingState } from "osrs-sdk";
+import { CacheRender, ControlPanelController, Settings, TrainerInstance, TrainerLoadingState, Viewport } from "osrs-sdk";
 import { GameOverlay, TrainerApp, TrainerLoadingSplash } from "osrs-sdk-react";
 import { OcellusRegion } from "./content/ocellus/js/OcellusRegion";
 import type { DrillConfig } from "./content/ocellus/js/OcellusTimings";
@@ -22,12 +22,15 @@ type VerificationProbeSnapshot = Readonly<{
   destination: Readonly<{ x: number; y: number }> | null;
   fight: FightSnapshot | null;
   rejected: readonly string[];
+  panel: Readonly<{ tab: string | null; keys: Readonly<Record<"inventory" | "spellbook" | "prayer" | "equipment" | "combat", string>> }>;
+  menu: readonly string[] | null;
 }>;
 
 function exposeVerificationProbe(trainer: TrainerInstance, region: OcellusRegion, rejected: readonly string[]) {
   window.__archiveOcellusProbe = Object.freeze({
     snapshot(): VerificationProbeSnapshot {
       const { player, world } = trainer.getSnapshot();
+      const { contextMenu } = Viewport.viewport;
       return {
         ticking: !world.isPaused,
         tick: world.globalTickCounter,
@@ -35,6 +38,11 @@ function exposeVerificationProbe(trainer: TrainerInstance, region: OcellusRegion
         destination: player?.destinationLocation ? { x: player.destinationLocation.x, y: player.destinationLocation.y } : null,
         fight: region.snapshot(),
         rejected,
+        panel: {
+          tab: Object.entries(ControlPanelController.controls).find(([, control]) => control === ControlPanelController.controller.selectedControl)?.[0] ?? null,
+          keys: { inventory: Settings.inventory_key, spellbook: Settings.spellbook_key, prayer: Settings.prayer_key, equipment: Settings.equipment_key, combat: Settings.combat_key },
+        },
+        menu: contextMenu.isActive ? contextMenu.menuOptions.map((option) => option.text.map((block) => `${block.text}`).join("")) : null,
       };
     },
     log: () => region.fightLog(),
@@ -81,9 +89,10 @@ function DrillControls({ config }: Readonly<{ config: DrillConfig }>) {
         </select>
       </label>
       <label>
-        Seed <input id="seed" inputMode="numeric" value={seed} onChange={(event) => setSeed(event.target.value)} />
+        Seed <input id="seed" inputMode="numeric" value={seed} onChange={(event) => setSeed(event.target.value)} onKeyDown={(event) => event.stopPropagation()} />
       </label>
       <button id="restart" type="submit">Restart</button>
+      <button id="keybinds" type="button" onClick={() => ControlPanelController.controller.setActiveControl("SETTINGS")}>Keybinds</button>
     </form>
   );
 }

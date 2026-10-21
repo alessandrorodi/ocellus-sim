@@ -31,8 +31,8 @@ FOCUS_DRILL="transition-attacks"
 FOCUS_LAST_TICK=40
 FOCUS_BEATS='["boss-landing-starts","boss-shouts","soul-split-heal","special-hit","special-sound","special-tell"]'
 LOADOUT_QUERY="?seed=1&setup=ranged"
-LOADOUT_RANGED_WORN='{"weapon":20997,"offhand":null,"helmet":11664,"chest":13072,"legs":13073,"gloves":8842,"cape":28951,"necklace":19547,"feet":13237,"ring":28310,"ammo":11212}'
-LOADOUT_MELEE_WORN='{"weapon":22325,"offhand":null,"helmet":24419,"chest":24420,"legs":24421,"gloves":22981,"cape":21295,"necklace":19553,"feet":13239,"ring":25485,"ammo":11212}'
+LOADOUT_RANGED_WORN='{"weapon":20997,"offhand":null,"helmet":11664,"chest":13072,"legs":13073,"gloves":8842,"cape":28951,"necklace":33639,"feet":31097,"ring":28310,"ammo":11212}'
+LOADOUT_MELEE_WORN='{"weapon":22325,"offhand":null,"helmet":24419,"chest":24420,"legs":24421,"gloves":22981,"cape":21295,"necklace":29801,"feet":31097,"ring":25485,"ammo":11212}'
 LOADOUT_INVENTORY_TAB_X=1164
 LOADOUT_INVENTORY_TAB_Y=745
 LOADOUT_SLOT_X=1125
@@ -40,12 +40,22 @@ LOADOUT_SLOT_Y=508
 LOADOUT_SLOT_DX=39
 LOADOUT_SLOT_DY=32
 LOADOUT_SPECIAL_SLOT=0
-LOADOUT_SWITCHES=9
+LOADOUT_SWITCHES=8
 LOADOUT_SPECIAL_ORB_X=1140
 LOADOUT_SPECIAL_ORB_Y=157
 LOADOUT_BOSS_CLICK_RIGHT_PX=-10
 LOADOUT_BOSS_CLICK_DOWN_PX=-160
 LOADOUT_DIVISION_DRAIN=37
+SUPPLY_QUERY="?seed=1&setup=ranged"
+SUPPLY_INVENTORY='[28922,22325,24419,24420,24421,22981,21295,29801,25485,12695,22461,6685,3024,12695,22461,6685,3024,6685,6685,6685,3024,6685,6685,6685,3024,6685,6685,3024]'
+SUPPLY_NAMED_SLOT=0
+SUPPLY_NAMED_MENU='["Equip Tonalztics of Ralos","Drop Tonalztics of Ralos","Examine Tonalztics of Ralos"]'
+SUPPLY_BREW_SLOT=11
+SUPPLY_HP_AFTER_BREW=115
+KEYBIND_INVENTORY_BUTTON_X=1130
+KEYBIND_INVENTORY_BUTTON_Y=650
+KEYBIND_DEFAULT_KEY=F4
+KEYBIND_NEW_KEY=F6
 BOSS_CLICK_RIGHT_PX=150
 BOSS_CLICK_UP_PX=150
 RING_CLICK_RIGHT_PX=140
@@ -218,7 +228,7 @@ state() {
 
 doctor() {
   [[ -f "$STATE_FILE" ]] || { log "doctor: no recorded instance"; return 1; }
-  local pid problems=0
+  local pid page manifest problems=0
   pid="$(state pid)"
   if [[ "$(process_start "$pid")" != "$(state started)" ]]; then
     log "doctor: recorded PID ${pid} is not running (or the PID was reused)"
@@ -228,11 +238,17 @@ doctor() {
     log "doctor: port $(state port) is held by '$(port_listener)', not the recorded PID ${pid}"
     problems=1
   fi
-  if ! curl -sf "http://127.0.0.1:$(state port)/" | grep -q "<title>Archive Ocellus Trainer</title>"; then
+  if ! page="$(curl -sf "http://127.0.0.1:$(state port)/")"; then
+    log "doctor: page request failed"
+    problems=1
+  elif ! grep -q "<title>Archive Ocellus Trainer</title>" <<<"$page"; then
     log "doctor: page title is not Archive Ocellus Trainer"
     problems=1
   fi
-  if ! curl -sf "http://127.0.0.1:$(state port)/osrs-assets/manifest.json" | grep -q "\"npc-${BOSS_NPC}\""; then
+  if ! manifest="$(curl -sf "http://127.0.0.1:$(state port)/osrs-assets/manifest.json")"; then
+    log "doctor: manifest request failed"
+    problems=1
+  elif ! grep -q "\"npc-${BOSS_NPC}\"" <<<"$manifest"; then
     log "doctor: served manifest has no npc-${BOSS_NPC}"
     problems=1
   fi
@@ -501,6 +517,57 @@ drive_loadouts() {
   ab --json errors | json data.errors >"$VERIFY_DIR/loadout-selector-page-errors.json" || { log "page error capture failed"; return 1; }
 }
 
+right_click_inventory_slot() {
+  ab mouse move $((LOADOUT_SLOT_X + $1 % 4 * LOADOUT_SLOT_DX)) $((LOADOUT_SLOT_Y + $1 / 4 * LOADOUT_SLOT_DY)) >/dev/null && ab mouse down right >/dev/null && ab mouse up right >/dev/null
+}
+
+drive_supplies() {
+  ab open "${URL}${SUPPLY_QUERY}" >/dev/null || return 1
+  fight_tick_at_least 1 120000 || { log "the supplies drill never stepped to P4 tick 1"; return 1; }
+  click_at "$LOADOUT_INVENTORY_TAB_X" "$LOADOUT_INVENTORY_TAB_Y" || return 1
+  ab wait 600 >/dev/null
+  probe "snapshot().fight.player.inventory" >"$VERIFY_DIR/supplies-inventory.json"
+  right_click_inventory_slot "$SUPPLY_NAMED_SLOT" || return 1
+  ab wait 300 >/dev/null
+  probe "snapshot().menu" >"$VERIFY_DIR/item-menu.json"
+  ab screenshot "$VERIFY_DIR/item-menu.png" >/dev/null || { log "item menu screenshot failed"; return 1; }
+  canvas_centre || { log "canvas box unreadable"; return 1; }
+  ab mouse move "$CX" "$CY" >/dev/null && ab wait 200 >/dev/null || return 1
+  probe "snapshot().menu" >"$VERIFY_DIR/item-menu-closed.json"
+  probe "snapshot().fight.run.tick" >"$VERIFY_DIR/brew-click.json"
+  click_inventory_slot "$SUPPLY_BREW_SLOT" || return 1
+  ab wait --fn "window.__archiveOcellusProbe.log().rows.some((row) => row.playerAtPostTick.hp > 99)" --timeout 15000 >/dev/null || log "the brew never raised the player's hitpoints"
+  probe "log().rows.map((row) => [row.tick, row.playerAtPostTick.hp])" >"$VERIFY_DIR/brew-hp.json"
+  ab wait 600 >/dev/null
+  ab screenshot "$VERIFY_DIR/brew-heal.png" >/dev/null || { log "brew screenshot failed"; return 1; }
+  ab console >"$VERIFY_DIR/supplies-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/supplies-page-errors.json" || { log "page error capture failed"; return 1; }
+}
+
+bind_inventory_key() {
+  ab click "#keybinds" >/dev/null && ab wait 300 >/dev/null && click_at "$KEYBIND_INVENTORY_BUTTON_X" "$KEYBIND_INVENTORY_BUTTON_Y" && ab press "$1" >/dev/null && ab wait 300 >/dev/null
+}
+
+drive_keybinds() {
+  ab click "#keybinds" >/dev/null && ab wait 300 >/dev/null || { log "the Keybinds button did not respond"; return 1; }
+  probe "snapshot().panel" >"$VERIFY_DIR/keybinds-open.json"
+  ab screenshot "$VERIFY_DIR/keybinds.png" >/dev/null || { log "key bindings screenshot failed"; return 1; }
+  bind_inventory_key "$KEYBIND_NEW_KEY" || { log "the inventory key was not bound"; return 1; }
+  probe "snapshot().panel" >"$VERIFY_DIR/keybinds-bound.json"
+  ab --json eval "localStorage.getItem('${SOUND_SETTINGS_KEY}')" | json data.result >"$VERIFY_DIR/keybinds-saved.json" || { log "saved settings capture failed"; return 1; }
+  ab open "${URL}${SUPPLY_QUERY}" >/dev/null || return 1
+  fight_tick_at_least 1 120000 || { log "the reloaded drill never stepped to P4 tick 1"; return 1; }
+  ab press "$KEYBIND_DEFAULT_KEY" >/dev/null && ab wait 300 >/dev/null || return 1
+  probe "snapshot().panel" >"$VERIFY_DIR/keybinds-old-key.json"
+  ab press "$KEYBIND_NEW_KEY" >/dev/null && ab wait 300 >/dev/null || return 1
+  probe "snapshot().panel" >"$VERIFY_DIR/keybinds-reloaded.json"
+  ab screenshot "$VERIFY_DIR/keybinds-reloaded.png" >/dev/null || { log "reloaded key screenshot failed"; return 1; }
+  bind_inventory_key "$KEYBIND_DEFAULT_KEY" || { log "the default inventory key was not restored"; return 1; }
+  probe "snapshot().panel" >"$VERIFY_DIR/keybinds-restored.json"
+  ab console >"$VERIFY_DIR/keybinds-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/keybinds-page-errors.json" || { log "page error capture failed"; return 1; }
+}
+
 drive_void_floor() {
   choose_focus "$VOID_DRILL" || return 1
   fight_tick_at_least "$VOID_INNER_SHOT_TICK" 120000 || { log "the reloaded boss never stepped to P4 tick ${VOID_INNER_SHOT_TICK}"; return 1; }
@@ -613,7 +680,7 @@ drive() {
   drive_lead_in || return 1
   ab wait --fn "window.__archiveOcellusProbe?.snapshot().ticking === true && window.__archiveOcellusProbe.snapshot().tick >= 8" \
     --timeout 90000 >/dev/null || { log "trainer never started ticking"; return 1; }
-  drive_walk && drive_edge && drive_cycle && drive_focus && drive_void_floor && drive_void_shot && drive_lifeforce_orb && drive_explosions && drive_transition_attack && drive_loadouts || return 1
+  drive_walk && drive_edge && drive_cycle && drive_focus && drive_void_floor && drive_void_shot && drive_lifeforce_orb && drive_explosions && drive_transition_attack && drive_loadouts && drive_supplies && drive_keybinds || return 1
 
   local capture
   for capture in hidden.json hidden.png before.json before.png after.json after.png edge-click.json edge-arrived.json edge.json edge.png boss.png cycle-ring-click.json cycle-snapshot.json cycle.json console.log page-errors.json focus.json focus.png focus-console.log focus-page-errors.json \
@@ -623,14 +690,17 @@ drive() {
     explosion-left.png explosion-standing.png explosions.json explosion-audio.json explosion-console.log explosion-page-errors.json explosion-under.png explosions-under.json explosion-under-console.log explosion-under-page-errors.json \
     special-before.png special-vortex.png special-spike-disk.png special-semicircle.png special-black-disk.png special.json special-console.log special-page-errors.json special-late.json special-audio.json special-late-console.log special-late-page-errors.json \
     loadout-before.json loadout-ranged.png loadout-after.json loadout-melee.png loadout-spec.json loadout-spec.png \
-    loadout-console.log loadout-page-errors.json loadout-selector.json loadout-selector-page-errors.json; do
+    loadout-console.log loadout-page-errors.json loadout-selector.json loadout-selector-page-errors.json \
+    supplies-inventory.json item-menu.json item-menu.png item-menu-closed.json brew-click.json brew-hp.json brew-heal.png supplies-console.log supplies-page-errors.json \
+    keybinds-open.json keybinds.png keybinds-bound.json keybinds-saved.json keybinds-old-key.json keybinds-reloaded.json keybinds-reloaded.png keybinds-restored.json keybinds-console.log keybinds-page-errors.json; do
     [[ -s "$VERIFY_DIR/$capture" ]] || { log "required capture ${capture} is missing or empty"; return 1; }
   done
 
   node -e '
     const [dir, spawn, target, edgeOrder, edgeStop, holdTicks, bossNpc, lastHiddenTick, lastTick, stages, overheads, specials, focusKey, focusBeats, square, floodDamage, floodLast, voidHits, voidEnd, voidPixel, rangedWorn, meleeWorn, drain, orbExpected, orbBox, orbFrames,
       innerMarks, lateMark, explosionPixel, explosionExpected, soundSamples, explosionSounds, centreX, centreY, tellBox, specialExpected,
-      tellCentreBox, transitionSamples, landingSounds, landingWindows, styleSounds, styleWindows, soundTolerance] = process.argv.slice(1);
+      tellCentreBox, transitionSamples, landingSounds, landingWindows, styleSounds, styleWindows, soundTolerance,
+      supplyInventory, namedMenu, hpAfterBrew, defaultKey, newKey] = process.argv.slice(1);
     const fs = require("fs");
     const read = (file) => JSON.parse(fs.readFileSync(`${dir}/${file}`, "utf8"));
     const [hidden, before, after, edgeArrived, edge, errors, cycle, snapshot, focus, focusErrors, voidLog, voidErrors, shot, shotErrors] =
@@ -640,6 +710,8 @@ drive() {
     const [orbLog, orbClick, orbErrors, orbSkip, orbSkipErrors] = ["orb.json", "orb-click.json", "orb-page-errors.json", "orb-skip.json", "orb-skip-page-errors.json"].map(read);
     const [explosionLog, explosionAudio, explosionErrors, underLog, underErrors] = ["explosions.json", "explosion-audio.json", "explosion-page-errors.json", "explosions-under.json", "explosion-under-page-errors.json"].map(read);
     const [specialLog, specialErrors, lateLog, lateErrors, transitionAudio] = ["special.json", "special-page-errors.json", "special-late.json", "special-late-page-errors.json", "special-audio.json"].map(read);
+    const [carried, itemMenu, itemMenuClosed, brewClick, brewHp, suppliesErrors] = ["supplies-inventory.json", "item-menu.json", "item-menu-closed.json", "brew-click.json", "brew-hp.json", "supplies-page-errors.json"].map(read);
+    const [keysOpen, keysBound, keysSaved, keysOldKey, keysReloaded, keysRestored, keybindsErrors] = ["keybinds-open.json", "keybinds-bound.json", "keybinds-saved.json", "keybinds-old-key.json", "keybinds-reloaded.json", "keybinds-restored.json", "keybinds-page-errors.json"].map(read);
     const [spawnTile, targetTile, edgeOrderTile, edgeStopTile, nearSquare] = [spawn, target, edgeOrder, edgeStop, square].map((tile) => JSON.parse(tile));
     const same = (a, b) => a?.x === b.x && a?.y === b.y;
     const inSquare = (t) => t.x >= nearSquare.minX && t.x <= nearSquare.maxX && t.y >= nearSquare.minY && t.y <= nearSquare.maxY;
@@ -794,6 +866,15 @@ drive() {
         styleSounds: heardIn(styleWindows, styleExpected),
         contexts: [...new Set(transitionAudio.map((s) => s.state))],
       },
+      supplies: {
+        carried,
+        itemMenu: [itemMenu, itemMenuClosed],
+        brew: { clickedAt: brewClick, hp: brewHp.filter(([tick]) => tick >= brewClick - 1 && tick <= brewClick + 3) },
+      },
+      keybinds: {
+        tabs: [keysOpen.tab, keysBound.tab, keysOldKey.tab, keysReloaded.tab],
+        inventoryKey: [keysOpen.keys.inventory, keysBound.keys.inventory, keysSaved.values?.inventory_key ?? null, keysReloaded.keys.inventory, keysRestored.keys.inventory],
+      },
     };
     const sameJson = (a, b) => require("util").isDeepStrictEqual(a, JSON.parse(b));
     const share = observed.voidPixelShare;
@@ -851,7 +932,17 @@ drive() {
       tellCentresDark: ["special-vortex.png", "special-spike-disk.png", "special-black-disk.png"].every((file) => special.centreShares[file].white < 1),
       landingSoundsOnSchedule: onSchedule(special.landingSounds, landingExpected) && sameJson(special.contexts, JSON.stringify(["running"])),
       styleSoundsOnSchedule: onSchedule(special.styleSounds, styleExpected) && sameJson(special.contexts, JSON.stringify(["running"])),
-      noPageErrors: [errors, focusErrors, voidErrors, shotErrors, orbErrors, orbSkipErrors, explosionErrors, underErrors, specialErrors, lateErrors, loadoutErrors, selectorErrors].every((list) => list.length === 0),
+      itemNamedInMenu: sameJson(itemMenu, namedMenu) && itemMenuClosed === null,
+      suppliesCarried: sameJson(carried, supplyInventory),
+      brewHealedNextTick: (() => {
+        const healed = brewHp.find(([, hp]) => hp !== 99);
+        return healed !== undefined && healed[1] === Number(hpAfterBrew) && healed[0] > brewClick && healed[0] <= brewClick + 2;
+      })(),
+      keybindsButtonOpensSettings: keysOpen.tab === "SETTINGS" && keysOpen.keys.inventory === defaultKey,
+      keyBoundAndSaved: keysBound.keys.inventory === newKey && keysSaved.values?.inventory_key === newKey,
+      boundKeyOpensTabAfterReload: keysOldKey.tab === "PRAYER" && keysReloaded.tab === "INVENTORY" && keysReloaded.keys.inventory === newKey,
+      defaultKeyRestored: keysRestored.keys.inventory === defaultKey,
+      noPageErrors: [errors, focusErrors, voidErrors, shotErrors, orbErrors, orbSkipErrors, explosionErrors, underErrors, specialErrors, lateErrors, loadoutErrors, selectorErrors, suppliesErrors, keybindsErrors].every((list) => list.length === 0),
     };
     if (!checks.clickTargetedExpectedTile) {
       console.error(`verify: the click resolved to ${JSON.stringify(after.destination)}, not ${JSON.stringify(targetTile)}; the click-to-tile mapping for this viewport and camera changed`);
@@ -862,7 +953,8 @@ drive() {
     "$NEAR_SQUARE" "$FLOOD_DAMAGE_TICK" "$FLOOD_LAST_TICK" "$VOID_FLOOR_HITS" "$VOID_RUN_END" "$VOID_PIXEL" \
     "$LOADOUT_RANGED_WORN" "$LOADOUT_MELEE_WORN" "$LOADOUT_DIVISION_DRAIN" "$ORB_EXPECTED" "$ORB_BOX" "$ORB_FRAMES" \
     "[${EXPLOSION_INNER_MARKS// /,}]" "${EXPLOSION_OUTER_MARKS%% *}" "$EXPLOSION_PIXEL" "$EXPLOSION_EXPECTED" "$SOUND_SAMPLES" "$EXPLOSION_SOUNDS" "$CX" "$CY" "$TELL_BOX" "$SPECIAL_EXPECTED" \
-    "$TELL_CENTRE_BOX" "$TRANSITION_SOUND_SAMPLES" "$LANDING_SOUNDS" "$LANDING_WINDOWS" "$STYLE_SOUNDS" "$STYLE_WINDOWS" "$SOUND_TOLERANCE_TICKS" >"$VERIFY_DIR/observed.json"
+    "$TELL_CENTRE_BOX" "$TRANSITION_SOUND_SAMPLES" "$LANDING_SOUNDS" "$LANDING_WINDOWS" "$STYLE_SOUNDS" "$STYLE_WINDOWS" "$SOUND_TOLERANCE_TICKS" \
+    "$SUPPLY_INVENTORY" "$SUPPLY_NAMED_MENU" "$SUPPLY_HP_AFTER_BREW" "$KEYBIND_DEFAULT_KEY" "$KEYBIND_NEW_KEY" >"$VERIFY_DIR/observed.json"
   local verdict=$?
   cat "$VERIFY_DIR/observed.json"
   return $verdict
