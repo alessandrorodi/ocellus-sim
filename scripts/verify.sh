@@ -65,6 +65,21 @@ ORB_CLICK_LEFT_PX=155
 ORB_CLICK_UP_PX=16
 ORB_BOX='{"minX":-60,"maxX":50,"minY":-75,"maxY":5}'
 ORB_SKIP_LAST_TICK=63
+EXPLOSION_DRILL="explosions"
+EXPLOSION_INNER_MARKS="17 19 21 23 25 27"
+EXPLOSION_OUTER_MARKS="48 50 52 54 56 58"
+EXPLOSION_LAST_TICK=59
+EXPLOSION_UNDER_LAST_TICK=29
+STEP_CLICK_SIDE_PX=55
+STEP_CLICK_DOWN_PX=25
+DODGE_CLICK_SIDE_PX=110
+UNDER_BOSS_CLICK_UP_PX=120
+MARKER_SHOT_DELAY_MS=450
+EXPLOSION_PIXEL="#5e317b"
+SOUND_SETTINGS_KEY="osrs-sdk:settings"
+SOUND_SAMPLES='{"12638":14332,"12537":8820}'
+EXPLOSION_SOUNDS='[[14,12638],[17,12537],[19,12537],[21,12537],[23,12537],[25,12537],[27,12537],[45,12638],[48,12537],[50,12537],[52,12537],[54,12537],[56,12537],[58,12537]]'
+EXPLOSION_EXPECTED='{"lateHit":{"requested":16,"applied":16,"beforeHp":99,"afterHp":83,"prayer":null},"under":[[18,{"x":10,"y":5},true,"hit",83],[20,{"x":10,"y":5},true,"hit",67],[22,{"x":10,"y":5},true,"hit",51],[24,{"x":10,"y":5},true,"hit",35],[26,{"x":10,"y":5},true,"hit",19],[28,{"x":10,"y":5},true,"hit",3]]}'
 ORB_EXPECTED='{"told":[[11,"inner-void"]],"drained":[[12,49,50]],"spawned":[[13,{"x":7,"y":9},49]],"matured":[[24,{"x":7,"y":9}]],"returned":{"requested":49,"applied":49,"beforeHp":50,"afterHp":99},"skipExpired":[[30,"inner-void"],[61,"outer-void"]],"skipHeal":[[62,{"kind":"unclaimed-orb"},{"requested":25,"applied":25,"beforeHp":1355,"afterHp":1380}]]}'
 CREDIT_LINE="Created using intellectual property belonging to Jagex Limited under the terms of Jagex's Fan Content Policy. This content is not endorsed by or affiliated with Jagex."
 
@@ -88,12 +103,18 @@ ensure_deps() {
 manifest_ready() {
   [[ -f "$MANIFEST" ]] && node --input-type=module -e '
     import { loadConfig } from "osrs-sdk-assets";
-    import { readFileSync } from "node:fs";
+    import { existsSync, readFileSync } from "node:fs";
+    import { dirname, join } from "node:path";
     const { assets } = await loadConfig();
     const m = JSON.parse(readFileSync(process.argv[1], "utf8"));
     const items = Object.values(assets.items).every(({ id }) => m.playerItems?.[`item:${id}`]);
     const spotAnims = Object.values(assets.spotAnims).every(({ id }) => m.spotAnims?.[id]);
-    process.exit(m.cache?.source === "openrs2:2746" && m.assets?.[`npc-${process.argv[2]}`] && items && spotAnims ? 0 : 1);
+    const pack = m.soundEffects && join(dirname(process.argv[1]), m.soundEffects.file);
+    const bytes = pack && existsSync(pack) ? readFileSync(pack) : Buffer.alloc(6);
+    const packed = new Set();
+    for (let at = 6, n = 0; n < bytes.readUInt16BE(4); n++, at += 4 + bytes.readUInt16BE(at + 2)) packed.add(bytes.readUInt16BE(at));
+    const sounds = Object.values(assets.sounds).every(({ id }) => packed.has(id));
+    process.exit(m.cache?.source === "openrs2:2746" && m.assets?.[`npc-${process.argv[2]}`] && items && spotAnims && sounds ? 0 : 1);
   ' "$MANIFEST" "$BOSS_NPC"
 }
 
@@ -115,7 +136,7 @@ stage_test() {
 
 stage_assets() {
   if manifest_ready; then
-    log "assets: manifest already has npc-${BOSS_NPC} and every configured item and spotanim from openrs2:2746, skipping rebuild" | tee "$VERIFY_DIR/assets.log"
+    log "assets: manifest already has npc-${BOSS_NPC} and every configured item, spotanim and sound from openrs2:2746, skipping rebuild" | tee "$VERIFY_DIR/assets.log"
     return 0
   fi
   npm run assets -- --cache-dir "$OSRS_CACHE_DIR" --reader-path "$OSRS_CACHE_READER" >"$VERIFY_DIR/assets.log" 2>&1 && manifest_ready
@@ -230,6 +251,40 @@ fight_tick_at_least() {
   ab wait --fn "(window.__archiveOcellusProbe?.snapshot().fight?.run.tick ?? -1) >= $1" --timeout "$2" >/dev/null
 }
 
+canvas_centre() {
+  local box
+  box="$(ab --json get box "#world")" || return 1
+  CX=$(( $(json data.x <<<"$box") + $(json data.width <<<"$box") / 2 ))
+  CY=$(( $(json data.y <<<"$box") + $(json data.height <<<"$box") / 2 ))
+}
+
+click_after_tick() {
+  printf '[["wait","--fn","(window.__archiveOcellusProbe?.snapshot().fight?.run.tick ?? -1) >= %d","--timeout","90000"],["mouse","move","%d","%d"],["mouse","down","left"],["mouse","up","left"]]' \
+    "$1" $((CX + $2)) $((CY + $3)) | ab batch --bail >/dev/null
+}
+
+shot_after_tick() {
+  printf '[["wait","--fn","(window.__archiveOcellusProbe?.snapshot().fight?.run.tick ?? -1) >= %d","--timeout","30000"],["wait","%d"],["screenshot","%s"]]' \
+    "$1" "$2" "$VERIFY_DIR/$3" | ab batch --bail >/dev/null
+}
+
+save_sound_settings() {
+  ab eval "(() => { const key = '${SOUND_SETTINGS_KEY}', saved = JSON.parse(localStorage.getItem(key) ?? '{\"version\":1,\"values\":{}}'); saved.values = { ...saved.values, playsAudio: $1, playsAreaAudio: $1 }; localStorage.setItem(key, JSON.stringify(saved)); })()" >/dev/null
+}
+
+record_audio_starts() {
+  ab eval '(() => { const starts = [], start = AudioBufferSourceNode.prototype.start; window.__cueAudio = starts; AudioBufferSourceNode.prototype.start = function (...args) { const run = window.__archiveOcellusProbe?.snapshot().fight?.run; starts.push({ tick: run?.kind === "running" ? run.tick : null, samples: this.buffer?.length ?? null, rate: this.buffer?.sampleRate ?? null, state: this.context.state }); return start.apply(this, args); }; })()' >/dev/null
+}
+
+step_on_marks() {
+  local side="$1" mark
+  shift
+  for mark in "$@"; do
+    click_after_tick $((mark - 1)) "$side" "$STEP_CLICK_DOWN_PX" || return 1
+    side=$((-side))
+  done
+}
+
 drive_walk() {
   local before after box cx cy credit
   before="$(probe "snapshot()")"
@@ -277,15 +332,17 @@ drive_flood_shot() {
 }
 
 drive_cycle() {
-  local box cx cy
+  local cx cy
   fight_tick_at_least 12 30000 || { log "the boss never stepped to P4 tick 12"; return 1; }
   ab screenshot "$VERIFY_DIR/boss.png" >/dev/null || { log "boss screenshot failed"; return 1; }
+  canvas_centre || { log "canvas box unreadable"; return 1; }
+  step_on_marks "$STEP_CLICK_SIDE_PX" $EXPLOSION_INNER_MARKS || { log "the steps on the inner explosion marks were not clicked"; return 1; }
   fight_tick_at_least "$CYCLE_RING_TICK" 60000 || { log "the boss never stepped to P4 tick ${CYCLE_RING_TICK}"; return 1; }
-  box="$(ab --json get box "#world")"
-  cx=$(( $(json data.x <<<"$box") + $(json data.width <<<"$box") / 2 - RING_CLICK_LEFT_PX ))
-  cy=$(( $(json data.y <<<"$box") + $(json data.height <<<"$box") / 2 - RING_CLICK_UP_PX ))
+  cx=$((CX - RING_CLICK_LEFT_PX))
+  cy=$((CY - RING_CLICK_UP_PX))
   echo "{\"x\":${cx},\"y\":${cy}}" >"$VERIFY_DIR/cycle-ring-click.json"
   click_at "$cx" "$cy" || return 1
+  step_on_marks "-$STEP_CLICK_SIDE_PX" $EXPLOSION_OUTER_MARKS || { log "the steps on the outer explosion marks were not clicked"; return 1; }
   fight_tick_at_least "$CYCLE_LAST_TICK" 90000 || { log "the boss never stepped to P4 tick ${CYCLE_LAST_TICK}"; return 1; }
   probe "snapshot()" >"$VERIFY_DIR/cycle-snapshot.json"
   probe "log()" >"$VERIFY_DIR/cycle.json"
@@ -415,6 +472,36 @@ drive_lifeforce_orb() {
   ab --json errors | json data.errors >"$VERIFY_DIR/orb-skip-page-errors.json" || { log "page error capture failed"; return 1; }
 }
 
+drive_explosions() {
+  local inner=($EXPLOSION_INNER_MARKS) outer=($EXPLOSION_OUTER_MARKS)
+  save_sound_settings true || { log "the sound settings were not saved"; return 1; }
+  ab select "#focus" "$EXPLOSION_DRILL" >/dev/null && ab click "#restart" >/dev/null || { log "focus control did not accept ${EXPLOSION_DRILL}"; return 1; }
+  ab wait --fn "new URLSearchParams(location.search).get('focus') === '${EXPLOSION_DRILL}'" --timeout 30000 >/dev/null || { log "restart did not load focus=${EXPLOSION_DRILL}"; return 1; }
+  fight_tick_at_least 0 120000 || { log "the explosions drill never started"; return 1; }
+  record_audio_starts || { log "the audio probe was not installed"; return 1; }
+  canvas_centre || { log "canvas box unreadable"; return 1; }
+  click_after_tick $((inner[0] - 1)) "$DODGE_CLICK_SIDE_PX" "$STEP_CLICK_DOWN_PX" || { log "the first dodge was not clicked"; return 1; }
+  shot_after_tick "${inner[0]}" "$MARKER_SHOT_DELAY_MS" explosion-left.png || { log "left marker screenshot failed"; return 1; }
+  step_on_marks "-$DODGE_CLICK_SIDE_PX" "${inner[@]:1}" || { log "the other dodges were not clicked"; return 1; }
+  printf '[["wait","--fn","(window.__archiveOcellusProbe?.snapshot().fight?.run.tick ?? -1) >= %d","--timeout","60000"],["mouse","move","%d","%d"],["mouse","down","left"],["mouse","up","left"],["wait","200"],["screenshot","%s"]]' \
+    "${outer[0]}" $((CX + DODGE_CLICK_SIDE_PX)) $((CY + STEP_CLICK_DOWN_PX)) "$VERIFY_DIR/explosion-standing.png" | ab batch --bail >/dev/null || { log "the late step was not clicked"; return 1; }
+  fight_tick_at_least "$EXPLOSION_LAST_TICK" 30000 || { log "the explosions drill never stepped to P4 tick ${EXPLOSION_LAST_TICK}"; return 1; }
+  probe "log()" >"$VERIFY_DIR/explosions.json"
+  ab --json eval "window.__cueAudio" | json data.result >"$VERIFY_DIR/explosion-audio.json" || { log "audio capture failed"; return 1; }
+  ab console >"$VERIFY_DIR/explosion-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/explosion-page-errors.json" || { log "page error capture failed"; return 1; }
+  save_sound_settings false || { log "the sound settings were not restored"; return 1; }
+
+  ab open "${URL}?seed=1&focus=${EXPLOSION_DRILL}" >/dev/null || return 1
+  canvas_centre || { log "canvas box unreadable"; return 1; }
+  click_after_tick 0 0 "-$UNDER_BOSS_CLICK_UP_PX" || { log "the walk under the hidden boss was not clicked"; return 1; }
+  shot_after_tick "${inner[0]}" "$MARKER_SHOT_DELAY_MS" explosion-under.png || { log "under-boss screenshot failed"; return 1; }
+  fight_tick_at_least "$EXPLOSION_UNDER_LAST_TICK" 30000 || { log "the camping drill never stepped to P4 tick ${EXPLOSION_UNDER_LAST_TICK}"; return 1; }
+  probe "log()" >"$VERIFY_DIR/explosions-under.json"
+  ab console >"$VERIFY_DIR/explosion-under-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/explosion-under-page-errors.json" || { log "page error capture failed"; return 1; }
+}
+
 drive() {
   ab set viewport 1280 800 >/dev/null || return 1
   # A new browser's first screenshot takes about 10 s, longer than the hidden lead-in, so it goes to a blank page.
@@ -423,20 +510,22 @@ drive() {
   drive_lead_in || return 1
   ab wait --fn "window.__archiveOcellusProbe?.snapshot().ticking === true && window.__archiveOcellusProbe.snapshot().tick >= 8" \
     --timeout 90000 >/dev/null || { log "trainer never started ticking"; return 1; }
-  drive_walk && drive_cycle && drive_focus && drive_void_floor && drive_void_shot && drive_lifeforce_orb && drive_loadouts || return 1
+  drive_walk && drive_cycle && drive_focus && drive_void_floor && drive_void_shot && drive_lifeforce_orb && drive_explosions && drive_loadouts || return 1
 
   local capture
   for capture in hidden.json hidden.png before.json before.png after.json after.png boss.png cycle-ring-click.json cycle-snapshot.json cycle.json console.log page-errors.json focus.json focus.png focus-console.log focus-page-errors.json \
     void-inner.png void-flood.png void-floor.json void-console.log void-page-errors.json \
     attack-click.json ring-click.json flood-ring.png void-shot.json void-shot-console.log void-shot-page-errors.json \
     orb-hit.png $(seq -f "orb-dormant-%g.png" 1 "$ORB_FRAMES") $(seq -f "orb-glow-%g.png" 1 "$ORB_FRAMES") orb-click.json orb.json orb-console.log orb-page-errors.json orb-skip.png orb-skip.json orb-skip-console.log orb-skip-page-errors.json \
+    explosion-left.png explosion-standing.png explosions.json explosion-audio.json explosion-console.log explosion-page-errors.json explosion-under.png explosions-under.json explosion-under-console.log explosion-under-page-errors.json \
     loadout-before.json loadout-ranged.png loadout-after.json loadout-melee.png loadout-spec.json loadout-spec.png \
     loadout-console.log loadout-page-errors.json loadout-selector.json loadout-selector-page-errors.json; do
     [[ -s "$VERIFY_DIR/$capture" ]] || { log "required capture ${capture} is missing or empty"; return 1; }
   done
 
   node -e '
-    const [dir, spawn, target, bossNpc, lastHiddenTick, lastTick, stages, overheads, specials, focusKey, focusBeats, square, floodDamage, floodLast, voidHits, voidEnd, voidPixel, rangedWorn, meleeWorn, drain, orbExpected, orbBox, orbFrames] = process.argv.slice(1);
+    const [dir, spawn, target, bossNpc, lastHiddenTick, lastTick, stages, overheads, specials, focusKey, focusBeats, square, floodDamage, floodLast, voidHits, voidEnd, voidPixel, rangedWorn, meleeWorn, drain, orbExpected, orbBox, orbFrames,
+      innerMarks, lateMark, explosionPixel, explosionExpected, soundSamples, explosionSounds] = process.argv.slice(1);
     const fs = require("fs");
     const read = (file) => JSON.parse(fs.readFileSync(`${dir}/${file}`, "utf8"));
     const [hidden, before, after, errors, cycle, snapshot, focus, focusErrors, voidLog, voidErrors, shot, shotErrors] =
@@ -444,13 +533,15 @@ drive() {
     const [dressed, switched, spec, selector, loadoutErrors, selectorErrors] =
       ["loadout-before.json", "loadout-after.json", "loadout-spec.json", "loadout-selector.json", "loadout-page-errors.json", "loadout-selector-page-errors.json"].map(read);
     const [orbLog, orbClick, orbErrors, orbSkip, orbSkipErrors] = ["orb.json", "orb-click.json", "orb-page-errors.json", "orb-skip.json", "orb-skip-page-errors.json"].map(read);
+    const [explosionLog, explosionAudio, explosionErrors, underLog, underErrors] = ["explosions.json", "explosion-audio.json", "explosion-page-errors.json", "explosions-under.json", "explosion-under-page-errors.json"].map(read);
     const [spawnTile, targetTile, nearSquare] = [JSON.parse(spawn), JSON.parse(target), JSON.parse(square)];
     const same = (a, b) => a?.x === b.x && a?.y === b.y;
     const inSquare = (t) => t.x >= nearSquare.minX && t.x <= nearSquare.maxX && t.y >= nearSquare.minY && t.y <= nearSquare.maxY;
     const upTo = (rows, last) => rows.filter((row) => row.tick <= last);
     const between = (rows, from, to) => rows.filter((row) => row.tick >= Number(from) && row.tick <= Number(to));
     const events = (rows, kind, pick) => upTo(rows, Number(lastTick)).flatMap((row) => row.events.filter((e) => e.kind === kind).map(pick));
-    function pixelShare(file, matches, area) {
+    const rowAt = (rows, t) => rows.find((row) => row.tick === Number(t));
+    function decode(file) {
       const zlib = require("zlib");
       const buf = fs.readFileSync(`${dir}/${file}`);
       let pos = 8, width = 0, height = 0, channels = 0;
@@ -469,6 +560,10 @@ drive() {
           px[y * stride + i] = (raw[y * (stride + 1) + 1 + i] + [0, a, b, (a + b) >> 1, pa <= pb && pa <= pc ? a : pb <= pc ? b : c][raw[y * (stride + 1)]]) & 255;
         }
       }
+      return { width, height, channels, px };
+    }
+    function pixelShare(file, matches, area) {
+      const { width, height, channels, px } = decode(file);
       const { minX, maxX, minY, maxY } = area ?? { minX: 0, maxX: width - 1, minY: 0, maxY: height - 1 };
       let hits = 0;
       for (let y = minY; y <= maxY; y++) {
@@ -478,6 +573,19 @@ drive() {
         }
       }
       return Math.round((100000 * hits) / ((maxX - minX + 1) * (maxY - minY + 1))) / 1000;
+    }
+    const shardRgb = [1, 3, 5].map((i) => parseInt(explosionPixel.slice(i, i + 2), 16));
+    function shards(file) {
+      const { width, height, channels, px } = decode(file);
+      const [x0, x1, y0, y1] = [Math.floor(width * 0.34), Math.ceil(width * 0.66), Math.floor(height * 0.375), Math.ceil(height * 0.7)];
+      let hits = 0, sumX = 0;
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const i = (y * width + x) * channels;
+          if (shardRgb.every((v, c) => Math.abs(px[i + c] - v) <= 12)) [hits, sumX] = [hits + 1, sumX + x];
+        }
+      }
+      return { share: Math.round((100000 * hits) / ((x1 - x0) * (y1 - y0))) / 1000, dx: hits ? Math.round((1000 * (sumX / hits - (width - 1) / 2)) / width) / 1000 : null };
     }
     const want = [1, 3, 5].map((i) => parseInt(voidPixel.slice(i, i + 2), 16));
     const voidShare = (file) => pixelShare(file, (...rgb) => want.every((v, c) => Math.abs(rgb[c] - v) <= 10));
@@ -491,6 +599,12 @@ drive() {
     const floorHit = (row) => row.events.some((e) => e.kind === "floor-hit" && same(e.tile, row.playerAtBossStep.tile));
     const launch = flood.find((row) => row.combatDraws > 0);
     const landing = flood.flatMap((row) => row.events.filter((e) => e.kind === "player-hit-judged" && e.style === "ranged").map((e) => ({ ...e, bossHp: row.bossHp })))[0];
+    const expectedExplosions = JSON.parse(explosionExpected);
+    const stepped = (rows, t) => rowAt(rows, t)?.inputs.some((input) => input.kind === "walk-ordered") ?? false;
+    const markedAt = (rows, t) => kindOf(rows, "explosion-marked").find((e) => e.at === t);
+    const resolvedAt = (rows, t) => kindOf(rows, "explosion-resolved").find((e) => e.at === t);
+    const late = Number(lateMark);
+    const soundBySamples = Object.fromEntries(Object.entries(JSON.parse(soundSamples)).map(([id, samples]) => [samples, Number(id)]));
     const observed = {
       stageEntries: events(cycle.rows, "stage-entered", (e) => [e.at, e.stage]),
       overheadSwitches: events(cycle.rows, "overhead-switched", (e) => [e.at, e.overhead]),
@@ -524,10 +638,30 @@ drive() {
         skipReturned: kindOf(orbSkip.rows, "orb-returned").length,
         tealShare: { box: around, dormant: orbTeal("dormant"), glow: orbTeal("glow") },
       },
+      explosions: {
+        dodges: JSON.parse(innerMarks).map((t) => ({ mark: t, stepped: stepped(explosionLog.rows, t), tile: markedAt(explosionLog.rows, t)?.tile ?? null, outcome: resolvedAt(explosionLog.rows, t + 1)?.outcome.kind ?? null })),
+        late: {
+          standing: rowAt(explosionLog.rows, late)?.playerAtBossStep.tile ?? null,
+          marked: markedAt(explosionLog.rows, late)?.tile ?? null,
+          steppedOnMark: stepped(explosionLog.rows, late),
+          steppedOnImpact: stepped(explosionLog.rows, late + 1),
+          resolved: resolvedAt(explosionLog.rows, late + 1) ?? null,
+          endTile: rowAt(explosionLog.rows, late + 1)?.playerAtPostTick.tile ?? null,
+        },
+        under: kindOf(underLog.rows, "explosion-resolved").map((e) => [e.at, e.tile, e.underBoss, e.outcome.kind, e.outcome.receipt?.afterHp ?? null]),
+        shards: { "explosion-left.png": shards("explosion-left.png"), "explosion-standing.png": shards("explosion-standing.png") },
+        sounds: {
+          heard: explosionAudio.filter((s) => s.rate === 22050 && soundBySamples[s.samples] !== undefined).map((s) => [s.tick, soundBySamples[s.samples]]),
+          contexts: [...new Set(explosionAudio.map((s) => s.state))],
+          starts: explosionAudio.length,
+        },
+      },
     };
     const sameJson = (a, b) => require("util").isDeepStrictEqual(a, JSON.parse(b));
     const share = observed.voidPixelShare;
     const orb = observed.orb;
+    const { dodges, late: lateStep, under, shards: shardSpots, sounds } = observed.explosions;
+    const [left, standing] = [shardSpots["explosion-left.png"], shardSpots["explosion-standing.png"]];
     const readyAt = Math.max(orb.arrivedAt ?? Infinity, orb.matured[0]?.[0] ?? Infinity);
     const checks = {
       spawnedOnSpawnTile: same(before.player, spawnTile),
@@ -563,7 +697,13 @@ drive() {
       orbReturnedTickAfterArrival: orb.returned.length === 1 && orb.returned[0][0] === readyAt + 1 && sameJson(orb.returned[0][1], JSON.stringify(expectedOrb.returned)),
       orbGlowDrawn: Math.max(...orb.tealShare.glow) - Math.max(...orb.tealShare.dormant) >= 7,
       skippedOrbHealsBoss: sameJson(orb.skipExpired, JSON.stringify(expectedOrb.skipExpired)) && sameJson(orb.skipHeal, JSON.stringify(expectedOrb.skipHeal)) && orb.skipReturned === 0,
-      noPageErrors: [errors, focusErrors, voidErrors, shotErrors, orbErrors, orbSkipErrors, loadoutErrors, selectorErrors].every((list) => list.length === 0),
+      explosionsDodgedOnMarkTicks: dodges.every((d) => d.stepped && d.outcome === "avoided") && same(dodges[0].tile, spawnTile),
+      lateStepHitOnMarkedTile: lateStep.standing !== null && lateStep.resolved?.outcome.kind === "hit" && sameJson(lateStep.resolved.outcome.receipt, JSON.stringify(expectedExplosions.lateHit)) &&
+        same(lateStep.marked, lateStep.standing) && same(lateStep.resolved.tile, lateStep.standing) && !lateStep.steppedOnMark && lateStep.steppedOnImpact && !same(lateStep.endTile, lateStep.standing),
+      campingUnderBossHit: sameJson(under, JSON.stringify(expectedExplosions.under)),
+      explosionSoundsOnSchedule: sameJson(sounds.heard, explosionSounds) && sameJson(sounds.contexts, JSON.stringify(["running"])),
+      markerStaysOnCapturedTile: left.share >= 0.1 && left.dx !== null && left.dx <= -0.02 && standing.share >= 0.1 && standing.dx !== null && Math.abs(standing.dx) <= 0.016,
+      noPageErrors: [errors, focusErrors, voidErrors, shotErrors, orbErrors, orbSkipErrors, explosionErrors, underErrors, loadoutErrors, selectorErrors].every((list) => list.length === 0),
     };
     if (!checks.clickTargetedExpectedTile) {
       console.error(`verify: the click resolved to ${JSON.stringify(after.destination)}, not ${JSON.stringify(targetTile)}; the click-to-tile mapping for this viewport and camera changed`);
@@ -572,7 +712,8 @@ drive() {
     process.exit(Object.values(checks).every(Boolean) ? 0 : 1);
   ' "$VERIFY_DIR" "$SPAWN_TILE" "$WALK_TARGET_TILE" "$BOSS_NPC" "$CYCLE_LAST_HIDDEN_TICK" "$CYCLE_LAST_TICK" "$CYCLE_STAGE_ENTRIES" "$CYCLE_OVERHEAD_SWITCHES" "$CYCLE_SPECIAL_HITS" "$FOCUS_DRILL" "$FOCUS_BEATS" \
     "$NEAR_SQUARE" "$FLOOD_DAMAGE_TICK" "$FLOOD_LAST_TICK" "$VOID_FLOOR_HITS" "$VOID_RUN_END" "$VOID_PIXEL" \
-    "$LOADOUT_RANGED_WORN" "$LOADOUT_MELEE_WORN" "$LOADOUT_DIVISION_DRAIN" "$ORB_EXPECTED" "$ORB_BOX" "$ORB_FRAMES" >"$VERIFY_DIR/observed.json"
+    "$LOADOUT_RANGED_WORN" "$LOADOUT_MELEE_WORN" "$LOADOUT_DIVISION_DRAIN" "$ORB_EXPECTED" "$ORB_BOX" "$ORB_FRAMES" \
+    "[${EXPLOSION_INNER_MARKS// /,}]" "${EXPLOSION_OUTER_MARKS%% *}" "$EXPLOSION_PIXEL" "$EXPLOSION_EXPECTED" "$SOUND_SAMPLES" "$EXPLOSION_SOUNDS" >"$VERIFY_DIR/observed.json"
   local verdict=$?
   cat "$VERIFY_DIR/observed.json"
   return $verdict

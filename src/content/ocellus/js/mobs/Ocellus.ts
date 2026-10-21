@@ -5,6 +5,7 @@ import { OCELLUS_P4 } from "../OcellusTimings";
 import type { OcellusPlayer } from "../OcellusPlayer";
 import type {
   Beat,
+  ExplosionOutcome,
   FightEvent,
   HitReceipt,
   IncomingStyle,
@@ -19,7 +20,7 @@ import type {
   VoidKind,
 } from "../P4Types";
 import { after, tick, worldTick } from "../P4Types";
-import { VOID_MASKS, floorRule } from "../p4/floor";
+import { FOOTPRINT, VOID_MASKS, floorRule } from "../p4/floor";
 import { orbTile, reach } from "../p4/orb";
 import { rollInt } from "../p4/roll";
 import type { Moment } from "../p4/schedule";
@@ -40,6 +41,8 @@ type Orb =
   | Readonly<{ kind: "available"; void: VoidKind; credit: number; tile: Tile }>
   | Readonly<{ kind: "claimed"; void: VoidKind; credit: number; tile: Tile; returnsAt: Tick }>
   | Readonly<{ kind: "expired"; void: VoidKind; credit: number; tile: Tile }>;
+
+type Mark = Readonly<{ void: VoidKind; pulse: number; tile: Tile }>;
 
 function incomingStyle(attackStyle: string): IncomingStyle {
   switch (attackStyle) {
@@ -87,6 +90,7 @@ export class Ocellus extends Mob {
   private readonly schedule: Schedule;
   private run: Run = { kind: "waiting", inputs: [] };
   private orbs: readonly Orb[] = [];
+  private marks: readonly Mark[] = [];
 
   constructor(region: Region, private readonly config: DrillConfig, private readonly target: OcellusPlayer) {
     super(region, OCELLUS_P4.geometry.bossAnchor.value);
@@ -302,8 +306,12 @@ export class Ocellus extends Mob {
         return this.expireOrb(beat.void, at);
       case "unclaimed-orb-heals":
         return this.healFromUnclaimedOuterOrb(at);
+      case "explosion-series-starts":
+        return { kind: "explosion-series-started", at, void: beat.void };
       case "explosion-mark":
+        return this.markExplosion(beat.void, beat.pulse, at, player.tile);
       case "explosion-impact":
+        return this.detonate(beat.void, beat.pulse, at, player.tile);
       case "special-tell":
       case "special-hit":
       case "soul-split-heal":
@@ -323,6 +331,22 @@ export class Ocellus extends Mob {
     const requested = rollInt(this.config.seed, "floorDamage", at, rule.perTick, 0);
     const hit = new P4Hit(this, this.target, () => requested, (receipt) => this.recordEvent({ kind: "floor-hit", at, void: kind, tile: player.tile, receipt }));
     this.target.addProjectile(hit);
+  }
+
+  private markExplosion(kind: VoidKind, pulse: number, at: Tick, player: Tile): FightEvent {
+    this.marks = [...this.marks, { void: kind, pulse, tile: player }];
+    return { kind: "explosion-marked", at, void: kind, pulse, tile: player };
+  }
+
+  private detonate(kind: VoidKind, pulse: number, at: Tick, player: Tile): FightEvent | null {
+    const mark = this.marks.find((pending) => pending.void === kind && pending.pulse === pulse);
+    if (!mark) return null;
+    this.marks = this.marks.filter((pending) => pending !== mark);
+    const resolved = (outcome: ExplosionOutcome): FightEvent => ({ kind: "explosion-resolved", at, void: kind, pulse, tile: mark.tile, underBoss: FOOTPRINT.contains(mark.tile), outcome });
+    if (mark.tile.x !== player.x || mark.tile.y !== player.y) return resolved({ kind: "avoided" });
+    const requested = rollInt(this.config.seed, "explosionDamage", at, this.config.choices.explosions.option.value.damage, 0);
+    this.target.addProjectile(new P4Hit(this, this.target, () => requested, (receipt) => this.recordEvent(resolved({ kind: "hit", receipt }))));
+    return null;
   }
 
   private drain(kind: VoidKind, at: Tick): void {

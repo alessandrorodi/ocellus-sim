@@ -135,7 +135,7 @@ describe("U1 cycle skeleton", () => {
     },
   ])("a lethal hit on phase-change tick $at logs the phase that tick enters and none of its beats", ({ at, phase, entered }) => {
     const drill = startDrill();
-    drill.tickTo(at - 1);
+    drill.playCorrectlyTo(at - 1);
     drill.hit(drill.player(), drill.boss(), 1355);
     drill.tickTo(at + 2);
     const row = drill.row(at);

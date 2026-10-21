@@ -1,11 +1,12 @@
 import type { DamageRange } from "../OcellusTimings";
 import type { Seed, Tick } from "../P4Types";
 
-type RollStream = "orbTile" | "floorDamage" | "specialVariant";
+type RollStream = "orbTile" | "floorDamage" | "explosionDamage" | "specialVariant";
 
 const STREAM_ID: Readonly<Record<RollStream, number>> = {
   orbTile: 1,
   floorDamage: 2,
+  explosionDamage: 3,
   specialVariant: 5,
 };
 

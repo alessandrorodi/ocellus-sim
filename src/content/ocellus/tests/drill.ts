@@ -14,6 +14,13 @@ export const UNDER_BOSS: At = { x: 10, y: 5 };
 export const RING_SOUTH: At = { x: 10, y: 7 };
 export const FLOOD_SOUTH_OF_RING: At = { x: 10, y: 8 };
 
+const inNearSquare = ({ x, y }: At) => x >= 8 && x <= 12 && y >= 3 && y <= 7;
+
+function besideOnSameFloor(home: At, insideSquare: boolean): At {
+  const sides = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => ({ x: home.x + dx, y: home.y + dy }));
+  return sides.find((side) => inNearSquare(side) === insideSquare) ?? home;
+}
+
 export function startDrill(options: DrillOptions = {}) {
   Settings.readFromStorage();
   const region = new OcellusRegion(resolveDrill({ seed: seed(options.seed ?? 1), selection: options.selection }));
@@ -29,6 +36,11 @@ export function startDrill(options: DrillOptions = {}) {
     return region.primaryBoss;
   };
   const walkTo = (to: At) => player().moveTo(to.x, to.y);
+  const stepOffMarkedTile = (home: At, side: At) => {
+    const at = player().location;
+    if (at.x === home.x && at.y === home.y) walkTo(side);
+    else if (at.x === side.x && at.y === side.y) walkTo(home);
+  };
   const ended = () => region.snapshot()?.run.kind === "ended";
   const lastTick = () => {
     const all = rows();
@@ -53,13 +65,22 @@ export function startDrill(options: DrillOptions = {}) {
       advance(t, () => undefined);
     },
     playCorrectlyTo(t: number) {
+      const focus = region.fightLog().header.choices.focus.option.value;
+      const dodging = focus.kind === "full-fight" || focus.mechanics.includes("explosions");
+      let home: At = { ...player().location };
+      const goHome = (to: At) => {
+        home = to;
+        walkTo(to);
+      };
       advance(t, (row) => {
         for (const event of row.events) {
-          if (event.kind === "orb-spawned") walkTo(event.tile);
+          if (event.kind === "orb-spawned") goHome(event.tile);
           if (event.kind !== "stage-entered") continue;
-          if (event.stage === "outer-void") walkTo(RING_SOUTH);
-          if (event.stage === "after-outer") walkTo(SPAWN_ON_FLOOD);
+          if (event.stage === "outer-void") goHome(RING_SOUTH);
+          if (event.stage === "after-outer") goHome(SPAWN_ON_FLOOD);
         }
+        const stage = row.phase.stage;
+        if (dodging && (stage === "inner-void" || stage === "outer-void")) stepOffMarkedTile(home, besideOnSameFloor(home, stage === "outer-void"));
       });
     },
     row(t: number): TickRow {

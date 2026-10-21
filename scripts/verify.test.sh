@@ -5,8 +5,8 @@ SCRIPT="$(cd "$(dirname "$0")" && pwd)/verify.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-eval "$(grep -E '^(DRILL_QUERY|BOSS_NPC|SPAWN_TILE|WALK_CLICK_RIGHT_PX|WALK_CLICK_DOWN_PX|WALK_TARGET_TILE|CYCLE_[A-Z_]+|FOCUS_[A-Z_]+|BOSS_CLICK_[A-Z_]+|RING_CLICK_[A-Z_]+|FLOOD_[A-Z_]+|NEAR_SQUARE|VOID_[A-Z_]+|ORB_[A-Z_]+|LOADOUT_[A-Z_]+|CREDIT_LINE)=' "$SCRIPT")"
-for fn in json process_start serve state doctor stop probe fight_tick_at_least drive_lead_in drive_walk drive_flood_shot drive_cycle drive_focus drive_void_floor drive_void_shot drive_lifeforce_orb click_at click_inventory_slot drive_loadouts drive release_browser stage_browser; do
+eval "$(grep -E '^(DRILL_QUERY|BOSS_NPC|SPAWN_TILE|WALK_CLICK_RIGHT_PX|WALK_CLICK_DOWN_PX|WALK_TARGET_TILE|CYCLE_[A-Z_]+|FOCUS_[A-Z_]+|BOSS_CLICK_[A-Z_]+|RING_CLICK_[A-Z_]+|FLOOD_[A-Z_]+|NEAR_SQUARE|VOID_[A-Z_]+|ORB_[A-Z_]+|LOADOUT_[A-Z_]+|EXPLOSION_[A-Z_]+|STEP_CLICK_[A-Z_]+|DODGE_CLICK_[A-Z_]+|UNDER_BOSS_CLICK_[A-Z_]+|MARKER_SHOT_[A-Z_]+|SOUND_[A-Z_]+|CREDIT_LINE)=' "$SCRIPT")"
+for fn in json process_start serve state doctor stop probe fight_tick_at_least canvas_centre click_after_tick shot_after_tick save_sound_settings record_audio_starts step_on_marks drive_lead_in drive_walk drive_flood_shot drive_cycle drive_focus drive_void_floor drive_void_shot drive_lifeforce_orb drive_explosions click_at click_inventory_slot drive_loadouts drive release_browser stage_browser; do
   eval "$(sed -n "/^${fn}() {\$/,/^}\$/p" "$SCRIPT")"
 done
 
@@ -156,7 +156,59 @@ fixture_logs() {
     const skip = Array.from({ length: 64 }, (_, t) => ({ tick: t, playerAtPostTick: orbAt(10, 10, 99), events: skipEvents[t] ?? [] }));
     write("orb-log.json", "lifeforce-orb", orb);
     write("orb-skip-log.json", "lifeforce-orb", skip);
+    const walk = (x, y) => ({ kind: "walk-ordered", destination: { x, y } });
+    const marked = (t, x, y) => ({ kind: "explosion-marked", at: t, void: t < 39 ? "inner-void" : "outer-void", tile: { x, y } });
+    const resolved = (t, x, y, outcome, underBoss = false) => ({ kind: "explosion-resolved", at: t, tile: { x, y }, underBoss, outcome });
+    const lateHit = { kind: "hit", receipt: { requested: 16, applied: 16, beforeHp: 99, afterHp: 83, prayer: null } };
+    const dodge = { 17: 10, 19: 12, 21: 10, 23: 12, 25: 10, 27: 12 };
+    const dodgeRows = Array.from({ length: 51 }, (_, t) => {
+      const markX = dodge[t], impactX = dodge[t - 1];
+      return {
+        tick: t,
+        playerAtBossStep: at(10, 10),
+        playerAtPostTick: t === 49 ? at(12, 10) : at(10, 10),
+        inputs: markX !== undefined ? [walk(22 - markX, 10)] : t === 49 ? [walk(12, 10)] : [],
+        events: [
+          ...(markX !== undefined ? [marked(t, markX, 10)] : []),
+          ...(impactX !== undefined ? [resolved(t, impactX, 10, fault === "dodge-hit" && t === 22 ? lateHit : { kind: "avoided" })] : []),
+          ...(t === 48 ? [marked(48, 10, 10)] : []),
+          ...(t === 49 ? [resolved(49, 10, 10, fault === "late-spared" ? { kind: "avoided" } : lateHit)] : []),
+        ],
+      };
+    });
+    const underRows = Array.from({ length: 30 }, (_, t) => ({
+      tick: t,
+      events: [
+        ...(dodge[t] !== undefined ? [marked(t, 10, 5)] : []),
+        ...(dodge[t - 1] !== undefined
+          ? [resolved(t, 10, 5, fault === "under-spared" ? { kind: "avoided" } : { kind: "hit", receipt: { requested: 16, applied: 16, beforeHp: 99 - 8 * (t - 18), afterHp: 99 - 8 * (t - 18) - 16, prayer: null } }, true)]
+          : []),
+      ],
+    }));
+    write("explosion-log.json", "explosions", dodgeRows);
+    const late = fault === "sound-on-impact" ? 1 : 0;
+    const cue = (tick, samples) => ({ tick, samples, rate: 22050, state: fault === "suspended-audio" ? "suspended" : "running" });
+    const audio = [
+      cue(14, 14332), ...[17, 19, 21, 23, 25, 27].map((t) => cue(t + late, 8820)),
+      cue(45, 14332), ...[48, 50, 52, 54, 56, 58].map((t) => cue(t + late, 8820)),
+      { ...cue(49, 30720), rate: 48000 },
+    ].sort((a, b) => a.tick - b.tick);
+    fs.writeFileSync(`${dir}/explosion-audio.json`, JSON.stringify({ data: { result: audio } }));
+    write("explosion-under-log.json", "explosions", underRows);
   ' "$T" "$inner_void_tick" "$focus" "$fault"
+}
+
+fixture_shards() {
+  command node -e '
+    const [file, centre] = process.argv.slice(1);
+    const zlib = require("zlib");
+    const crc = (buf) => { let c = ~0; for (const b of buf) { c ^= b; for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xedb88320 : c >>> 1; } return ~c >>> 0; };
+    const chunk = (type, data) => { const head = Buffer.alloc(8), tail = Buffer.alloc(4); head.writeUInt32BE(data.length); head.write(type, 4); tail.writeUInt32BE(crc(Buffer.concat([Buffer.from(type), data]))); return Buffer.concat([head, data, tail]); };
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(100, 0); ihdr.writeUInt32BE(100, 4); ihdr[8] = 8; ihdr[9] = 2;
+    const shard = (x, y) => y >= 45 && y <= 55 && Math.abs(x + 0.5 - Number(centre) * 100) <= 2;
+    const rows = Array.from({ length: 100 }, (_, y) => Buffer.from([0, ...Array.from({ length: 100 }, (_, x) => (shard(x, y) ? [0x5e, 0x31, 0x7b] : [0x68, 0x60, 0x58])).flat()]));
+    require("fs").writeFileSync(file, Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(Buffer.concat(rows))), chunk("IEND", Buffer.alloc(0))]));
+  ' "$1" "$2"
 }
 
 fixture_png() {
@@ -190,6 +242,25 @@ OK_DORMANT_TEAL=(0 2.3 0.4 0 0 0)
 OK_GLOW_TEAL=(2.4 11.1 12.7 12.9 14.4 9.2)
 NOORB_DORMANT_TEAL=(0 0 0 0 0 0.2)
 NOORB_GLOW_TEAL=(3.5 4 3.4 3.1 2.9 2.5)
+
+fake_screenshot() {
+  local name frame
+  name="$(basename "$1")"
+  frame="${name//[^0-9]/}"
+  case "$SCREENSHOT:$name" in
+    fail:*) return 1 ;;
+    empty:*) ;;
+    markerfollows:explosion-left.png | *:explosion-standing.png) fixture_shards "$1" 0.5 ;;
+    *:explosion-left.png) fixture_shards "$1" 0.44 ;;
+    ok:void-flood.png | ok:flood-ring.png | noorb:void-flood.png | noorb:flood-ring.png | markerfollows:void-flood.png | markerfollows:flood-ring.png) fixture_png "$1" 60 ;;
+    ok:void-inner.png | noorb:void-inner.png | markerfollows:void-inner.png) fixture_png "$1" 2 ;;
+    ok:orb-dormant-* | markerfollows:orb-dormant-*) fixture_png "$1" 0 "${OK_DORMANT_TEAL[frame - 1]}" ;;
+    ok:orb-glow-* | markerfollows:orb-glow-*) fixture_png "$1" 0 "${OK_GLOW_TEAL[frame - 1]}" ;;
+    noorb:orb-dormant-*) fixture_png "$1" 0 "${NOORB_DORMANT_TEAL[frame - 1]}" ;;
+    noorb:orb-glow-*) fixture_png "$1" 0 "${NOORB_GLOW_TEAL[frame - 1]}" 1 ;;
+    *) fixture_png "$1" 0 ;;
+  esac
+}
 
 loadout_snapshot() {
   local n worn="$LOADOUT_RANGED_WORN" energy=100 defence=250
@@ -228,7 +299,10 @@ fake_browser() {
         [[ "$(cat "$T/restarts" 2>/dev/null || echo 0)" -lt 3 ]] || tile='{"x":7,"y":9}'
         printf '{"data":{"result":{"ticking":true,"tick":%s,"player":%s,"destination":%s,"fight":%s}}}\n' "$tick" "$tile" "$tile" "$fight"
         ;;
+      "--json eval window.__cueAudio") cat "$T/explosion-audio.json" ;;
       "--json eval window.__archiveOcellusProbe.log()")
+        [[ ! -e "$T/explosion-under" ]] || { cat "$T/explosion-under-log.json"; return; }
+        [[ "$(cat "$T/restarts" 2>/dev/null || echo 0)" -lt 4 ]] || { cat "$T/explosion-log.json"; return; }
         [[ ! -e "$T/orb-skip" ]] || { cat "$T/orb-skip-log.json"; return; }
         case "$(cat "$T/restarts" 2>/dev/null || echo 0)" in
           0) cat "$T/cycle-log.json" ;;
@@ -239,26 +313,19 @@ fake_browser() {
         ;;
       "open "*"focus=${VOID_DRILL}") : >"$T/void-shot" ;;
       "open "*"focus=${ORB_DRILL}") : >"$T/orb-skip" ;;
+      "open "*"focus=${EXPLOSION_DRILL}") : >"$T/explosion-under" ;;
+      "batch --bail")
+        local shot
+        for shot in $(command node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>JSON.parse(s).filter((c)=>c[0]==="screenshot").forEach((c)=>console.log(c[1])))'); do
+          fake_screenshot "$shot" || return 1
+        done
+        ;;
       "click #restart") echo $(($(cat "$T/restarts" 2>/dev/null || echo 0) + 1)) >"$T/restarts" ;;
       "--json get text "*) printf '{"data":{"text":"%s"}}\n' "$CREDIT_LINE" ;;
       "--json is visible "*) echo '{"data":{"visible":true}}' ;;
       "--json get box "*) echo '{"data":{"x":0,"y":0,"width":1280,"height":800}}' ;;
       "--json errors") echo '{"data":{"errors":[]}}' ;;
-      "screenshot "*)
-        local name frame
-        name="$(basename "$2")"
-        frame="${name//[^0-9]/}"
-        case "$SCREENSHOT:$name" in
-          ok:void-flood.png | ok:flood-ring.png | noorb:void-flood.png | noorb:flood-ring.png) fixture_png "$2" 60 ;;
-          ok:void-inner.png | noorb:void-inner.png) fixture_png "$2" 2 ;;
-          ok:orb-dormant-*) fixture_png "$2" 0 "${OK_DORMANT_TEAL[frame - 1]}" ;;
-          ok:orb-glow-*) fixture_png "$2" 0 "${OK_GLOW_TEAL[frame - 1]}" ;;
-          noorb:orb-dormant-*) fixture_png "$2" 0 "${NOORB_DORMANT_TEAL[frame - 1]}" ;;
-          noorb:orb-glow-*) fixture_png "$2" 0 "${NOORB_GLOW_TEAL[frame - 1]}" 1 ;;
-          ok:* | novoid:* | noorb:*) fixture_png "$2" 0 ;;
-          fail:*) return 1 ;;
-        esac
-        ;;
+      "screenshot "*) fake_screenshot "$2" ;;
       console) echo "[info] page loaded" ;;
     esac
   }
@@ -359,6 +426,48 @@ skipped_orb_without_boss_heal_fails() {
   grep -q '"skippedOrbHealsBoss": false' "$T/drive.log" || { echo "the heal check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
+explosion_dodge_hit_fails() {
+  setup
+  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' dodge-hit
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although a dodge on a mark tick was hit"; return 1; fi
+  grep -q '"explosionsDodgedOnMarkTicks": false' "$T/drive.log" || { echo "the dodge check did not name the failure"; cat "$T/drive.log"; return 1; }
+}
+
+late_step_spared_fails() {
+  setup
+  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' late-spared
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the step on the impact tick escaped the explosion"; return 1; fi
+  grep -q '"lateStepHitOnMarkedTile": false' "$T/drive.log" || { echo "the late-step check did not name the failure"; cat "$T/drive.log"; return 1; }
+}
+
+camping_under_boss_spared_fails() {
+  setup
+  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' under-spared
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the marks under the boss never hit"; return 1; fi
+  grep -q '"campingUnderBossHit": false' "$T/drive.log" || { echo "the under-boss check did not name the failure"; cat "$T/drive.log"; return 1; }
+}
+
+explosion_sound_on_the_impact_fails() {
+  setup
+  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' sound-on-impact
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although 12537 played a tick after each mark"; return 1; fi
+  grep -q '"explosionSoundsOnSchedule": false' "$T/drive.log" || { echo "the sound check did not name the failure"; cat "$T/drive.log"; return 1; }
+}
+
+explosion_sound_on_a_suspended_context_fails() {
+  setup
+  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' suspended-audio
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although every sound started on a suspended audio context"; return 1; fi
+  grep -q '"explosionSoundsOnSchedule": false' "$T/drive.log" || { echo "the sound check did not name the failure"; cat "$T/drive.log"; return 1; }
+}
+
+explosion_marker_following_the_player_fails() {
+  setup
+  fake_browser '{"x":13,"y":11}' markerfollows
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the marker was drawn on the player after the dodge"; return 1; fi
+  grep -q '"markerStaysOnCapturedTile": false' "$T/drive.log" || { echo "the marker check did not name the failure"; cat "$T/drive.log"; return 1; }
+}
+
 orb_glow_not_drawn_fails() {
   setup
   fake_browser '{"x":13,"y":11}' noorb
@@ -420,6 +529,12 @@ for t in \
   orb_returned_a_tick_late_fails \
   skipped_orb_without_boss_heal_fails \
   orb_glow_not_drawn_fails \
+  explosion_dodge_hit_fails \
+  late_step_spared_fails \
+  camping_under_boss_spared_fails \
+  explosion_marker_following_the_player_fails \
+  explosion_sound_on_the_impact_fails \
+  explosion_sound_on_a_suspended_context_fails \
   loadout_not_switched_fails \
   division_not_spent_fails \
   division_extra_drains_fail; do

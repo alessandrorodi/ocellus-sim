@@ -289,6 +289,116 @@ export class OrbView extends Entity {
   }
 }
 
+const SHARD_COLOUR = OCELLUS_P4.explosion.shards.value;
+const SHARDS = 7;
+const SHARD_RING = 0.3;
+const SHARD_LEAN = 0.12;
+const SHARD_HALF_WIDTH = 0.05;
+const SHARD_HEIGHT = 0.85;
+const SPIN_PER_SECOND = 3;
+const TICK_SECONDS = 0.6;
+
+type Blast = "marked" | "detonated";
+
+function shardGeometry(): THREE.BufferGeometry {
+  const positions: number[] = [];
+  for (let shard = 0; shard < SHARDS; shard++) {
+    const angle = (2 * Math.PI * shard) / SHARDS;
+    const [ox, oz] = [Math.cos(angle), Math.sin(angle)];
+    const tip = SHARD_RING + SHARD_LEAN;
+    positions.push(
+      ox * SHARD_RING - oz * SHARD_HALF_WIDTH, 0, oz * SHARD_RING + ox * SHARD_HALF_WIDTH,
+      ox * SHARD_RING + oz * SHARD_HALF_WIDTH, 0, oz * SHARD_RING - ox * SHARD_HALF_WIDTH,
+      ox * tip, SHARD_HEIGHT, oz * tip,
+    );
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  return geometry;
+}
+
+class BurstModel implements Model {
+  private readonly material = new THREE.MeshBasicMaterial({ color: SHARD_COLOUR, side: THREE.DoubleSide, transparent: true });
+  private readonly mesh = new THREE.Mesh(shardGeometry(), this.material);
+  private flare = 0;
+
+  constructor(private readonly blast: () => Blast) {}
+
+  draw(scene: THREE.Scene, clockDelta: number, tickPercent: number, location: Location3, angleRadians: number, pitchRadians: number, visible: boolean): void {
+    if (this.mesh.parent !== scene) scene.add(this.mesh);
+    this.flare = this.blast() === "detonated" ? Math.min(1, this.flare + clockDelta / TICK_SECONDS) : 0;
+    this.mesh.visible = visible && this.flare < 1;
+    this.mesh.position.set(location.x + 0.5, GROUND_OVERLAY_Y, location.y - 0.5);
+    this.mesh.rotation.y += clockDelta * SPIN_PER_SECOND;
+    this.mesh.scale.setScalar(1 + this.flare);
+    this.material.opacity = 1 - this.flare;
+  }
+
+  destroy(scene: THREE.Scene): void {
+    scene.remove(this.mesh);
+    this.mesh.geometry.dispose();
+    this.material.dispose();
+  }
+
+  getWorldPosition(): THREE.Vector3 {
+    return this.mesh.getWorldPosition(new THREE.Vector3());
+  }
+
+  async preload(): Promise<void> {}
+}
+
+class ExplosionView extends Entity {
+  private blast: Blast = "marked";
+
+  constructor(region: Region, at: Tile) {
+    super(region, { x: at.x, y: at.y });
+  }
+
+  detonate(): void {
+    this.blast = "detonated";
+  }
+
+  override tick(): void {
+    if (this.blast === "detonated") this.dying = 0;
+  }
+
+  override get collisionType(): CollisionType {
+    return CollisionType.NONE;
+  }
+
+  override get lineOfSight(): LineOfSightMask {
+    return LineOfSightMask.NONE;
+  }
+
+  override draw(tickPercent: number, context: OffscreenCanvasRenderingContext2D): void {
+    if (this.blast !== "marked") return;
+    const scale = Settings.tileSize;
+    context.fillStyle = SHARD_COLOUR;
+    context.fillRect((this.location.x + 0.15) * scale, (this.location.y + 0.15) * scale, 0.7 * scale, 0.7 * scale);
+  }
+
+  protected override create3dModel(): Model {
+    return new BurstModel(() => this.blast);
+  }
+}
+
+export class ExplosionViews {
+  private readonly live = new Map<string, ExplosionView>();
+
+  constructor(private readonly region: Region) {}
+
+  mark(kind: VoidKind, pulse: number, at: Tile): void {
+    const view = new ExplosionView(this.region, at);
+    this.region.addEntity(view);
+    this.live.set(`${kind}:${pulse}`, view);
+  }
+
+  detonate(kind: VoidKind, pulse: number): void {
+    this.live.get(`${kind}:${pulse}`)?.detonate();
+    this.live.delete(`${kind}:${pulse}`);
+  }
+}
+
 export class FragmentFlash extends Entity {
   private cue: Cue | null = null;
 

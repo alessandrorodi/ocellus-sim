@@ -39,6 +39,7 @@ function mechanicOf(beat: Beat): Mechanic | null {
     case "orb-expires":
     case "unclaimed-orb-heals":
       return "lifeforce-orb";
+    case "explosion-series-starts":
     case "explosion-mark":
     case "explosion-impact":
       return "explosions";
@@ -71,7 +72,7 @@ export class Schedule {
   ) {}
 
   static compile(seed: Seed, choices: ResolvedChoices): Schedule {
-    const { leadIn, cycle: stages, overheads, lifeforce, orb, bossHeals, rifts } = OCELLUS_P4;
+    const { leadIn, cycle: stages, overheads, lifeforce, orb, bossHeals, rifts, explosion: explosionCues } = OCELLUS_P4;
     const hidden = leadIn.hiddenFor.value;
     const leadInLength = hidden + leadIn.presentFor.value;
     const shout = leadIn.shout.value;
@@ -111,6 +112,7 @@ export class Schedule {
         if (unclaimed.afterHit <= orb.lastHealAfterHit.value) throw new RangeError(`an unclaimed outer orb must heal the boss after its last pickup at hit + ${orb.lastHealAfterHit.value}, not at hit + ${unclaimed.afterHit}`);
         put(hit + unclaimed.afterHit, "unclaimed outer orb heal", () => ({ kind: "unclaimed-orb-heals" }));
       }
+      put(hit + explosionCues.seriesStartsAfterHit.value, `${kind} explosion series start`, () => ({ kind: "explosion-series-starts", void: kind }));
       for (let pulse = 0; pulse < explosions.count; pulse++) {
         const mark = hit + explosions.firstMarkAfterHit + pulse * explosions.period;
         put(mark, `${kind} explosion mark ${pulse}`, () => ({ kind: "explosion-mark", void: kind, pulse }));

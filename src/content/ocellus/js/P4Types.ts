@@ -13,6 +13,7 @@ export type Ordinal = Brand<"Ordinal">;
 export type Seed = Brand<"Seed">;
 export type TileX = Brand<"TileX">;
 export type TileY = Brand<"TileY">;
+export type SoundId = Brand<"SoundId">;
 export type Tile = Readonly<{ x: TileX; y: TileY }>;
 
 const isCount = (n: number): boolean => Number.isInteger(n) && n >= 0;
@@ -24,6 +25,7 @@ const isOrdinal = (n: Unbranded): n is Unbranded & Ordinal => isCount(n);
 const isSeed = (n: Unbranded): n is Unbranded & Seed => isCount(n) && n <= 0xffffffff;
 const isTileX = (n: Unbranded): n is Unbranded & TileX => Number.isInteger(n);
 const isTileY = (n: Unbranded): n is Unbranded & TileY => Number.isInteger(n);
+const isSoundId = (n: Unbranded): n is Unbranded & SoundId => isCount(n) && n <= 0xffff;
 
 export function tick(n: Unbranded): Tick {
   if (!isTick(n)) throw new RangeError(`not a P4 tick: ${n}`);
@@ -53,6 +55,10 @@ export function tile(x: Unbranded, y: Unbranded): Tile {
   if (!isTileX(x) || !isTileY(y)) throw new RangeError(`not a tile: ${x}, ${y}`);
   return { x, y };
 }
+export function soundId(n: Unbranded): SoundId {
+  if (!isSoundId(n)) throw new RangeError(`not a cache sound id: ${n}`);
+  return n;
+}
 export function after(start: Tick, offset: TickSpan): Tick {
   return tick(start + offset);
 }
@@ -81,6 +87,7 @@ export type Beat =
   | Readonly<{ kind: "orb-matures"; void: VoidKind }>
   | Readonly<{ kind: "orb-expires"; void: VoidKind }>
   | Readonly<{ kind: "unclaimed-orb-heals" }>
+  | Readonly<{ kind: "explosion-series-starts"; void: VoidKind }>
   | Readonly<{ kind: "explosion-mark"; void: VoidKind; pulse: number }>
   | Readonly<{ kind: "explosion-impact"; void: VoidKind; pulse: number }>
   | Readonly<{ kind: "floor-damage"; void: VoidKind }>
@@ -96,6 +103,7 @@ export type RunEnd = "kill" | "death";
 export type HitReceipt = Readonly<{ requested: number; applied: number; beforeHp: number; afterHp: number; prayer: Style | null }>;
 export type HealReceipt = Readonly<{ requested: number; applied: number; beforeHp: number; afterHp: number }>;
 export type HealCause = Readonly<{ kind: "unclaimed-orb" }>;
+export type ExplosionOutcome = Readonly<{ kind: "hit"; receipt: HitReceipt }> | Readonly<{ kind: "avoided" }>;
 
 export type FightEvent =
   | Readonly<{ kind: "stage-entered"; at: Tick; stage: Stage }>
@@ -111,6 +119,9 @@ export type FightEvent =
   | Readonly<{ kind: "orb-returned"; at: Tick; void: VoidKind; tile: Tile; receipt: HealReceipt }>
   | Readonly<{ kind: "orb-expired"; at: Tick; void: VoidKind; tile: Tile; credit: number }>
   | Readonly<{ kind: "boss-healed"; at: Tick; cause: HealCause; receipt: HealReceipt }>
+  | Readonly<{ kind: "explosion-series-started"; at: Tick; void: VoidKind }>
+  | Readonly<{ kind: "explosion-marked"; at: Tick; void: VoidKind; pulse: number; tile: Tile }>
+  | Readonly<{ kind: "explosion-resolved"; at: Tick; void: VoidKind; pulse: number; tile: Tile; underBoss: boolean; outcome: ExplosionOutcome }>
   | Readonly<{ kind: "run-ended"; at: Tick; reason: RunEnd }>;
 
 export type PlayerObservation = Readonly<{ tile: Tile; hp: number; prayer: Style | null }>;

@@ -5,7 +5,7 @@ description: Verify Archive Ocellus Trainer, a browser trainer built on osrs-sdk
 
 # Verify Archive Ocellus Trainer
 
-The trainer is a web page: a three.js canvas (`#world`) with the osrs-sdk HUD around it. A user loads the page, sees the arena, their player and Ocellus (NPC 16677), clicks floor tiles to walk, switches gear from the inventory, and plays the phase 4 cycle, stepping in and out of the 5x5 under the boss as the void floor changes. A setup selector, a focus selector, a seed field and a Restart button sit at the bottom left. There is no backend. `scripts/verify.sh` runs every stage below and prints `PASS <stage>` or `FAIL <stage>`. It exits non-zero when any stage fails.
+The trainer is a web page: a three.js canvas (`#world`) with the osrs-sdk HUD around it. A user loads the page, sees the arena, their player and Ocellus (NPC 16677), clicks floor tiles to walk, switches gear from the inventory, and plays the phase 4 cycle, stepping in and out of the 5x5 under the boss as the void floor changes and stepping off each explosion mark. A setup selector, a focus selector, a seed field and a Restart button sit at the bottom left. There is no backend. `scripts/verify.sh` runs every stage below and prints `PASS <stage>` or `FAIL <stage>`. It exits non-zero when any stage fails.
 
 ```sh
 source ~/osrs-sims/env.sh            # Node 22 on this machine; elsewhere use any Node 22
@@ -83,12 +83,15 @@ Each run writes to `.verify/<UTC timestamp>/` (gitignored; override with `VERIFY
 | `orb-hit.png`, `orb-dormant-1.png` to `orb-dormant-6.png`, `orb-glow-1.png` to `orb-glow-6.png`, `orb-click.json`, `orb.json` | The `lifeforce-orb` drill with the player on spawn: the screen at the lifeforce hit, six frames of the dormant orb from P4 tick 20, six of the glowing orb from tick 24, the click on the orb's tile after them with the pixel and the snapshot it set, and the fight log once the HP came back |
 | `orb-skip.png`, `orb-skip.json` | The same drill reloaded with no input: the screen and fight log at tick 63, after the unclaimed outer orb healed the boss |
 | `orb-console.log`, `orb-page-errors.json`, `orb-skip-console.log`, `orb-skip-page-errors.json` | Console and page errors of both orb pages |
+| `explosion-left.png`, `explosion-standing.png`, `explosions.json`, `explosion-audio.json` | The `explosions` drill with sound and area sound saved on: the shards left on their tile 450 ms after the first dodge, the shards under the player before the late step, the fight log at P4 tick 59, and every audio buffer start with its P4 tick, length, sample rate and context state |
+| `explosion-under.png`, `explosions-under.json` | The same drill reloaded with the player walked under the hidden boss: the screen at the first mark and the fight log after the inner series |
+| `explosion-console.log`, `explosion-page-errors.json`, `explosion-under-console.log`, `explosion-under-page-errors.json` | Console and page errors of both explosion pages |
 | `loadout-before.json`, `loadout-ranged.png` | Fight snapshot and screen of `?seed=1&setup=ranged` with the inventory tab open |
 | `loadout-after.json`, `loadout-melee.png` | Snapshot and screen after clicking the nine switches |
 | `loadout-spec.json`, `loadout-spec.png` | Snapshot and screen after Division on the boss |
 | `loadout-console.log`, `loadout-page-errors.json` | Console and page errors of the loadout page |
 | `loadout-selector.json`, `loadout-selector-page-errors.json` | Snapshot and page errors after the setup control reloaded the drill on `melee` |
-| `observed.json` | Lead-in, before and after state, the cycle's stage, overhead and transition attack ticks, the focused beats, the bow shot across the flood, the floor hits, the void pixel shares, the orb events and teal shares, the worn setups, special energy and boss Defence, and each check's result |
+| `observed.json` | Lead-in, before and after state, the cycle's stage, overhead and transition attack ticks, the focused beats, the bow shot across the flood, the floor hits, the void pixel shares, the orb events and teal shares, the explosion dodges, late step, under-boss hits, sounds and shard positions, the worn setups, special energy and boss Defence, and each check's result |
 | `cleanup.log` | Confirmation that the recorded PID stopped |
 
 A browser proof captures the action and the resulting state, not only the last screen. A test count of zero fails the `test` stage. A page error fails the `browser` stage, and so does a failed or empty screenshot, state, console or page-error capture.
@@ -110,4 +113,4 @@ scripts/verify.sh stop
 - `scripts/verify.test.sh`: browser-free checks of `verify.sh` itself, with the dev server and agent-browser stubbed. Run it after changing `verify.sh`; CI runs it too.
 - `scripts/install-beta-sdk.sh`: installs the beta SDK packages with `--no-save`. CI calls it without `OSRS_SDK_PACKS`, so it builds from the pinned commit.
 
-The `assets` stage skips extraction when `public/osrs-assets/manifest.json` already contains `npc-16677`, a player model for every item the asset config declares and every spotanim it declares, from `openrs2:2746`. The boss's P4 poses come from the presentation recipe in `OcellusTimings.ts`; a pose added there is extracted on the next rebuild. The trainer's gear item ids come from the gear recipe in the same file, and the orb spotanims from its `lifeforceOrb.look`. Delete `public/osrs-assets/` to force a rebuild. Extracted assets are never committed.
+The `assets` stage skips extraction when `public/osrs-assets/manifest.json` already contains `npc-16677`, a player model for every item the asset config declares and every spotanim it declares, from `openrs2:2746`, and its sound pack holds every sound the config declares. The boss's P4 poses come from the presentation recipe in `OcellusTimings.ts`; a pose added there is extracted on the next rebuild. The trainer's gear item ids come from the gear recipe in the same file, the orb spotanims from its `lifeforceOrb.look`, and the cue sounds from its `presentation.sounds`. Delete `public/osrs-assets/` to force a rebuild. Extracted assets are never committed.
