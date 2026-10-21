@@ -1,12 +1,14 @@
 import { Settings, TrainerInstance } from "osrs-sdk";
 import { OcellusRegion } from "../js/OcellusRegion";
+import { resolveDrill } from "../js/OcellusTimings";
+import { seed } from "../js/P4Types";
 
 describe("Ocellus arena", () => {
   let trainer: TrainerInstance;
 
   beforeEach(() => {
     Settings.readFromStorage();
-    trainer = new TrainerInstance(new OcellusRegion(), { force2d: true });
+    trainer = new TrainerInstance(new OcellusRegion(resolveDrill({ seed: seed(1) })), { force2d: true });
     trainer.mount(document.createElement("canvas"), document.createElement("div"));
   });
 

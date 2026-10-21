@@ -5,15 +5,15 @@ description: Verify Archive Ocellus Trainer, a browser trainer built on osrs-sdk
 
 # Verify Archive Ocellus Trainer
 
-The trainer is a web page: a three.js canvas (`#world`) with the osrs-sdk HUD around it. A user loads the page, sees the arena and their player, and clicks floor tiles to walk. There is no backend. `scripts/verify.sh` runs every stage below and prints `PASS <stage>` or `FAIL <stage>`. It exits non-zero when any stage fails.
+The trainer is a web page: a three.js canvas (`#world`) with the osrs-sdk HUD around it. A user loads the page, sees the arena, their player and Ocellus (NPC 16677), clicks floor tiles to walk, and watches the phase 4 cycle run. A focus selector, a seed field and a Restart button sit at the bottom left. There is no backend. `scripts/verify.sh` runs every stage below and prints `PASS <stage>` or `FAIL <stage>`. It exits non-zero when any stage fails.
 
 ```sh
 source ~/osrs-sims/env.sh            # Node 22 on this machine; elsewhere use any Node 22
-scripts/verify.sh                    # build test assets browser
+scripts/verify.sh                    # build types test assets browser
 scripts/verify.sh test browser       # any subset, in the order given
 ```
 
-Run it from the repository root or a worktree. A passing run prints four `PASS` lines and ends with `verify: stop: PID <n> is gone; evidence kept in <dir>`.
+Run it from the repository root or a worktree. A passing run prints five `PASS` lines and ends with `verify: stop: PID <n> is gone; evidence kept in <dir>`.
 
 ## Preconditions
 
@@ -37,7 +37,7 @@ It refuses ports 8000 and 8001, which belong to other trainers, and refuses any 
 scripts/verify.sh doctor
 ```
 
-Read-only. It passes when the recorded PID is alive with its recorded start time, that PID owns the port, `/` has the title `Archive Ocellus Trainer`, and `/osrs-assets/manifest.json` contains `npc-16673`. It also warns when HEAD or tracked files changed since launch; webpack has reloaded them, but the recorded revision no longer names what you are driving. Run it first whenever anything looks wrong, and never drive an instance this checkout did not start.
+Read-only. It passes when the recorded PID is alive with its recorded start time, that PID owns the port, `/` has the title `Archive Ocellus Trainer`, and `/osrs-assets/manifest.json` contains `npc-16677`. It also warns when HEAD or tracked files changed since launch; webpack has reloaded them, but the recorded revision no longer names what you are driving. Run it first whenever anything looks wrong, and never drive an instance this checkout did not start.
 
 ## Drive
 
@@ -46,13 +46,13 @@ Use a named agent-browser session so you never touch another agent's browser:
 ```sh
 export AGENT_BROWSER_SESSION=archive-ocellus-$(date -u +%Y%m%dT%H%M%SZ)
 agent-browser set viewport 1280 800
-agent-browser open http://127.0.0.1:8002/
-agent-browser wait --fn "window.__archiveOcellus?.snapshot().tick >= 8" --timeout 90000
+agent-browser open "http://127.0.0.1:8002/?seed=1&specialSelection=replay-v2"
+agent-browser wait --fn "window.__archiveOcellusProbe?.snapshot().tick >= 8" --timeout 90000
 ```
 
-Drive with real input only: page loads, `agent-browser mouse move/down/up` on the canvas, and visible elements by CSS id. The canvas has no accessible children, so tiles are reached by pixel position relative to `agent-browser get box "#world"`. The camera centres on the player. At a 1280x800 viewport, the point 160 px right of and 50 px below the canvas centre is a floor tile; from the spawn tile (10, 10) the player walks to (13, 11). The `browser` stage fails when the click resolves to any other tile, so a changed viewport, camera or default setting shows up as a failure. It does not pass silently.
+Drive with real input only: page loads, `agent-browser mouse move/down/up` on the canvas, and visible elements by CSS id. The canvas has no accessible children, so tiles are reached by pixel position relative to `agent-browser get box "#world"`. The camera centres on the player. At a 1280x800 viewport, the point `WALK_CLICK_RIGHT_PX` (160) right of and `WALK_CLICK_DOWN_PX` (50) below the canvas centre is a floor tile; from the spawn tile (10, 10) the player walks to `WALK_TARGET_TILE` (13, 11). The three constants sit together at the top of `scripts/verify.sh`. The `browser` stage fails when the click resolves to any other tile, so a changed viewport, camera or default setting shows up as a failure. It does not pass silently.
 
-Development builds expose `window.__archiveOcellus.snapshot()`. It returns a fresh copy of `{ ticking, tick, player, destination }` and has no setters. Use it to record state the UI does not show. Never use it, `eval`, or SDK internals to change state; a proof that mutates the world through code proves nothing about the user path. Production builds (`npm run build`) do not contain the handle.
+Development builds expose a verification probe, `window.__archiveOcellusProbe`. `snapshot()` returns a fresh copy of `{ ticking, tick, player, destination, fight, rejected }`: `tick` is the SDK world tick, `fight` is `{ run, boss }` with the P4 tick and phase in `run` and, in `boss.visible`, whether the renderer draws the boss model. `rejected` lists URL options the drill ignored. `log()` returns the fight log: a header with the seed and every resolved choice, and one row per boss step with its phase, beats, inputs and events. Each row samples the player and the boss HP twice. `playerAtBossStep` and `bossHp.atBossStep` are read when the boss steps, after prayers publish and before hits land. `playerAtPostTick` and `bossHp.atPostTick` are read in the region's `postTick`, after every unit has moved. The probe has no setters. Use it to record state the UI does not show. Never use it, `eval`, or SDK internals to change state; a proof that mutates the world through code proves nothing about the user path. Production builds (`npm run build`) do not contain the handle.
 
 Per-feature recipes are in [features/README.md](features/README.md).
 
@@ -63,13 +63,19 @@ Each run writes to `.verify/<UTC timestamp>/` (gitignored; override with `VERIFY
 | File | Content |
 | --- | --- |
 | `summary.txt` | One `PASS`/`FAIL` line per stage |
-| `build.log`, `test.log`, `jest.json`, `assets.log` | Stage output; `jest.json` holds the executed test count |
+| `build.log`, `types.log`, `test.log`, `jest.json`, `assets.log` | Stage output; `jest.json` holds the executed test count |
 | `server.log`, `server.pid` | Dev server output; PID, start time, port and revision |
+| `warm-up.png` | A blank page; a new browser's first screenshot takes about 10 s, so it is taken before the trainer opens |
+| `hidden.json`, `hidden.png` | Screenshot, then state, after the boss's first P4 step; the check needs P4 tick 3 or earlier with the model hidden |
 | `before.json`, `before.png` | State and screenshot after load, before any input |
 | `click.json` | Canvas pixel that was clicked |
 | `after.json`, `after.png` | State and screenshot after the walk |
-| `console.log`, `page-errors.json` | Browser console and uncaught page errors |
-| `observed.json` | Before and after state, the expected tile and each check's result |
+| `console.log`, `page-errors.json` | Browser console and uncaught page errors of the first page |
+| `boss.png` | The default 3D view once the boss is present (P4 tick 12 or later) |
+| `cycle-snapshot.json`, `cycle.json` | Probe snapshot and fight log once P4 tick 70 has run |
+| `focus.json`, `focus.png` | Fight log and screen after the focus control reloaded the drill on `transition-attacks` |
+| `focus-console.log`, `focus-page-errors.json` | Console and page errors of the reloaded page |
+| `observed.json` | Lead-in, before and after state, the cycle's stage, overhead and transition attack ticks, the focused beats, and each check's result |
 | `cleanup.log` | Confirmation that the recorded PID stopped |
 
 A browser proof captures the action and the resulting state, not only the last screen. A test count of zero fails the `test` stage. A page error fails the `browser` stage, and so does a failed or empty screenshot, state, console or page-error capture.
@@ -85,9 +91,10 @@ scripts/verify.sh stop
 
 ## Helpers
 
-- `scripts/verify.sh [build] [test] [assets] [browser]`: the stages; no argument runs all four.
+- `scripts/verify.sh [build] [types] [test] [assets] [browser]`: the stages; no argument runs all five. `types` runs `npm run typecheck`: strict `tsc` over `src` and `test`, then `scripts/check-types.mjs`, which fails on `any`, `as` casts other than `as const`, non-null and definite-assignment `!`, `@ts-` suppression comments in `src`, and imports of the fight's internal modules from outside `src/content/ocellus/js`.
+- `scripts/check-types.test.sh`: planted violations and a clean control for `check-types.mjs`. Run it after changing the rule check; CI runs it too.
 - `scripts/verify.sh serve | doctor | stop`: a manual instance, as above.
 - `scripts/verify.test.sh`: browser-free checks of `verify.sh` itself, with the dev server and agent-browser stubbed. Run it after changing `verify.sh`; CI runs it too.
 - `scripts/install-beta-sdk.sh`: installs the beta SDK packages with `--no-save`. CI calls it without `OSRS_SDK_PACKS`, so it builds from the pinned commit.
 
-The `assets` stage skips extraction when `public/osrs-assets/manifest.json` already contains `npc-16673` from `openrs2:2746`. Delete `public/osrs-assets/` to force a rebuild. Extracted assets are never committed.
+The `assets` stage skips extraction when `public/osrs-assets/manifest.json` already contains `npc-16677` from `openrs2:2746`. The boss's P4 poses come from the presentation recipe in `OcellusTimings.ts`; a pose added there is extracted on the next rebuild. Delete `public/osrs-assets/` to force a rebuild. Extracted assets are never committed.

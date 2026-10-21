@@ -1,32 +1,39 @@
-import { CardinalDirection, Player, Region } from "osrs-sdk";
-import type { Location } from "osrs-sdk";
+import { CardinalDirection, Region } from "osrs-sdk";
+import type { Player } from "osrs-sdk";
+import type { DrillConfig } from "./OcellusTimings";
+import { OCELLUS_P4 } from "./OcellusTimings";
 import { ocellusLoadout } from "./OcellusLoadout";
+import { OcellusPlayer } from "./OcellusPlayer";
+import type { FightLog, FightSnapshot, TickRow } from "./P4Types";
+import { Ocellus } from "./mobs/Ocellus";
+import { CombatStream } from "./p4/roll";
 
-export const ARENA_SIZE = { width: 20, height: 20 } as const;
-export const SPAWN_TILE: Readonly<Location> = { x: 10, y: 10 };
+type Mounted = Readonly<{ kind: "unmounted" }> | Readonly<{ kind: "mounted"; ocellus: Ocellus; player: OcellusPlayer; rows: TickRow[] }>;
 
 export class OcellusRegion extends Region {
-  constructor() {
+  private mounted: Mounted = { kind: "unmounted" };
+
+  constructor(private readonly config: DrillConfig) {
     super([ocellusLoadout]);
   }
 
-  getName() {
+  override getName(): string {
     return "Ocellus";
   }
 
-  get width() {
-    return ARENA_SIZE.width;
+  override get width(): number {
+    return OCELLUS_P4.geometry.placeholderArena.value.width;
   }
 
-  get height() {
-    return ARENA_SIZE.height;
+  override get height(): number {
+    return OCELLUS_P4.geometry.placeholderArena.value.height;
   }
 
-  get initialFacing() {
+  override get initialFacing(): CardinalDirection {
     return CardinalDirection.NORTH;
   }
 
-  drawWorldBackground(context: OffscreenCanvasRenderingContext2D, scale: number) {
+  override drawWorldBackground(context: OffscreenCanvasRenderingContext2D, scale: number): void {
     for (let x = 0; x < this.width; x++) {
       for (let y = 0; y < this.height; y++) {
         context.fillStyle = (x + y) % 2 === 0 ? "#4a4339" : "#3f392f";
@@ -35,9 +42,41 @@ export class OcellusRegion extends Region {
     }
   }
 
-  initialiseRegion() {
-    const player = new Player(this, { ...SPAWN_TILE });
+  initialiseRegion(): { player: Player } {
+    const player: OcellusPlayer = new OcellusPlayer(this, { ...OCELLUS_P4.geometry.playerSpawn.value }, new CombatStream(this.config.seed), (input) => ocellus.recordInput(input));
+    const ocellus: Ocellus = new Ocellus(this, this.config, player);
     this.addPlayer(player);
+    this.addMob(ocellus);
+    this.setBoss(ocellus);
+    this.mounted = { kind: "mounted", ocellus, player, rows: [] };
     return { player };
+  }
+
+  /** Unit constructors and Region.reset's setStats pass write SDK default stats, so P4 entry is applied after both. */
+  override reset(startWorld = true): { player: Player } {
+    const result = super.reset(false);
+    if (this.mounted.kind === "mounted") this.mounted.ocellus.enterP4();
+    if (startWorld) this.world.startTicking();
+    return result;
+  }
+
+  override postTick(): void {
+    if (this.mounted.kind === "unmounted") return;
+    const row = this.mounted.ocellus.completeTick();
+    if (row) this.mounted.rows.push(row);
+  }
+
+  snapshot(): FightSnapshot | null {
+    if (this.mounted.kind === "unmounted") return null;
+    const { ocellus } = this.mounted;
+    return {
+      run: ocellus.runState(),
+      boss: { npcId: OCELLUS_P4.boss.npcId.value, hp: ocellus.currentStats.hitpoint, maxHp: ocellus.stats.hitpoint, visible: ocellus.visible() },
+    };
+  }
+
+  fightLog(): FightLog {
+    const rows = this.mounted.kind === "mounted" ? [...this.mounted.rows] : [];
+    return { header: { seed: this.config.seed, choices: this.config.choices }, rows };
   }
 }

@@ -1,0 +1,39 @@
+# P4 cycle
+
+Phase 4 starts after GET READY. Ocellus (NPC 16677) is hidden for 4 ticks, appears on his tile, shouts "End..." and becomes damageable when the first inner void forms at P4 tick 8. The fight then repeats a 60-tick cycle of inner void, transition, outer void and transition, with the boss overhead on its own track. Every boss step adds one row to the fight log. A focus selector restarts the drill with only one mechanic acting while the cycle still runs in full. In this unit the beats act only as log entries; no mechanic deals damage yet.
+
+## Sub-features
+
+- `cycle-lead-in` hides the boss for P4 ticks 0 to 3, shows him from tick 4 and shows "End..." over him from tick 5 for 3 ticks.
+- `cycle-stages` enters the inner void at 8, the first transition at 30, the outer void at 39, the second transition at 59 and the next inner void at 68.
+- `cycle-overheads` switches the boss overhead to Deflect Melee at 8, Soul Split at 33, Deflect Range at 39 and Soul Split at 61, independent of the floor stage.
+- `cycle-transition-attacks` names each transition attack variant; `specialSelection=replay-v2` replays V2's order, vortex at 37 and spike disk at 65.
+- `cycle-log` keeps one row per boss step from P4 tick 0, with no gaps.
+- `boss-3d` draws NPC 16677 in the default 3D view with the boss HP bar at 1355 / 5420.
+- `drill-focus` restarts the drill from the focus selector, the seed field and the Restart button.
+
+## How to get to it (user POV)
+
+- Open `http://127.0.0.1:8002/` and wait; the cycle runs on its own.
+- Add URL options for a fixed run, for example `?seed=1&specialSelection=replay-v2`. Every choice in `OcellusTimings.ts` is a URL key, and its option keys are the values.
+- Pick a focus in the `Focus` selector at the bottom left, optionally change `Seed`, and press `Restart`.
+
+## Driving it with agent-browser
+
+Preconditions:
+
+- The baseline preconditions in the index hold, with the page opened at `http://127.0.0.1:8002/?seed=1&specialSelection=replay-v2`.
+
+- **Hidden lead-in.** A new browser's first screenshot takes about 10 s, which is longer than the hidden ticks. Take one screenshot of `about:blank` before you open the trainer. Then wait for P4 tick 0 with `>= 0` and `--timeout 90000`, then run `agent-browser screenshot "$PWD/.verify/<run>/hidden.png"` and read `snapshot()`. `fight.run.tick` is 3 or less and `fight.boss.visible` is `false`. The screenshot shows the arena and the player with no boss model.
+- **Boss present.** Wait for P4 tick 12. Run `agent-browser wait --fn "(window.__archiveOcellusProbe?.snapshot().fight?.run.tick ?? -1) >= 12" --timeout 30000`, then `agent-browser screenshot "$PWD/.verify/<run>/boss.png"`. The screenshot shows the boss model on his 3x3 tile north of the player and the `Ocellus 1355 / 5420 (25.0%)` bar. `snapshot().fight.boss.npcId` is `16677` and `snapshot().fight.boss.visible` is `true`.
+- **Cycle.** Wait for P4 tick 70 with the same command and `>= 70`, `--timeout 90000`. Run `agent-browser --json eval "window.__archiveOcellusProbe.log()"`. The `stage-entered` events up to tick 70 are `[[0,"lead-in"],[8,"inner-void"],[30,"after-inner"],[39,"outer-void"],[59,"after-outer"],[68,"inner-void"]]`, the `overhead-switched` events are `[[8,"deflect-melee"],[33,"soul-split"],[39,"deflect-range"],[61,"soul-split"],[68,"deflect-melee"]]`, the `special-hit` beats are vortex at 37 and spike disk at 65, and the row ticks run 0, 1, 2 and on without a gap.
+- **Focus.** Run `agent-browser select "#focus" transition-attacks` and `agent-browser click "#restart"`. The page reloads with `focus=transition-attacks` in its URL and the selector shows `Transition attacks`. After P4 tick 40, `log().header.choices.focus.key` is `transition-attacks` and the only beat kinds in the rows are `boss-shouts`, `special-tell`, `special-hit` and `soul-split-heal`.
+- **Scripted.** `scripts/verify.sh browser` runs these steps after the walk check on the same page and records `bossHiddenInLeadIn`, `bossDrawnOncePresent`, `stagesOnSchedule`, `overheadsOnSchedule`, `transitionAttacksReplayed`, `logHasEveryTick`, `bossIsExpectedNpc` and `focusApplied` in `observed.json`. The lead-in capture runs right after the page opens, before the walk check.
+
+## Gotchas
+
+- P4 tick 0 is the first boss step after GET READY, not world tick 0. Wait on `snapshot().fight.run.tick`, not on `snapshot().tick`.
+- Without `seed` in the URL each load draws a fresh seed, so the default `random-uniform` transition attack variants differ between loads. Pin `seed` and `specialSelection` for literal checks.
+- The boss HP bar stays visible while the boss is hidden, as in the V2 footage. Only the model disappears.
+- The NPC bundle carries 18 animations and is about 27 MB, so the first load takes longer than before. The death animation 14872 is not declared, because one of its frame sounds is missing from cache 2746 and the asset build stops on it.
+- The `Restart` button reloads the page. Read the reloaded state only after the URL check passes, or the probe answers for the old page.

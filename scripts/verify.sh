@@ -11,8 +11,20 @@ VERIFY_DIR="${VERIFY_DIR:-$ROOT/.verify/$(date -u +%Y%m%dT%H%M%SZ)}"
 STATE_FILE="$ROOT/.verify/current-server"
 MANIFEST="$ROOT/public/osrs-assets/manifest.json"
 URL="http://127.0.0.1:${VERIFY_PORT}/"
+DRILL_QUERY="?seed=1&specialSelection=replay-v2"
+BOSS_NPC=16677
 SPAWN_TILE='{"x":10,"y":10}'
+WALK_CLICK_RIGHT_PX=160
+WALK_CLICK_DOWN_PX=50
 WALK_TARGET_TILE='{"x":13,"y":11}'
+CYCLE_LAST_HIDDEN_TICK=3
+CYCLE_LAST_TICK=70
+CYCLE_STAGE_ENTRIES='[[0,"lead-in"],[8,"inner-void"],[30,"after-inner"],[39,"outer-void"],[59,"after-outer"],[68,"inner-void"]]'
+CYCLE_OVERHEAD_SWITCHES='[[8,"deflect-melee"],[33,"soul-split"],[39,"deflect-range"],[61,"soul-split"],[68,"deflect-melee"]]'
+CYCLE_SPECIAL_HITS='[[37,"vortex"],[65,"spike-disk"]]'
+FOCUS_DRILL="transition-attacks"
+FOCUS_LAST_TICK=40
+FOCUS_BEATS='["boss-shouts","soul-split-heal","special-hit","special-tell"]'
 CREDIT_LINE="Created using intellectual property belonging to Jagex Limited under the terms of Jagex's Fan Content Policy. This content is not endorsed by or affiliated with Jagex."
 
 log() { echo "verify: $*"; }
@@ -35,12 +47,16 @@ ensure_deps() {
 manifest_ready() {
   [[ -f "$MANIFEST" ]] && node -e '
     const m = require(process.argv[1]);
-    process.exit(m.cache?.source === "openrs2:2746" && m.assets?.["npc-16673"] ? 0 : 1);
-  ' "$MANIFEST"
+    process.exit(m.cache?.source === "openrs2:2746" && m.assets?.[`npc-${process.argv[2]}`] ? 0 : 1);
+  ' "$MANIFEST" "$BOSS_NPC"
 }
 
 stage_build() {
   npm run build >"$VERIFY_DIR/build.log" 2>&1
+}
+
+stage_types() {
+  npm run typecheck >"$VERIFY_DIR/types.log" 2>&1
 }
 
 stage_test() {
@@ -53,7 +69,7 @@ stage_test() {
 
 stage_assets() {
   if manifest_ready; then
-    log "assets: manifest already has npc-16673 from openrs2:2746, skipping rebuild" | tee "$VERIFY_DIR/assets.log"
+    log "assets: manifest already has npc-${BOSS_NPC} from openrs2:2746, skipping rebuild" | tee "$VERIFY_DIR/assets.log"
     return 0
   fi
   npm run assets -- --cache-dir "$OSRS_CACHE_DIR" --reader-path "$OSRS_CACHE_READER" >"$VERIFY_DIR/assets.log" 2>&1 && manifest_ready
@@ -123,8 +139,8 @@ doctor() {
     log "doctor: page title is not Archive Ocellus Trainer"
     problems=1
   fi
-  if ! curl -sf "http://127.0.0.1:$(state port)/osrs-assets/manifest.json" | grep -q '"npc-16673"'; then
-    log "doctor: served manifest has no npc-16673"
+  if ! curl -sf "http://127.0.0.1:$(state port)/osrs-assets/manifest.json" | grep -q "\"npc-${BOSS_NPC}\""; then
+    log "doctor: served manifest has no npc-${BOSS_NPC}"
     problems=1
   fi
   if [[ "$(state revision)" != "$(git rev-parse HEAD)" ]] || [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
@@ -160,18 +176,17 @@ ab() {
   agent-browser --session "$BROWSER_SESSION" "$@"
 }
 
-snapshot() {
-  ab --json eval "window.__archiveOcellus.snapshot()" | json data.result
+probe() {
+  ab --json eval "window.__archiveOcellusProbe.$1" | json data.result
 }
 
-drive() {
-  ab set viewport 1280 800 >/dev/null || return 1
-  ab open "$URL" >/dev/null || return 1
-  ab wait --fn "window.__archiveOcellus?.snapshot().ticking === true && window.__archiveOcellus.snapshot().tick >= 8" \
-    --timeout 90000 >/dev/null || { log "trainer never started ticking"; return 1; }
+fight_tick_at_least() {
+  ab wait --fn "(window.__archiveOcellusProbe?.snapshot().fight?.run.tick ?? -1) >= $1" --timeout "$2" >/dev/null
+}
 
+drive_walk() {
   local before after box cx cy credit
-  before="$(snapshot)"
+  before="$(probe "snapshot()")"
   echo "$before" >"$VERIFY_DIR/before.json"
   ab screenshot "$VERIFY_DIR/before.png" >/dev/null || { log "before screenshot failed"; return 1; }
 
@@ -180,42 +195,97 @@ drive() {
   [[ "$(ab --json is visible "#credit_line" | json data.visible)" == "true" ]] || { log "credit line is not visible"; return 1; }
 
   box="$(ab --json get box "#world")"
-  cx=$(( $(json data.x <<<"$box") + $(json data.width <<<"$box") / 2 + 160 ))
-  cy=$(( $(json data.y <<<"$box") + $(json data.height <<<"$box") / 2 + 50 ))
+  cx=$(( $(json data.x <<<"$box") + $(json data.width <<<"$box") / 2 + WALK_CLICK_RIGHT_PX ))
+  cy=$(( $(json data.y <<<"$box") + $(json data.height <<<"$box") / 2 + WALK_CLICK_DOWN_PX ))
   echo "{\"x\":${cx},\"y\":${cy}}" >"$VERIFY_DIR/click.json"
   ab mouse move "$cx" "$cy" >/dev/null && ab mouse down left >/dev/null && ab mouse up left >/dev/null || return 1
 
-  ab wait --fn "(() => { const s = window.__archiveOcellus.snapshot(), spawn = ${SPAWN_TILE}; return (s.player.x !== spawn.x || s.player.y !== spawn.y) && s.player.x === s.destination.x && s.player.y === s.destination.y; })()" \
+  ab wait --fn "(() => { const s = window.__archiveOcellusProbe.snapshot(), spawn = ${SPAWN_TILE}; return (s.player.x !== spawn.x || s.player.y !== spawn.y) && s.player.x === s.destination.x && s.player.y === s.destination.y; })()" \
     --timeout 15000 >/dev/null || log "player did not settle on a new tile after the click"
-  after="$(snapshot)"
+  after="$(probe "snapshot()")"
   echo "$after" >"$VERIFY_DIR/after.json"
   ab wait 1200 >/dev/null
   ab screenshot "$VERIFY_DIR/after.png" >/dev/null || { log "after screenshot failed"; return 1; }
+}
 
+drive_lead_in() {
+  fight_tick_at_least 0 90000 || { log "the boss never took its first P4 step"; return 1; }
+  ab screenshot "$VERIFY_DIR/hidden.png" >/dev/null || { log "lead-in screenshot failed"; return 1; }
+  probe "snapshot()" >"$VERIFY_DIR/hidden.json"
+}
+
+drive_cycle() {
+  fight_tick_at_least 12 30000 || { log "the boss never stepped to P4 tick 12"; return 1; }
+  ab screenshot "$VERIFY_DIR/boss.png" >/dev/null || { log "boss screenshot failed"; return 1; }
+  fight_tick_at_least "$CYCLE_LAST_TICK" 90000 || { log "the boss never stepped to P4 tick ${CYCLE_LAST_TICK}"; return 1; }
+  probe "snapshot()" >"$VERIFY_DIR/cycle-snapshot.json"
+  probe "log()" >"$VERIFY_DIR/cycle.json"
   ab console >"$VERIFY_DIR/console.log" 2>&1 || { log "console capture failed"; return 1; }
   ab --json errors | json data.errors >"$VERIFY_DIR/page-errors.json" || { log "page error capture failed"; return 1; }
+}
+
+drive_focus() {
+  ab select "#focus" "$FOCUS_DRILL" >/dev/null && ab click "#restart" >/dev/null || { log "focus control did not accept ${FOCUS_DRILL}"; return 1; }
+  ab wait --fn "new URLSearchParams(location.search).get('focus') === '${FOCUS_DRILL}'" --timeout 30000 >/dev/null || { log "restart did not load focus=${FOCUS_DRILL}"; return 1; }
+  fight_tick_at_least "$FOCUS_LAST_TICK" 120000 || { log "the reloaded boss never stepped to P4 tick ${FOCUS_LAST_TICK}"; return 1; }
+  probe "log()" >"$VERIFY_DIR/focus.json"
+  ab screenshot "$VERIFY_DIR/focus.png" >/dev/null || { log "focus screenshot failed"; return 1; }
+  ab console >"$VERIFY_DIR/focus-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/focus-page-errors.json" || { log "page error capture failed"; return 1; }
+}
+
+drive() {
+  ab set viewport 1280 800 >/dev/null || return 1
+  # A new browser's first screenshot takes about 10 s, longer than the hidden lead-in, so it goes to a blank page.
+  ab open about:blank >/dev/null && ab screenshot "$VERIFY_DIR/warm-up.png" >/dev/null || { log "warm-up screenshot failed"; return 1; }
+  ab open "${URL}${DRILL_QUERY}" >/dev/null || return 1
+  drive_lead_in || return 1
+  ab wait --fn "window.__archiveOcellusProbe?.snapshot().ticking === true && window.__archiveOcellusProbe.snapshot().tick >= 8" \
+    --timeout 90000 >/dev/null || { log "trainer never started ticking"; return 1; }
+  drive_walk && drive_cycle && drive_focus || return 1
 
   local capture
-  for capture in before.json before.png after.json after.png console.log page-errors.json; do
+  for capture in hidden.json hidden.png before.json before.png after.json after.png boss.png cycle-snapshot.json cycle.json console.log page-errors.json focus.json focus.png focus-console.log focus-page-errors.json; do
     [[ -s "$VERIFY_DIR/$capture" ]] || { log "required capture ${capture} is missing or empty"; return 1; }
   done
 
   node -e '
-    const [before, after, errors, spawn, target] = process.argv.slice(1).map((s) => JSON.parse(s));
+    const [dir, spawn, target, bossNpc, lastHiddenTick, lastTick, stages, overheads, specials, focusKey, focusBeats] = process.argv.slice(1);
+    const read = (file) => JSON.parse(require("fs").readFileSync(`${dir}/${file}`, "utf8"));
+    const [hidden, before, after, errors, cycle, snapshot, focus, focusErrors] =
+      ["hidden.json", "before.json", "after.json", "page-errors.json", "cycle.json", "cycle-snapshot.json", "focus.json", "focus-page-errors.json"].map(read);
+    const [spawnTile, targetTile] = [JSON.parse(spawn), JSON.parse(target)];
     const same = (a, b) => a?.x === b.x && a?.y === b.y;
+    const upTo = (rows, last) => rows.filter((row) => row.tick <= last);
+    const events = (rows, kind, pick) => upTo(rows, Number(lastTick)).flatMap((row) => row.events.filter((e) => e.kind === kind).map(pick));
+    const observed = {
+      stageEntries: events(cycle.rows, "stage-entered", (e) => [e.at, e.stage]),
+      overheadSwitches: events(cycle.rows, "overhead-switched", (e) => [e.at, e.overhead]),
+      specialHits: upTo(cycle.rows, Number(lastTick)).flatMap((row) => row.beats.filter((b) => b.kind === "special-hit").map((b) => [row.tick, b.variant])),
+      focusBeats: [...new Set(focus.rows.flatMap((row) => row.beats.map((b) => b.kind)))].sort(),
+    };
+    const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(JSON.parse(b));
     const checks = {
-      spawnedOnSpawnTile: same(before.player, spawn),
-      clickTargetedExpectedTile: same(after.destination, target),
-      arrivedAtExpectedTile: same(after.player, target),
+      spawnedOnSpawnTile: same(before.player, spawnTile),
+      clickTargetedExpectedTile: same(after.destination, targetTile),
+      arrivedAtExpectedTile: same(after.player, targetTile),
       worldTicked: after.tick > before.tick,
-      noPageErrors: errors.length === 0,
+      bossIsExpectedNpc: snapshot.fight?.boss.npcId === Number(bossNpc),
+      bossHiddenInLeadIn: hidden.fight?.run.kind === "running" && hidden.fight.run.tick <= Number(lastHiddenTick) && hidden.fight.boss.visible === false,
+      bossDrawnOncePresent: snapshot.fight?.boss.visible === true,
+      logHasEveryTick: cycle.rows.every((row, index) => row.tick === index) && cycle.rows.length > Number(lastTick),
+      stagesOnSchedule: sameJson(observed.stageEntries, stages),
+      overheadsOnSchedule: sameJson(observed.overheadSwitches, overheads),
+      transitionAttacksReplayed: sameJson(observed.specialHits, specials),
+      focusApplied: focus.header.choices.focus.key === focusKey && sameJson(observed.focusBeats, focusBeats),
+      noPageErrors: errors.length === 0 && focusErrors.length === 0,
     };
     if (!checks.clickTargetedExpectedTile) {
-      console.error(`verify: the click resolved to ${JSON.stringify(after.destination)}, not ${JSON.stringify(target)}; the click-to-tile mapping for this viewport and camera changed`);
+      console.error(`verify: the click resolved to ${JSON.stringify(after.destination)}, not ${JSON.stringify(targetTile)}; the click-to-tile mapping for this viewport and camera changed`);
     }
-    console.log(JSON.stringify({ before, after, target, checks }, null, 2));
+    console.log(JSON.stringify({ hidden, before, after, target: targetTile, observed, checks }, null, 2));
     process.exit(Object.values(checks).every(Boolean) ? 0 : 1);
-  ' "$before" "$after" "$(cat "$VERIFY_DIR/page-errors.json")" "$SPAWN_TILE" "$WALK_TARGET_TILE" >"$VERIFY_DIR/observed.json"
+  ' "$VERIFY_DIR" "$SPAWN_TILE" "$WALK_TARGET_TILE" "$BOSS_NPC" "$CYCLE_LAST_HIDDEN_TICK" "$CYCLE_LAST_TICK" "$CYCLE_STAGE_ENTRIES" "$CYCLE_OVERHEAD_SWITCHES" "$CYCLE_SPECIAL_HITS" "$FOCUS_DRILL" "$FOCUS_BEATS" >"$VERIFY_DIR/observed.json"
   local verdict=$?
   cat "$VERIFY_DIR/observed.json"
   return $verdict
@@ -248,9 +318,9 @@ case "${1:-}" in
 esac
 
 stages=("$@")
-[[ ${#stages[@]} -gt 0 ]] || stages=(build test assets browser)
+[[ ${#stages[@]} -gt 0 ]] || stages=(build types test assets browser)
 for stage in "${stages[@]}"; do
-  case "$stage" in build | test | assets | browser) ;; *) log "unknown stage: ${stage}"; exit 2 ;; esac
+  case "$stage" in build | types | test | assets | browser) ;; *) log "unknown stage: ${stage}"; exit 2 ;; esac
 done
 
 mkdir -p "$VERIFY_DIR"
