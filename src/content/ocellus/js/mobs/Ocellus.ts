@@ -1,10 +1,25 @@
-import { CacheRenderModel, CacheRenderReferences, Mob } from "osrs-sdk";
+import { CacheRenderModel, CacheRenderReferences, Mob, Projectile } from "osrs-sdk";
 import type { Model, Region, UnitBonuses } from "osrs-sdk";
 import type { DrillConfig } from "../OcellusTimings";
 import { OCELLUS_P4 } from "../OcellusTimings";
 import type { OcellusPlayer } from "../OcellusPlayer";
-import type { Beat, FightEvent, IncomingStyle, InputObservation, Phase, RunEnd, RunState, Tick, TickRow } from "../P4Types";
+import type {
+  Beat,
+  FightEvent,
+  HitReceipt,
+  IncomingStyle,
+  InputObservation,
+  Phase,
+  PlayerObservation,
+  RunEnd,
+  RunState,
+  Tick,
+  TickRow,
+  VoidKind,
+} from "../P4Types";
 import { tick, worldTick } from "../P4Types";
+import { VOID_MASKS, floorRule } from "../p4/floor";
+import { rollInt } from "../p4/roll";
 import type { Moment } from "../p4/schedule";
 import { Schedule } from "../p4/schedule";
 
@@ -29,6 +44,20 @@ function incomingStyle(attackStyle: string): IncomingStyle {
       return "magic";
     default:
       return "typeless";
+  }
+}
+
+class P4Hit extends Projectile {
+  constructor(boss: Ocellus, private readonly player: OcellusPlayer, private readonly requested: number, private readonly settle: (receipt: HitReceipt) => void) {
+    super(null, requested, boss, player, "typeless", { setDelay: 1, visuals: { hidden: true } });
+  }
+
+  // The SDK clamps damage to HP when the projectile is built; hits that land earlier in the same tick can lower HP again.
+  override beforeHit(): void {
+    super.beforeHit();
+    const beforeHp = this.player.currentStats.hitpoint;
+    this.damage = Math.min(this.requested, beforeHp);
+    this.settle({ requested: this.requested, applied: this.damage, beforeHp, afterHp: beforeHp - this.damage, prayer: this.player.protection });
   }
 }
 
@@ -220,7 +249,7 @@ export class Ocellus extends Mob {
       this.run = { kind: "killed", draft: { ...draft, beats: [], events: [...logged, { kind: "run-ended", at: moment.tick, reason: "kill" }] } };
       return;
     }
-    const reactions = moment.beats.flatMap((beat) => this.react(beat, moment.tick) ?? []);
+    const reactions = moment.beats.flatMap((beat) => this.react(beat, moment.tick, draft.playerAtBossStep) ?? []);
     this.run = { kind: "stepping", draft: { ...draft, beats: moment.beats, events: [...logged, ...reactions] } };
   }
 
@@ -235,12 +264,15 @@ export class Ocellus extends Mob {
       });
   }
 
-  private react(beat: Beat, at: Tick): FightEvent | null {
+  private react(beat: Beat, at: Tick, player: PlayerObservation): FightEvent | null {
     switch (beat.kind) {
       case "boss-shouts":
         this.setOverheadText(beat.text);
         this.overheadTextTimer = beat.lasts;
         return { kind: "boss-shouted", at, text: beat.text };
+      case "floor-damage":
+        this.strikeFloor(beat.void, at, player);
+        return null;
       case "lifeforce-tell":
       case "lifeforce-hit":
       case "orb-spawns":
@@ -249,7 +281,6 @@ export class Ocellus extends Mob {
       case "unclaimed-orb-heals":
       case "explosion-mark":
       case "explosion-impact":
-      case "floor-damage":
       case "special-tell":
       case "special-hit":
       case "soul-split-heal":
@@ -258,6 +289,32 @@ export class Ocellus extends Mob {
         return null;
       default: {
         const unhandled: never = beat;
+        return unhandled;
+      }
+    }
+  }
+
+  private strikeFloor(kind: VoidKind, at: Tick, player: PlayerObservation): void {
+    const rule = floorRule(kind, this.config.choices);
+    if (rule.kind === "harmless" || !VOID_MASKS[kind].contains(player.tile)) return;
+    const requested = rollInt(this.config.seed, "floorDamage", at, rule.perTick, 0);
+    const hit = new P4Hit(this, this.target, requested, (receipt) => this.recordEvent({ kind: "floor-hit", at, void: kind, tile: player.tile, receipt }));
+    this.target.addProjectile(hit);
+  }
+
+  private recordEvent(event: FightEvent): void {
+    const run = this.run;
+    switch (run.kind) {
+      case "stepping":
+      case "killed":
+        this.run = { ...run, draft: { ...run.draft, events: [...run.draft.events, event] } };
+        return;
+      case "waiting":
+      case "between":
+      case "ended":
+        return;
+      default: {
+        const unhandled: never = run;
         return unhandled;
       }
     }

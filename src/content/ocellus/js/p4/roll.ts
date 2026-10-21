@@ -1,8 +1,10 @@
+import type { DamageRange } from "../OcellusTimings";
 import type { Seed, Tick } from "../P4Types";
 
-type RollStream = "specialVariant";
+type RollStream = "floorDamage" | "specialVariant";
 
 const STREAM_ID: Readonly<Record<RollStream, number>> = {
+  floorDamage: 2,
   specialVariant: 5,
 };
 
@@ -14,6 +16,10 @@ export function roll(seed: Seed, stream: RollStream, at: Tick, draw: number): nu
   h = Math.imul(h, 0x735a2d97);
   h ^= h >>> 15;
   return (h >>> 0) / 2 ** 32;
+}
+
+export function rollInt(seed: Seed, stream: RollStream, at: Tick, range: DamageRange, draw: number): number {
+  return range.min + Math.floor(roll(seed, stream, at, draw) * (range.max - range.min + 1));
 }
 
 export class CombatStream {

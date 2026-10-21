@@ -29,7 +29,7 @@ Preconditions:
 - **Switches.** Slot `n` is at (1125 + 39 × (n mod 4), 508 + 32 × floor(n / 4)). Click slots 1 to 9 the same way, about 150 ms apart. `equipped` becomes `{"weapon":22325,"offhand":null,"helmet":24419,"chest":24420,"legs":24421,"gloves":22981,"cape":21295,"necklace":19553,"feet":13239,"ring":25485,"ammo":11212}`, and the player model shows the scythe and the dark Inquisitor plate.
 - **Division.** Click slot 0 to wield Ralos, click the special orb at (1140, 157) so it lights up, then click Ocellus 10 px left of and 160 px above the canvas centre. Wait with `agent-browser wait --fn "window.__archiveOcellusProbe.snapshot().fight.player.specialEnergy < 100"`, then wait until `log().rows` holds two `player-hit-judged` events, because each glaive drains only as it lands. `specialEnergy` is 50, and `fight.boss.defence` has dropped from 250 by 37 for each glaive that landed damage. With `seed=1` one glaive deals 14 and the other 0, so Defence reads 213, and the verdict accepts only that one drain. Two splats show on the boss and the orb reads 50.
 - **Selector.** Run `agent-browser select "#setup" melee` and `agent-browser click "#restart"`. The page reloads with `setup=melee`, and `equipped` is the melee record above.
-- **Scripted.** `scripts/verify.sh browser` runs these steps after the focus check and records `rangedSetupWorn`, `switchesWornByClick`, `divisionSpentHalfTheBar`, `divisionDrainedBossDefence` and `setupSelectorApplied` in `observed.json`.
+- **Scripted.** `scripts/verify.sh browser` runs these steps after the void-floor check and records `rangedSetupWorn`, `switchesWornByClick`, `divisionSpentHalfTheBar`, `divisionDrainedBossDefence` and `setupSelectorApplied` in `observed.json`.
 
 ## Gotchas
 

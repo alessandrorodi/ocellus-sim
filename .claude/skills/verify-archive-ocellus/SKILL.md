@@ -5,7 +5,7 @@ description: Verify Archive Ocellus Trainer, a browser trainer built on osrs-sdk
 
 # Verify Archive Ocellus Trainer
 
-The trainer is a web page: a three.js canvas (`#world`) with the osrs-sdk HUD around it. A user loads the page, sees the arena, their player and Ocellus (NPC 16677), clicks floor tiles to walk, switches gear from the inventory, and watches the phase 4 cycle run. A setup selector, a focus selector, a seed field and a Restart button sit at the bottom left. There is no backend. `scripts/verify.sh` runs every stage below and prints `PASS <stage>` or `FAIL <stage>`. It exits non-zero when any stage fails.
+The trainer is a web page: a three.js canvas (`#world`) with the osrs-sdk HUD around it. A user loads the page, sees the arena, their player and Ocellus (NPC 16677), clicks floor tiles to walk, switches gear from the inventory, and plays the phase 4 cycle, stepping in and out of the 5x5 under the boss as the void floor changes. A setup selector, a focus selector, a seed field and a Restart button sit at the bottom left. There is no backend. `scripts/verify.sh` runs every stage below and prints `PASS <stage>` or `FAIL <stage>`. It exits non-zero when any stage fails.
 
 ```sh
 source ~/osrs-sims/env.sh            # Node 22 on this machine; elsewhere use any Node 22
@@ -72,15 +72,18 @@ Each run writes to `.verify/<UTC timestamp>/` (gitignored; override with `VERIFY
 | `after.json`, `after.png` | State and screenshot after the walk |
 | `console.log`, `page-errors.json` | Browser console and uncaught page errors of the first page |
 | `boss.png` | The default 3D view once the boss is present (P4 tick 12 or later) |
+| `attack-click.json`, `ring-click.json`, `flood-ring.png` | Canvas pixels of the boss click from the flood at P4 tick 44 and of the ring click after the bow fires, and the screen at tick 52 with the player in the safe ring |
 | `cycle-snapshot.json`, `cycle.json` | Probe snapshot and fight log once P4 tick 70 has run |
 | `focus.json`, `focus.png` | Fight log and screen after the focus control reloaded the drill on `transition-attacks` |
 | `focus-console.log`, `focus-page-errors.json` | Console and page errors of the reloaded page |
+| `void-inner.png`, `void-flood.png`, `void-floor.json` | The `void-floor` drill reloaded with the player standing on spawn: the inner square at P4 tick 12, the flood at 45, and the fight log once the flood has killed the player |
+| `void-console.log`, `void-page-errors.json` | Console and page errors of the `void-floor` page |
 | `loadout-before.json`, `loadout-ranged.png` | Fight snapshot and screen of `?seed=1&setup=ranged` with the inventory tab open |
 | `loadout-after.json`, `loadout-melee.png` | Snapshot and screen after clicking the nine switches |
 | `loadout-spec.json`, `loadout-spec.png` | Snapshot and screen after Division on the boss |
 | `loadout-console.log`, `loadout-page-errors.json` | Console and page errors of the loadout page |
 | `loadout-selector.json`, `loadout-selector-page-errors.json` | Snapshot and page errors after the setup control reloaded the drill on `melee` |
-| `observed.json` | Lead-in, before and after state, the cycle's stage, overhead and transition attack ticks, the focused beats, the worn setups, special energy and boss Defence, and each check's result |
+| `observed.json` | Lead-in, before and after state, the cycle's stage, overhead and transition attack ticks, the focused beats, the bow shot across the flood, the floor hits, the void pixel shares, the worn setups, special energy and boss Defence, and each check's result |
 | `cleanup.log` | Confirmation that the recorded PID stopped |
 
 A browser proof captures the action and the resulting state, not only the last screen. A test count of zero fails the `test` stage. A page error fails the `browser` stage, and so does a failed or empty screenshot, state, console or page-error capture.
@@ -96,7 +99,7 @@ scripts/verify.sh stop
 
 ## Helpers
 
-- `scripts/verify.sh [build] [types] [test] [assets] [browser]`: the stages; no argument runs all five. `types` runs `npm run typecheck`: strict `tsc` over `src` and `test`, then `scripts/check-types.mjs`, which fails on `any`, `as` casts other than `as const`, non-null and definite-assignment `!`, `@ts-` suppression comments in `src`, and imports of the fight's internal modules from outside `src/content/ocellus/js`.
+- `scripts/verify.sh [build] [types] [test] [assets] [browser]`: the stages; no argument runs all five. `types` runs `npm run typecheck`: strict `tsc` over `src` and `test`, then `scripts/check-types.mjs`, which fails on `any`, `as` casts other than `as const`, non-null and definite-assignment `!`, `@ts-` suppression comments in `src`, imports of the fight's internal modules from outside `src/content/ocellus/js`, and test files inside it. Tests live in `src/content/ocellus/tests` and drive the region.
 - `scripts/check-types.test.sh`: planted violations and a clean control for `check-types.mjs`. Run it after changing the rule check; CI runs it too.
 - `scripts/verify.sh serve | doctor | stop`: a manual instance, as above.
 - `scripts/verify.test.sh`: browser-free checks of `verify.sh` itself, with the dev server and agent-browser stubbed. Run it after changing `verify.sh`; CI runs it too.

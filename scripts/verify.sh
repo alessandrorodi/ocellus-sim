@@ -41,6 +41,20 @@ LOADOUT_SPECIAL_ORB_Y=157
 LOADOUT_BOSS_CLICK_RIGHT_PX=-10
 LOADOUT_BOSS_CLICK_DOWN_PX=-160
 LOADOUT_DIVISION_DRAIN=37
+BOSS_CLICK_LEFT_PX=130
+BOSS_CLICK_UP_PX=160
+RING_CLICK_LEFT_PX=55
+RING_CLICK_UP_PX=90
+FLOOD_DAMAGE_TICK=44
+FLOOD_LAST_TICK=58
+FLOOD_RING_SCREENSHOT_TICK=52
+NEAR_SQUARE='{"minX":8,"maxX":12,"minY":3,"maxY":7}'
+VOID_DRILL="void-floor"
+VOID_INNER_SHOT_TICK=12
+VOID_FLOOD_SHOT_TICK=45
+VOID_FLOOR_HITS='[[44,9],[45,11],[46,10],[47,11],[48,10],[49,9],[50,9],[51,10],[52,9],[53,10],[54,1]]'
+VOID_RUN_END='[[54,"death"]]'
+VOID_PIXEL="#1e2529"
 CREDIT_LINE="Created using intellectual property belonging to Jagex Limited under the terms of Jagex's Fan Content Policy. This content is not endorsed by or affiliated with Jagex."
 
 log() { echo "verify: $*"; }
@@ -234,9 +248,26 @@ drive_lead_in() {
   probe "snapshot()" >"$VERIFY_DIR/hidden.json"
 }
 
+drive_flood_shot() {
+  local box cx cy
+  fight_tick_at_least "$FLOOD_DAMAGE_TICK" 90000 || { log "the flood never reached P4 tick ${FLOOD_DAMAGE_TICK}"; return 1; }
+  box="$(ab --json get box "#world")"
+  cx=$(( $(json data.x <<<"$box") + $(json data.width <<<"$box") / 2 ))
+  cy=$(( $(json data.y <<<"$box") + $(json data.height <<<"$box") / 2 ))
+  echo "{\"x\":$((cx - BOSS_CLICK_LEFT_PX)),\"y\":$((cy - BOSS_CLICK_UP_PX))}" >"$VERIFY_DIR/attack-click.json"
+  click_at $((cx - BOSS_CLICK_LEFT_PX)) $((cy - BOSS_CLICK_UP_PX)) || return 1
+  ab wait --fn "window.__archiveOcellusProbe.log().rows.some((row) => row.tick >= ${FLOOD_DAMAGE_TICK} && row.combatDraws > 0)" \
+    --timeout 15000 >/dev/null || log "the bow never fired across the flood"
+  echo "{\"x\":$((cx - RING_CLICK_LEFT_PX)),\"y\":$((cy - RING_CLICK_UP_PX))}" >"$VERIFY_DIR/ring-click.json"
+  click_at $((cx - RING_CLICK_LEFT_PX)) $((cy - RING_CLICK_UP_PX)) || return 1
+  fight_tick_at_least "$FLOOD_RING_SCREENSHOT_TICK" 30000 || { log "the boss never stepped to P4 tick ${FLOOD_RING_SCREENSHOT_TICK}"; return 1; }
+  ab screenshot "$VERIFY_DIR/flood-ring.png" >/dev/null || { log "flood screenshot failed"; return 1; }
+}
+
 drive_cycle() {
   fight_tick_at_least 12 30000 || { log "the boss never stepped to P4 tick 12"; return 1; }
   ab screenshot "$VERIFY_DIR/boss.png" >/dev/null || { log "boss screenshot failed"; return 1; }
+  drive_flood_shot || return 1
   fight_tick_at_least "$CYCLE_LAST_TICK" 90000 || { log "the boss never stepped to P4 tick ${CYCLE_LAST_TICK}"; return 1; }
   probe "snapshot()" >"$VERIFY_DIR/cycle-snapshot.json"
   probe "log()" >"$VERIFY_DIR/cycle.json"
@@ -301,6 +332,19 @@ drive_loadouts() {
   ab --json errors | json data.errors >"$VERIFY_DIR/loadout-selector-page-errors.json" || { log "page error capture failed"; return 1; }
 }
 
+drive_void_floor() {
+  ab select "#focus" "$VOID_DRILL" >/dev/null && ab click "#restart" >/dev/null || { log "focus control did not accept ${VOID_DRILL}"; return 1; }
+  ab wait --fn "new URLSearchParams(location.search).get('focus') === '${VOID_DRILL}'" --timeout 30000 >/dev/null || { log "restart did not load focus=${VOID_DRILL}"; return 1; }
+  fight_tick_at_least "$VOID_INNER_SHOT_TICK" 120000 || { log "the reloaded boss never stepped to P4 tick ${VOID_INNER_SHOT_TICK}"; return 1; }
+  ab screenshot "$VERIFY_DIR/void-inner.png" >/dev/null || { log "inner void screenshot failed"; return 1; }
+  fight_tick_at_least "$VOID_FLOOD_SHOT_TICK" 60000 || { log "the reloaded boss never stepped to P4 tick ${VOID_FLOOD_SHOT_TICK}"; return 1; }
+  ab screenshot "$VERIFY_DIR/void-flood.png" >/dev/null || { log "flood screenshot failed"; return 1; }
+  ab wait --fn "window.__archiveOcellusProbe.snapshot().fight?.run.kind === 'ended'" --timeout 60000 >/dev/null || { log "the player standing on the flood never died"; return 1; }
+  probe "log()" >"$VERIFY_DIR/void-floor.json"
+  ab console >"$VERIFY_DIR/void-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/void-page-errors.json" || { log "page error capture failed"; return 1; }
+}
+
 drive() {
   ab set viewport 1280 800 >/dev/null || return 1
   # A new browser's first screenshot takes about 10 s, longer than the hidden lead-in, so it goes to a blank page.
@@ -309,31 +353,73 @@ drive() {
   drive_lead_in || return 1
   ab wait --fn "window.__archiveOcellusProbe?.snapshot().ticking === true && window.__archiveOcellusProbe.snapshot().tick >= 8" \
     --timeout 90000 >/dev/null || { log "trainer never started ticking"; return 1; }
-  drive_walk && drive_cycle && drive_focus && drive_loadouts || return 1
+  drive_walk && drive_cycle && drive_focus && drive_void_floor && drive_loadouts || return 1
 
   local capture
-  for capture in hidden.json hidden.png before.json before.png after.json after.png boss.png cycle-snapshot.json cycle.json console.log page-errors.json focus.json focus.png focus-console.log focus-page-errors.json \
+  for capture in hidden.json hidden.png before.json before.png after.json after.png boss.png attack-click.json ring-click.json flood-ring.png cycle-snapshot.json cycle.json console.log page-errors.json focus.json focus.png focus-console.log focus-page-errors.json \
+    void-inner.png void-flood.png void-floor.json void-console.log void-page-errors.json \
     loadout-before.json loadout-ranged.png loadout-after.json loadout-melee.png loadout-spec.json loadout-spec.png \
     loadout-console.log loadout-page-errors.json loadout-selector.json loadout-selector-page-errors.json; do
     [[ -s "$VERIFY_DIR/$capture" ]] || { log "required capture ${capture} is missing or empty"; return 1; }
   done
 
   node -e '
-    const [dir, spawn, target, bossNpc, lastHiddenTick, lastTick, stages, overheads, specials, focusKey, focusBeats, rangedWorn, meleeWorn, drain] = process.argv.slice(1);
-    const read = (file) => JSON.parse(require("fs").readFileSync(`${dir}/${file}`, "utf8"));
-    const [hidden, before, after, errors, cycle, snapshot, focus, focusErrors] =
-      ["hidden.json", "before.json", "after.json", "page-errors.json", "cycle.json", "cycle-snapshot.json", "focus.json", "focus-page-errors.json"].map(read);
+    const [dir, spawn, target, bossNpc, lastHiddenTick, lastTick, stages, overheads, specials, focusKey, focusBeats, square, floodDamage, floodLast, voidHits, voidEnd, voidPixel, rangedWorn, meleeWorn, drain] = process.argv.slice(1);
+    const fs = require("fs");
+    const read = (file) => JSON.parse(fs.readFileSync(`${dir}/${file}`, "utf8"));
+    const [hidden, before, after, errors, cycle, snapshot, focus, focusErrors, voidLog, voidErrors] =
+      ["hidden.json", "before.json", "after.json", "page-errors.json", "cycle.json", "cycle-snapshot.json", "focus.json", "focus-page-errors.json", "void-floor.json", "void-page-errors.json"].map(read);
     const [dressed, switched, spec, selector, loadoutErrors, selectorErrors] =
       ["loadout-before.json", "loadout-after.json", "loadout-spec.json", "loadout-selector.json", "loadout-page-errors.json", "loadout-selector-page-errors.json"].map(read);
-    const [spawnTile, targetTile] = [JSON.parse(spawn), JSON.parse(target)];
+    const [spawnTile, targetTile, nearSquare] = [JSON.parse(spawn), JSON.parse(target), JSON.parse(square)];
     const same = (a, b) => a?.x === b.x && a?.y === b.y;
+    const inSquare = (t) => t.x >= nearSquare.minX && t.x <= nearSquare.maxX && t.y >= nearSquare.minY && t.y <= nearSquare.maxY;
     const upTo = (rows, last) => rows.filter((row) => row.tick <= last);
+    const between = (rows, from, to) => rows.filter((row) => row.tick >= Number(from) && row.tick <= Number(to));
     const events = (rows, kind, pick) => upTo(rows, Number(lastTick)).flatMap((row) => row.events.filter((e) => e.kind === kind).map(pick));
+    function pixelShare(file) {
+      const zlib = require("zlib");
+      const buf = fs.readFileSync(`${dir}/${file}`);
+      let pos = 8, width = 0, height = 0, channels = 0;
+      const idat = [];
+      while (pos < buf.length) {
+        const len = buf.readUInt32BE(pos), type = buf.toString("ascii", pos + 4, pos + 8), data = buf.subarray(pos + 8, pos + 8 + len);
+        if (type === "IHDR") [width, height, channels] = [data.readUInt32BE(0), data.readUInt32BE(4), { 2: 3, 6: 4 }[data[9]]];
+        if (type === "IDAT") idat.push(data);
+        pos += 12 + len;
+      }
+      const raw = zlib.inflateSync(Buffer.concat(idat)), stride = width * channels, px = Buffer.alloc(height * stride);
+      for (let y = 0; y < height; y++) {
+        for (let i = 0; i < stride; i++) {
+          const a = i >= channels ? px[y * stride + i - channels] : 0, b = y ? px[(y - 1) * stride + i] : 0, c = y && i >= channels ? px[(y - 1) * stride + i - channels] : 0;
+          const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+          px[y * stride + i] = (raw[y * (stride + 1) + 1 + i] + [0, a, b, (a + b) >> 1, pa <= pb && pa <= pc ? a : pb <= pc ? b : c][raw[y * (stride + 1)]]) & 255;
+        }
+      }
+      const want = [1, 3, 5].map((i) => parseInt(voidPixel.slice(i, i + 2), 16));
+      let near = 0;
+      for (let i = 0; i < width * height; i++) if (want.every((v, c) => Math.abs(px[i * channels + c] - v) <= 10)) near++;
+      return Math.round((10000 * near) / (width * height)) / 100;
+    }
+    const flood = between(cycle.rows, floodDamage, floodLast);
+    const floorHit = (row) => row.events.some((e) => e.kind === "floor-hit" && same(e.tile, row.playerAtBossStep.tile));
+    const launch = flood.find((row) => row.combatDraws > 0);
+    const landing = flood.flatMap((row) => row.events.filter((e) => e.kind === "player-hit-judged" && e.style === "ranged").map((e) => ({ ...e, bossHp: row.bossHp })))[0];
     const observed = {
       stageEntries: events(cycle.rows, "stage-entered", (e) => [e.at, e.stage]),
       overheadSwitches: events(cycle.rows, "overhead-switched", (e) => [e.at, e.overhead]),
       specialHits: upTo(cycle.rows, Number(lastTick)).flatMap((row) => row.beats.filter((b) => b.kind === "special-hit").map((b) => [row.tick, b.variant])),
       focusBeats: [...new Set(focus.rows.flatMap((row) => row.beats.map((b) => b.kind)))].sort(),
+      floodShot: {
+        launch: launch && { at: launch.tick, startedOn: launch.playerAtBossStep.tile, firedFrom: launch.playerAtPostTick.tile, floorHitOnStart: floorHit(launch) },
+        landing: landing && { at: landing.at, style: landing.style, outcome: landing.outcome, damage: landing.requested, bossHp: [landing.bossHp.atBossStep, landing.bossHp.atPostTick] },
+        walk: flood.flatMap((row) => row.inputs.filter((i) => i.kind === "walk-ordered").map((i) => [row.tick, i.destination])),
+      },
+      floodRows: flood.map((row) => [row.tick, row.playerAtBossStep.tile, floorHit(row)]),
+      voidHits: voidLog.rows.flatMap((row) => row.events.filter((e) => e.kind === "floor-hit").map((e) => [e.at, e.receipt.applied])),
+      voidHitTiles: [...new Set(voidLog.rows.flatMap((row) => row.events.filter((e) => e.kind === "floor-hit").map((e) => JSON.stringify(e.tile))))],
+      voidRunEnd: voidLog.rows.flatMap((row) => row.events.filter((e) => e.kind === "run-ended").map((e) => [e.at, e.reason])),
+      voidPixelShare: { "before.png": pixelShare("before.png"), "void-inner.png": pixelShare("void-inner.png"), "void-flood.png": pixelShare("void-flood.png"), "flood-ring.png": pixelShare("flood-ring.png") },
       loadout: {
         worn: [dressed.player.equipped, switched.player.equipped, selector.player.equipped],
         specialEnergy: [switched.player.specialEnergy, spec.player.specialEnergy],
@@ -341,6 +427,7 @@ drive() {
       },
     };
     const sameJson = (a, b) => require("util").isDeepStrictEqual(a, JSON.parse(b));
+    const share = observed.voidPixelShare;
     const checks = {
       spawnedOnSpawnTile: same(before.player, spawnTile),
       clickTargetedExpectedTile: same(after.destination, targetTile),
@@ -354,12 +441,21 @@ drive() {
       overheadsOnSchedule: sameJson(observed.overheadSwitches, overheads),
       transitionAttacksReplayed: sameJson(observed.specialHits, specials),
       focusApplied: focus.header.choices.focus.key === focusKey && sameJson(observed.focusBeats, focusBeats),
+      rangedShotFromTheFlood: launch !== undefined && !inSquare(targetTile) && same(launch.playerAtBossStep.tile, targetTile) && same(launch.playerAtPostTick.tile, targetTile) && floorHit(launch),
+      rangedShotLanded: launch !== undefined && landing !== undefined && landing.at > launch.tick && landing.outcome === "passed" && landing.requested > 0 &&
+        landing.bossHp.atBossStep - landing.bossHp.atPostTick === landing.requested,
+      ringSparedInFlood: flood.length === Number(floodLast) - Number(floodDamage) + 1 && flood.every((row) => floorHit(row) === !inSquare(row.playerAtBossStep.tile)) &&
+        flood.some(floorHit) && inSquare(flood[flood.length - 1].playerAtBossStep.tile),
+      floodHitsStandingStill: sameJson(observed.voidHits, voidHits) && sameJson(observed.voidHitTiles, JSON.stringify([JSON.stringify(spawnTile)])) && sameJson(observed.voidRunEnd, voidEnd),
+      noVoidBeforeTheFight: share["before.png"] < 0.3,
+      innerVoidDrawn: share["void-inner.png"] > 0.6 && share["void-inner.png"] < 10,
+      floodDrawn: share["void-flood.png"] > 20 && share["flood-ring.png"] > 20,
       rangedSetupWorn: sameJson(dressed.player.equipped, rangedWorn),
       switchesWornByClick: sameJson(switched.player.equipped, meleeWorn),
       divisionSpentHalfTheBar: switched.player.specialEnergy === 100 && spec.player.specialEnergy === 50,
       divisionDrainedBossDefence: switched.boss.defence - spec.boss.defence === Number(drain),
       setupSelectorApplied: sameJson(selector.player.equipped, meleeWorn),
-      noPageErrors: [errors, focusErrors, loadoutErrors, selectorErrors].every((list) => list.length === 0),
+      noPageErrors: [errors, focusErrors, voidErrors, loadoutErrors, selectorErrors].every((list) => list.length === 0),
     };
     if (!checks.clickTargetedExpectedTile) {
       console.error(`verify: the click resolved to ${JSON.stringify(after.destination)}, not ${JSON.stringify(targetTile)}; the click-to-tile mapping for this viewport and camera changed`);
@@ -367,6 +463,7 @@ drive() {
     console.log(JSON.stringify({ hidden, before, after, target: targetTile, observed, checks }, null, 2));
     process.exit(Object.values(checks).every(Boolean) ? 0 : 1);
   ' "$VERIFY_DIR" "$SPAWN_TILE" "$WALK_TARGET_TILE" "$BOSS_NPC" "$CYCLE_LAST_HIDDEN_TICK" "$CYCLE_LAST_TICK" "$CYCLE_STAGE_ENTRIES" "$CYCLE_OVERHEAD_SWITCHES" "$CYCLE_SPECIAL_HITS" "$FOCUS_DRILL" "$FOCUS_BEATS" \
+    "$NEAR_SQUARE" "$FLOOD_DAMAGE_TICK" "$FLOOD_LAST_TICK" "$VOID_FLOOR_HITS" "$VOID_RUN_END" "$VOID_PIXEL" \
     "$LOADOUT_RANGED_WORN" "$LOADOUT_MELEE_WORN" "$LOADOUT_DIVISION_DRAIN" >"$VERIFY_DIR/observed.json"
   local verdict=$?
   cat "$VERIFY_DIR/observed.json"

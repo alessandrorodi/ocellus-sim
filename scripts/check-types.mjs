@@ -9,6 +9,7 @@ const root = path.resolve(process.argv[2] ?? path.join(path.dirname(fileURLToPat
 const FIGHT = path.join(root, "src/content/ocellus/js");
 const PUBLIC = new Set(["OcellusRegion.ts", "OcellusTimings.ts", "P4Types.ts"].map((file) => path.join(FIGHT, file)));
 const SUPPRESSION = /@ts-(ignore|expect-error|nocheck)\b/;
+const TEST_FILE = /(^|[/\\])__tests__[/\\]|\.(test|spec)(-d)?\.[cm]?[jt]sx?$/;
 
 function sources(dir) {
   if (!fs.existsSync(dir)) return [];
@@ -35,6 +36,10 @@ for (const file of [...sources(path.join(root, "src")), ...sources(path.join(roo
     const { line, character } = sf.getLineAndCharacterOfPosition(pos);
     findings.push(`${path.relative(root, file)}:${line + 1}:${character + 1} ${rule}`);
   };
+
+  if (insideFight && TEST_FILE.test(path.relative(FIGHT, file))) {
+    report(0, "test file inside the fight; tests drive the region from src/content/ocellus/tests");
+  }
 
   if (inSrc) {
     const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, sf.languageVariant, text);

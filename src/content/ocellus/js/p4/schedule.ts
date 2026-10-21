@@ -2,6 +2,7 @@ import type { Focus, ResolvedChoices, SpecialSelection, TransitionRecipe, VoidRe
 import { OCELLUS_P4 } from "../OcellusTimings";
 import type { Beat, Cycle, Mechanic, Phase, Seed, Special, Tick, TransitionKind, VoidKind } from "../P4Types";
 import { cycle, ordinal, tick } from "../P4Types";
+import { floorRule } from "./floor";
 import { roll } from "./roll";
 
 export type Moment = Readonly<{ tick: Tick; phase: Phase; beats: readonly Beat[] }>;
@@ -114,8 +115,12 @@ export class Schedule {
         put(mark, `${kind} explosion mark ${pulse}`, () => ({ kind: "explosion-mark", void: kind, pulse }));
         put(mark + explosions.impactAfterMark, `${kind} explosion impact ${pulse}`, () => ({ kind: "explosion-impact", void: kind, pulse }));
       }
-      for (let offset = recipe.floorDamage.value.afterOnset; offset < recipe.duration.value; offset++) {
-        put(start + offset, `${kind} floor damage`, () => ({ kind: "floor-damage", void: kind }));
+      const floor = floorRule(kind, choices);
+      if (floor.kind === "damages") {
+        inside(floor.afterOnset, recipe.duration.value, `${kind} floor damage onset`);
+        for (let offset = floor.afterOnset; offset < recipe.duration.value; offset++) {
+          put(start + offset, `${kind} floor damage`, () => ({ kind: "floor-damage", void: kind }));
+        }
       }
     };
 

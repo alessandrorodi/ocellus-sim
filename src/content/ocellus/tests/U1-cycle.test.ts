@@ -5,7 +5,7 @@ import { startDrill } from "./drill";
 describe("U1 cycle skeleton", () => {
   test("floor stages, overheads and boss state follow the reconciled schedule as separate tracks", () => {
     const drill = startDrill();
-    drill.tickTo(128);
+    drill.playCorrectlyTo(128);
     expect(drill.rows().map((row) => row.tick)).toEqual(Array.from({ length: 129 }, (_, t) => t));
     expect(drill.events("stage-entered").map((e) => [e.at, e.stage])).toEqual([
       [0, "lead-in"], [8, "inner-void"], [30, "after-inner"], [39, "outer-void"], [59, "after-outer"],
@@ -25,7 +25,7 @@ describe("U1 cycle skeleton", () => {
   test("the transition attack ordinal runs across cycles and each selection names its variants", () => {
     const hits = (options: Parameters<typeof startDrill>[0]) => {
       const drill = startDrill(options);
-      drill.tickTo(217);
+      drill.playCorrectlyTo(217);
       const out = drill.rows().flatMap((row) => row.beats.flatMap((b) => (b.kind === "special-hit" ? [[row.tick, b.ordinal, b.variant]] : [])));
       drill.dispose();
       return out;
@@ -110,7 +110,7 @@ describe("U1 cycle skeleton", () => {
     drill.hit(drill.player(), drill.boss(), 1355);
     drill.tickTo(20);
     expect(drill.events("run-ended").map((e) => [e.at, e.reason])).toEqual([[12, "kill"]]);
-    expect(drill.rows().slice(-2).map((row) => [row.tick, row.beats.map((b) => b.kind)])).toEqual([[11, ["lifeforce-tell"]], [12, []]]);
+    expect(drill.rows().slice(-2).map((row) => [row.tick, row.beats.map((b) => b.kind)])).toEqual([[11, ["lifeforce-tell", "floor-damage"]], [12, []]]);
     expect(drill.region.snapshot()?.run).toEqual({ kind: "ended", at: 12, reason: "kill" });
     drill.dispose();
   });
@@ -165,7 +165,7 @@ describe("U1 cycle skeleton", () => {
   test("the log records a walk order and a protection prayer on the row they act in", () => {
     const drill = startDrill();
     drill.tickTo(9);
-    drill.walkTo(14, 10);
+    drill.walkTo({ x: 14, y: 10 });
     drill.tickTo(10);
     drill.pray("Protect from Magic");
     drill.tickTo(11);

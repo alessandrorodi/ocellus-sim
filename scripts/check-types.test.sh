@@ -84,6 +84,11 @@ helmet_factory_rejects_a_weapon() {
     "voidRangerHelm: () => new VoidRangerHelm()" "voidRangerHelm: () => new OcellusScythe()" \
     "error TS2322: Type 'OcellusScythe' is not assignable to type 'Helmet'."
 }
+void_masks_reject_a_swapped_mask() {
+  expect_compile_error src/content/ocellus/js/p4/floor.ts \
+    '"inner-void": voidMask("inner-void")' '"inner-void": voidMask("outer-void")' \
+    "error TS2322: Type 'TileMask<\"outer-void\">' is not assignable to type 'TileMask<\"inner-void\">'."
+}
 explicit_any_fails() { expect_finding src/content/ocellus/js/p4/roll.ts 'export const x: any = 1;' "explicit any"; }
 as_cast_fails() { expect_finding src/content/ocellus/js/p4/roll.ts 'export const x = (1 as number);' "type assertion with as"; }
 double_cast_fails() { expect_finding src/App.tsx 'export const x = ("1" as unknown as number);' "type assertion with as"; }
@@ -102,6 +107,8 @@ import_type_of_internal_fails() { expect_finding src/content/ocellus/tests/sched
 require_of_internal_fails() { expect_finding src/content/ocellus/tests/schedule.test.ts 'export const schedule = require("../js/p4/schedule");' "import of fight internal src/content/ocellus/js/p4/schedule.ts"; }
 js_reexport_of_internal_fails() { expect_finding src/content/ocellus/tests/helper.js 'export { later } from "../js/p4/schedule";' "import of fight internal src/content/ocellus/js/p4/schedule.ts"; }
 declaration_file_import_of_internal_fails() { expect_finding src/globals.d.ts 'export type Later = typeof import("./content/ocellus/js/p4/schedule").later;' "import of fight internal src/content/ocellus/js/p4/schedule.ts"; }
+backtick_import_of_internal_fails() { expect_finding src/content/ocellus/tests/schedule.test.ts 'export const load = () => import(`../js/p4/schedule`);' "import of fight internal src/content/ocellus/js/p4/schedule.ts"; }
+test_file_inside_the_fight_fails() { expect_finding src/content/ocellus/js/p4/schedule.test.ts 'export const later = 1;' "test file inside the fight"; }
 absolute_import_of_internal_fails() { expect_finding src/App.tsx 'export { later } from "@ROOT@/src/content/ocellus/js/p4/schedule";' "import of fight internal src/content/ocellus/js/p4/schedule.ts"; }
 
 failed=0
@@ -125,8 +132,11 @@ for t in \
   require_of_internal_fails \
   js_reexport_of_internal_fails \
   declaration_file_import_of_internal_fails \
+  backtick_import_of_internal_fails \
+  test_file_inside_the_fight_fails \
   absolute_import_of_internal_fails \
-  helmet_factory_rejects_a_weapon; do
+  helmet_factory_rejects_a_weapon \
+  void_masks_reject_a_swapped_mask; do
   if ("$t") >"$WORK/$t.log" 2>&1; then
     echo "PASS $t"
   else

@@ -59,14 +59,12 @@ type LeadInRecipe = Readonly<{
   shout: Selected<Readonly<{ text: string; at: TickSpan; lasts: TickSpan }>>;
 }>;
 
-type DamageRange = Readonly<{ min: number; max: number }>;
-type FloorDamage = Readonly<{ afterOnset: TickSpan; perTick: DamageRange }>;
+export type DamageRange = Readonly<{ min: number; max: number }>;
 
 export type VoidRecipe<K extends VoidKind> = Readonly<{
   kind: K;
   duration: Selected<TickSpan>;
   orbMaturesAfterHit: Selected<TickSpan>;
-  floorDamage: Selected<FloorDamage>;
 }>;
 
 export type TransitionRecipe<K extends TransitionKind> = Readonly<{
@@ -205,7 +203,6 @@ const INNER_VOID: VoidRecipe<"inner-void"> = {
   kind: "inner-void",
   duration: selected(span(22), "footage-repeated", "team-4-and-5", "inner void visible 22 ticks", vod("V1", "G33-G54, G93-G114, G153-G174"), vod("V2", "k48-k69, k108-k129, k168-k189, k228-k249")),
   orbMaturesAfterHit: selected(span(12), "footage-repeated", "team-4-and-5", "orb glows teal 12 ticks after the hit", vod("V1", "G49"), vod("V2", "k64"), cache("spotanim 4311 soul_fragment_spawn_12_ticks")),
-  floorDamage: selected({ afterOnset: span(5), perTick: { min: 9, max: 11 } }, "assumption", "team-5", "no capture shows a player inside the inner void past one tick; reuses the outer rule", vod("V2", "k48 to k49")),
 };
 
 const AFTER_INNER: TransitionRecipe<"after-inner"> = {
@@ -220,7 +217,6 @@ const OUTER_VOID: VoidRecipe<"outer-void"> = {
   kind: "outer-void",
   duration: selected(span(20), "footage-repeated", "team-4-and-5", "outer void visible 20 ticks", vod("V1", "G64-G83, G124-G143"), vod("V2", "k79-k98, k139-k158, k199-k218")),
   orbMaturesAfterHit: selected(span(6), "footage-repeated", "team-4-and-5", "outer orb first glows 5 to 6 ticks after the hit", vod("V1", "G74"), vod("V2", "k88, k149"), cache("spotanim 4309 soul_fragment_spawn_6_ticks")),
-  floorDamage: selected({ afterOnset: span(5), perTick: { min: 9, max: 11 } }, "footage-once", "team-5", "standing on the flood from its onset, first damage at S+36; amounts 11, 9, 9, 9, 10, 11", vod("V2", "k199 to k204"), vod("V2", "k92-k97")),
 };
 
 const AFTER_OUTER: TransitionRecipe<"after-outer"> = {
@@ -262,6 +258,35 @@ const GEOMETRY: GeometryRecipe = {
   bossAnchor: selected(tile(9, 6), "assumption", "unscaled", "footprint x 9-11, y 4-6 keeps the spawn tile and the walk check clear of the boss", owner("placeholder arena layout")),
   playerSpawn: selected(tile(10, 10), "assumption", "unscaled", "spawn used by the walk test and the verify click", owner("placeholder arena layout")),
 };
+
+type FloorDamage = Readonly<{ kind: "damages"; afterOnset: TickSpan; perTick: DamageRange }>;
+export type FloorRule = FloorDamage | Readonly<{ kind: "harmless" }>;
+export type FloorShape = "near-square" | "platform-minus-near-square";
+
+type FloorRecipe = Readonly<{
+  squareSide: Selected<number>;
+  shapes: Readonly<{ "inner-void": Selected<"near-square">; "outer-void": Selected<"platform-minus-near-square"> }>;
+  outerDamage: Selected<FloorDamage>;
+  look: Selected<Readonly<{ void: string; stars: string; rim: string }>>;
+}>;
+
+const FLOOD_PER_TICK: DamageRange = { min: 9, max: 11 };
+
+const FLOOR: FloorRecipe = {
+  squareSide: selected(5, "footage-repeated", "team-4-and-5", "the boss's 3x3 plus a 1-tile ring", vod("V1", "frame 4325"), vod("V2", "k86"), STRATEGIES),
+  shapes: {
+    "inner-void": selected("near-square", "footage-repeated", "team-4-and-5", "the 5x5 under and around the boss", vod("V1", "G33, G93, G153"), vod("V2", "k48, k108, k168, k228"), STRATEGIES),
+    "outer-void": selected("platform-minus-near-square", "footage-repeated", "team-4-and-5", "all floor but the 5x5; floor the client leaves undrawn is not safe (C16), and the placeholder arena has none", vod("V1", "G64"), vod("V2", "k86, k93-k97"), STRATEGIES),
+  },
+  outerDamage: selected({ kind: "damages", afterOnset: span(5), perTick: FLOOD_PER_TICK }, "footage-once", "team-5", "standing on the flood from its onset, first damage at S+36; amounts 11, 9, 9, 9, 10, 11", vod("V2", "k199 to k204"), vod("V2", "k92-k97")),
+  look: selected({ void: "#1e2529", stars: "#babcc2", rim: "#9f48bd" }, "footage-repeated", "team-4", "starry near-black tiles inside a glowing purple rim; median colours of each in two frames", vod("V1", "G33, frame 1877"), vod("V1", "G64, frame 2993")),
+};
+
+const INNER_VOID_FLOOR = choice("one-tick-grace", {
+  "one-tick-grace": selected<FloorRule>({ kind: "damages", afterOnset: span(2), perTick: FLOOD_PER_TICK }, "inferred", "team-5", "inside at S+0 and off by S+1 took no splat; the floor reads the tile a tick starts on, so S+2 is the earliest onset that capture allows; amounts copy the flood", vod("V2", "k48 to k49"), STRATEGIES),
+  "outer-rule": selected<FloorRule>({ kind: "damages", afterOnset: span(5), perTick: FLOOD_PER_TICK }, "assumption", "team-5", "the flood's S+5 onset; no capture shows a player inside past one tick", vod("V2", "k48 to k49")),
+  harmless: selected<FloorRule>({ kind: "harmless" }, "assumption", "unscaled", "no capture shows inner-void damage", vod("V2", "k48 to k49")),
+});
 
 const pose = (id: number, name: string, basis: Basis, note: string): Selected<number> =>
   selected(id, basis, "unscaled", note, cache(`seq ${id} ${name}`));
@@ -345,6 +370,7 @@ export const OCELLUS_P4 = {
   bossHeals: BOSS_HEALS,
   rifts: RIFTS,
   geometry: GEOMETRY,
+  floor: FLOOR,
   presentation: PRESENTATION,
   gear: GEAR,
   choices: {
@@ -392,6 +418,7 @@ export const OCELLUS_P4 = {
       "cycle-2": selected<Cycle>(cycle(2), "footage-repeated", "team-5", "rifts before every inner void after the first (C5)", vod("V2", "k107, k167, k227"), STRATEGIES),
       "cycle-3": selected<Cycle>(cycle(3), "footage-once", "team-4", "none in view before cycle 2, two before cycle 3", vod("V1", "G90-G95, G152")),
     }),
+    innerVoidFloor: INNER_VOID_FLOOR,
     focus: choice("full-fight", {
       "full-fight": selected<Focus>({ kind: "full-fight" }, "assumption", "unscaled", "every mechanic acts", PRACTICE),
       "void-floor": drill("void-floor"),
@@ -446,6 +473,7 @@ function resolveChoices(lookup: (name: ChoiceName) => string | undefined, reject
     orbSpawnAfterHit: pick("orbSpawnAfterHit"),
     unclaimedOuterOrb: pick("unclaimedOuterOrb"),
     riftFirstCycle: pick("riftFirstCycle"),
+    innerVoidFloor: pick("innerVoidFloor"),
     focus: pick("focus"),
   };
 }

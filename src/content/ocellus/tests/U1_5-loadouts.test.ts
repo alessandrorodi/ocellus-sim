@@ -174,7 +174,7 @@ describe("U1.5 loadouts", () => {
   test("Division drains Ocellus's Defence only for glaives that land damage, so a spec into the invulnerable lead-in drains nothing", () => {
     const spec = (throwAt: number, landedBy: number) => {
       const drill = startDrill({ seed: 1 });
-      drill.walkTo(10, 8);
+      drill.walkTo({ x: 10, y: 8 });
       drill.tickTo(throwAt);
       clickInventory(drill, 28922);
       drill.player().useSpecialAttack = true;

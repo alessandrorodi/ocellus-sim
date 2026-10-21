@@ -93,12 +93,15 @@ export type Beat =
 export type IncomingStyle = Style | "typeless";
 export type RunEnd = "kill" | "death";
 
+export type HitReceipt = Readonly<{ requested: number; applied: number; beforeHp: number; afterHp: number; prayer: Style | null }>;
+
 export type FightEvent =
   | Readonly<{ kind: "stage-entered"; at: Tick; stage: Stage }>
   | Readonly<{ kind: "overhead-switched"; at: Tick; overhead: BossOverhead }>
   | Readonly<{ kind: "boss-state-changed"; at: Tick; state: BossState }>
   | Readonly<{ kind: "boss-shouted"; at: Tick; text: string }>
   | Readonly<{ kind: "player-hit-judged"; at: Tick; style: IncomingStyle; outcome: "passed" | "invulnerable"; requested: number }>
+  | Readonly<{ kind: "floor-hit"; at: Tick; void: VoidKind; tile: Tile; receipt: HitReceipt }>
   | Readonly<{ kind: "run-ended"; at: Tick; reason: RunEnd }>;
 
 export type PlayerObservation = Readonly<{ tile: Tile; hp: number; prayer: Style | null }>;

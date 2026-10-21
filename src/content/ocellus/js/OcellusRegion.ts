@@ -5,7 +5,9 @@ import { OCELLUS_P4 } from "./OcellusTimings";
 import { dress } from "./OcellusLoadout";
 import { OcellusPlayer } from "./OcellusPlayer";
 import type { FightLog, FightSnapshot, TickRow } from "./P4Types";
+import { VoidField } from "./entities/P4Views";
 import { Ocellus } from "./mobs/Ocellus";
+import { voidUnder } from "./p4/floor";
 import { CombatStream } from "./p4/roll";
 
 function itemId(item: Item | null | undefined): number | null {
@@ -13,7 +15,9 @@ function itemId(item: Item | null | undefined): number | null {
   return typeof id === "number" ? id : null;
 }
 
-type Mounted = Readonly<{ kind: "unmounted" }> | Readonly<{ kind: "mounted"; ocellus: Ocellus; player: OcellusPlayer; rows: TickRow[] }>;
+type Mounted =
+  | Readonly<{ kind: "unmounted" }>
+  | Readonly<{ kind: "mounted"; ocellus: Ocellus; player: OcellusPlayer; field: VoidField; rows: TickRow[] }>;
 
 export class OcellusRegion extends Region {
   private mounted: Mounted = { kind: "unmounted" };
@@ -51,10 +55,12 @@ export class OcellusRegion extends Region {
     const player: OcellusPlayer = new OcellusPlayer(this, { ...OCELLUS_P4.geometry.playerSpawn.value }, new CombatStream(this.config.seed), (input) => ocellus.recordInput(input));
     const ocellus: Ocellus = new Ocellus(this, this.config, player);
     dress(player, this.config.choices.setup);
+    const field = new VoidField(this);
+    this.addEntity(field);
     this.addPlayer(player);
     this.addMob(ocellus);
     this.setBoss(ocellus);
-    this.mounted = { kind: "mounted", ocellus, player, rows: [] };
+    this.mounted = { kind: "mounted", ocellus, player, field, rows: [] };
     return { player };
   }
 
@@ -69,7 +75,9 @@ export class OcellusRegion extends Region {
   override postTick(): void {
     if (this.mounted.kind === "unmounted") return;
     const row = this.mounted.ocellus.completeTick();
-    if (row) this.mounted.rows.push(row);
+    if (!row) return;
+    this.mounted.rows.push(row);
+    this.mounted.field.show(voidUnder(row.phase));
   }
 
   snapshot(): FightSnapshot | null {
