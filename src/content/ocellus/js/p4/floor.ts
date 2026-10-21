@@ -26,6 +26,17 @@ export class TileMask<K extends VoidKind | null = VoidKind | null> {
     return new TileMask(null, tiles);
   }
 
+  static floorOf(rows: readonly string[]): TileMask<null> {
+    const tiles = new Map<string, Tile>();
+    rows.forEach((row, y) =>
+      [...row].forEach((cell, x) => {
+        if (cell === "#") tiles.set(`${x},${y}`, tile(x, y));
+        else if (cell !== "." && cell !== "?") throw new RangeError(`platform cell ${JSON.stringify(cell)} at ${x},${y} is not #, . or ?`);
+      }),
+    );
+    return new TileMask(null, tiles);
+  }
+
   minus(other: TileMask): TileMask<null> {
     return new TileMask(null, new Map([...this.byKey].filter(([at]) => !other.byKey.has(at))));
   }
@@ -47,6 +58,24 @@ export class TileMask<K extends VoidKind | null = VoidKind | null> {
       SIDES.filter((side) => !this.byKey.has(`${at.x + STEP[side].dx},${at.y + STEP[side].dy}`)).map((side) => ({ at, side })),
     );
   }
+
+  surround(): TileMask<null> {
+    const around = new Map<string, Tile>();
+    for (const { x, y } of this.tiles()) {
+      for (const dx of [-1, 0, 1]) {
+        for (const dy of [-1, 0, 1]) {
+          const at = tile(x + dx, y + dy);
+          if (!this.contains(at)) around.set(key(at), at);
+        }
+      }
+    }
+    return new TileMask(null, around);
+  }
+
+  extent(): Readonly<{ width: number; height: number }> {
+    const tiles = this.tiles();
+    return { width: Math.max(0, ...tiles.map(({ x }) => x + 1)), height: Math.max(0, ...tiles.map(({ y }) => y + 1)) };
+  }
 }
 
 const { geometry, boss, floor } = OCELLUS_P4;
@@ -59,7 +88,7 @@ if (!Number.isInteger(ring) || ring < 0) throw new RangeError(`a ${floor.squareS
 const aroundBoss = (grow: number) => TileMask.area(tile(anchor.x - grow, anchor.y - size + 1 - grow), tile(anchor.x + size - 1 + grow, anchor.y + grow));
 const nearSquare = aroundBoss(ring);
 export const FOOTPRINT = aroundBoss(0);
-export const PLATFORM = TileMask.area(tile(0, 0), tile(geometry.placeholderArena.value.width - 1, geometry.placeholderArena.value.height - 1));
+export const PLATFORM = TileMask.floorOf(geometry.platform.value);
 
 function shaped(shape: FloorShape): TileMask {
   switch (shape) {

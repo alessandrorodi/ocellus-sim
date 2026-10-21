@@ -108,7 +108,7 @@ type BossHealRecipe = Readonly<{ soulSplitAfterHit: Selected<TickSpan> }>;
 type RiftRecipe = Readonly<{ spawnBeforeOnset: Selected<TickSpan>; chargeAfterSpawn: Selected<TickSpan> }>;
 
 type GeometryRecipe = Readonly<{
-  placeholderArena: Selected<Readonly<{ width: number; height: number }>>;
+  platform: Selected<readonly string[]>;
   bossAnchor: Selected<Tile>;
   playerSpawn: Selected<Tile>;
 }>;
@@ -260,10 +260,34 @@ const RIFTS: RiftRecipe = {
   chargeAfterSpawn: selected(span(11), "inferred", "team-5", "unexplained 14 on the streamer 11 ticks after rifts appear", vod("V2", "k107 to k118, k167 to k178")),
 };
 
+const FLOOD_FRAMES = vod("V2", "k86, k95, k142, k156, k205, k212, k262, k269");
+const V1_FLOOD_FRAMES = vod("V1", "G66, G126, G130");
+
 const GEOMETRY: GeometryRecipe = {
-  placeholderArena: selected({ width: 20, height: 20 }, "assumption", "unscaled", "cache 2746 has no XTEA keys for the raid, so the real quadrant is unavailable", cache("region keys absent")),
-  bossAnchor: selected(tile(9, 6), "assumption", "unscaled", "footprint x 9-11, y 4-6 keeps the spawn tile and the walk check clear of the boss", owner("placeholder arena layout")),
-  playerSpawn: selected(tile(10, 10), "assumption", "unscaled", "spawn used by the walk test and the verify click", owner("placeholder arena layout")),
+  platform: selected(
+    [
+      "..?#........",
+      ".?##########",
+      ".###########",
+      ".##########.",
+      ".#########..",
+      ".########?..",
+      "?#######....",
+      ".#######....",
+      "?##?........",
+      "?###........",
+      "?####.......",
+      ".###?.......",
+    ],
+    "footage-repeated",
+    "team-5",
+    "row y = 0 first, x = 0 leftmost; # is floor the outer void covers or the 5x5, . is not floor, ? is a ragged-edge tile fewer than two frames classified (±1 tile) and is left blocked; the flood draws this shape in all four V2 floods, and V1 draws it turned 270 degrees or mirrored east-west; cache 2746 has no XTEA keys for the raid",
+    FLOOD_FRAMES,
+    V1_FLOOD_FRAMES,
+    cache("region keys absent"),
+  ),
+  bossAnchor: selected(tile(4, 6), "footage-repeated", "team-4-and-5", "south-west tile of the boss's 3x3 at x 4-6, y 4-6, centred in the 5x5 at x 3-7, y 3-7; the cyan 3x3 marker sits inside the purple 5x5 rim in every fitted frame", FLOOD_FRAMES, V1_FLOOD_FRAMES),
+  playerSpawn: selected(tile(5, 1), "inferred", "team-4-and-5", "two tiles north of the 5x5, where players wait through the first inner void; no clip pins one tile", vod("V2", "k49 to k52"), vod("V1", "G33")),
 };
 
 type FloorDamage = Readonly<{ kind: "damages"; afterOnset: TickSpan; perTick: DamageRange }>;
@@ -283,7 +307,7 @@ const FLOOR: FloorRecipe = {
   squareSide: selected(5, "footage-repeated", "team-4-and-5", "the boss's 3x3 plus a 1-tile ring", vod("V1", "frame 4325"), vod("V2", "k86"), STRATEGIES),
   shapes: {
     "inner-void": selected("near-square", "footage-repeated", "team-4-and-5", "the 5x5 under and around the boss", vod("V1", "G33, G93, G153"), vod("V2", "k48, k108, k168, k228"), STRATEGIES),
-    "outer-void": selected("platform-minus-near-square", "footage-repeated", "team-4-and-5", "all floor but the 5x5; floor the client leaves undrawn is not safe (C16), and the placeholder arena has none", vod("V1", "G64"), vod("V2", "k86, k93-k97"), STRATEGIES),
+    "outer-void": selected("platform-minus-near-square", "footage-repeated", "team-4-and-5", "all floor but the 5x5; floor the client leaves undrawn is not safe (C16), and the platform leaves out V2's undrawn strip north of it", vod("V1", "G64"), vod("V2", "k86, k93-k97"), STRATEGIES),
   },
   outerDamage: selected({ kind: "damages", afterOnset: span(5), perTick: FLOOD_PER_TICK }, "footage-once", "team-5", "standing on the flood from its onset, first damage at S+36; amounts 11, 9, 9, 9, 10, 11", vod("V2", "k199 to k204"), vod("V2", "k92-k97")),
   look: selected({ void: "#1e2529", stars: "#babcc2", rim: "#9f48bd" }, "footage-repeated", "team-4", "starry near-black tiles inside a glowing purple rim; median colours of each in two frames", vod("V1", "G33, frame 1877"), vod("V1", "G64, frame 2993")),

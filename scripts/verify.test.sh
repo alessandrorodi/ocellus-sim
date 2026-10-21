@@ -5,8 +5,8 @@ SCRIPT="$(cd "$(dirname "$0")" && pwd)/verify.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-eval "$(grep -E '^(DRILL_QUERY|BOSS_NPC|SPAWN_TILE|WALK_CLICK_RIGHT_PX|WALK_CLICK_DOWN_PX|WALK_TARGET_TILE|CYCLE_[A-Z_]+|FOCUS_[A-Z_]+|BOSS_CLICK_[A-Z_]+|RING_CLICK_[A-Z_]+|FLOOD_[A-Z_]+|NEAR_SQUARE|VOID_[A-Z_]+|ORB_[A-Z_]+|LOADOUT_[A-Z_]+|EXPLOSION_[A-Z_]+|STEP_CLICK_[A-Z_]+|DODGE_CLICK_[A-Z_]+|UNDER_BOSS_CLICK_[A-Z_]+|MARKER_SHOT_[A-Z_]+|SOUND_[A-Z_]+|CREDIT_LINE)=' "$SCRIPT")"
-for fn in json process_start serve state doctor stop probe fight_tick_at_least canvas_centre click_after_tick shot_after_tick save_sound_settings record_audio_starts step_on_marks drive_lead_in drive_walk drive_flood_shot drive_cycle drive_focus drive_void_floor drive_void_shot drive_lifeforce_orb drive_explosions click_at click_inventory_slot drive_loadouts drive release_browser stage_browser; do
+eval "$(grep -E '^(DRILL_QUERY|BOSS_NPC|SPAWN_TILE|WALK_[A-Z_]+|EDGE_[A-Z_]+|CYCLE_[A-Z_]+|FOCUS_[A-Z_]+|BOSS_CLICK_[A-Z_]+|RING_CLICK_[A-Z_]+|FLOOD_[A-Z_]+|NEAR_SQUARE|VOID_[A-Z_]+|ORB_[A-Z_]+|LOADOUT_[A-Z_]+|EXPLOSION_[A-Z_]+|STEP_CLICK_[A-Z_]+|DODGE_CLICK_[A-Z_]+|UNDER_BOSS_CLICK_[A-Z_]+|MARKER_SHOT_[A-Z_]+|SOUND_[A-Z_]+|CREDIT_LINE)=' "$SCRIPT")"
+for fn in json process_start serve state doctor stop probe fight_tick_at_least canvas_centre click_after_tick shot_after_tick save_sound_settings record_audio_starts step_on_marks step_south_and_back_on_marks drive_lead_in drive_walk click_past_the_edge drive_edge drive_flood_shot drive_cycle drive_focus drive_void_floor drive_void_shot drive_lifeforce_orb drive_explosions click_at click_inventory_slot drive_loadouts drive release_browser stage_browser; do
   eval "$(sed -n "/^${fn}() {\$/,/^}\$/p" "$SCRIPT")"
 done
 
@@ -90,21 +90,22 @@ fixture_logs() {
     const overheads = { 8: "deflect-melee", 33: "soul-split", 39: "deflect-range", 61: "soul-split", 68: "deflect-melee" };
     const specials = { 37: "vortex", 65: "spike-disk" };
     const at = (x, y) => ({ tile: { x, y } });
+    const walks = { 3: { x: 8, y: 3 }, 5: fault === "edge-on-floor" ? { x: 8, y: 1 } : { x: 8, y: 0 }, 40: { x: 7, y: 3 } };
     const cycle = Array.from({ length: 71 }, (_, t) => ({
       tick: t,
       beats: specials[t] ? [{ kind: "special-hit", variant: specials[t] }] : [],
-      playerAtBossStep: t <= 40 ? at(13, 11) : t === 41 ? at(13, 9) : at(12, 7),
-      playerAtPostTick: t <= 39 ? at(13, 11) : t === 40 ? at(13, 9) : at(12, 7),
+      playerAtBossStep: t <= 40 ? at(8, 1) : t === 41 ? at(7, 2) : at(7, 3),
+      playerAtPostTick: t <= 39 ? at(8, 1) : t === 40 ? at(7, 2) : at(7, 3),
       bossHp: { atBossStep: 1355, atPostTick: 1355 },
       combatDraws: 0,
-      inputs: t === 40 ? [{ kind: "walk-ordered", destination: { x: 12, y: 7 } }] : [],
+      inputs: walks[t] ? [{ kind: "walk-ordered", destination: walks[t] }] : [],
       events: [
         ...(stages[t] ? [{ kind: "stage-entered", at: t, stage: stages[t] }] : []),
         ...(overheads[t] ? [{ kind: "overhead-switched", at: t, overhead: overheads[t] }] : []),
       ],
     }));
-    const startOn = (t) => (t <= 47 ? at(13, 11) : t === 48 ? at(13, 9) : at(12, 7));
-    const endOn = (t) => (t <= 46 ? at(13, 11) : t === 47 ? at(13, 9) : at(12, 7));
+    const startOn = (t) => (t <= 47 ? at(8, 1) : t === 48 ? at(7, 2) : at(7, 3));
+    const endOn = (t) => (t <= 46 ? at(8, 1) : t === 47 ? at(7, 2) : at(7, 3));
     const floodHits = { 44: 9, 45: 11, 46: 10, 47: 11, 48: 10, ...(fault === "ring-hit" ? { 50: 10 } : {}) };
     const launchTick = fault === "shot-from-the-ring" ? 50 : 45;
     const landingTick = fault === "no-ranged-landing" ? null : launchTick + 3;
@@ -115,7 +116,7 @@ fixture_logs() {
       playerAtPostTick: endOn(t),
       bossHp: landingTick === null ? { atBossStep: 1355, atPostTick: 1355 } : { atBossStep: t <= landingTick ? 1355 : 1298, atPostTick: t < landingTick ? 1355 : 1298 },
       combatDraws: t === launchTick ? 2 : 0,
-      inputs: t === 47 ? [{ kind: "walk-ordered", destination: { x: 12, y: 7 } }] : [],
+      inputs: t === 47 ? [{ kind: "walk-ordered", destination: { x: 7, y: 3 } }] : [],
       events: [
         ...(t === landingTick ? [{ kind: "player-hit-judged", at: t, style: "ranged", outcome: "passed", requested: 57 }] : []),
         ...(floodHits[t] ? [{ kind: "floor-hit", at: t, tile: startOn(t).tile, receipt: { applied: floodHits[t] } }] : []),
@@ -128,7 +129,7 @@ fixture_logs() {
       tick: t,
       beats: [],
       events: [
-        ...(standingHits[t] ? [{ kind: "floor-hit", at: t, tile: { x: 10, y: 10 }, receipt: { applied: standingHits[t] } }] : []),
+        ...(standingHits[t] ? [{ kind: "floor-hit", at: t, tile: { x: 5, y: 1 }, receipt: { applied: standingHits[t] } }] : []),
         ...(t === 54 ? [{ kind: "run-ended", at: t, reason: "death" }] : []),
       ],
     }));
@@ -143,45 +144,45 @@ fixture_logs() {
     const orbEvents = {
       11: [{ kind: "lifeforce-told", at: 11, void: "inner-void" }],
       12: [{ kind: "lifeforce-drained", at: 12, void: "inner-void", receipt: { applied: 49, afterHp: 50 } }],
-      13: [{ kind: "orb-spawned", at: 13, void: "inner-void", tile: { x: 7, y: 9 }, credit: 49 }],
-      24: [{ kind: "orb-matured", at: 24, void: "inner-void", tile: { x: 7, y: 9 } }],
+      13: [{ kind: "orb-spawned", at: 13, void: "inner-void", tile: { x: 3, y: 2 }, credit: 49 }],
+      24: [{ kind: "orb-matured", at: 24, void: "inner-void", tile: { x: 3, y: 2 } }],
       [orbReturn]: [{ kind: "orb-returned", at: orbReturn, void: "inner-void", receipt: { afterHp: 99, applied: 49, beforeHp: 50, requested: 49 } }],
     };
-    const orb = Array.from({ length: 31 }, (_, t) => ({ tick: t, playerAtPostTick: t < 27 ? orbAt(10, 10, 99) : orbAt(7, 9, t < orbReturn ? 50 : 99), events: orbEvents[t] ?? [] }));
+    const orb = Array.from({ length: 31 }, (_, t) => ({ tick: t, playerAtPostTick: t < 27 ? orbAt(5, 1, 99) : orbAt(3, 2, t < orbReturn ? 50 : 99), events: orbEvents[t] ?? [] }));
     const skipEvents = {
       30: [{ kind: "orb-expired", at: 30, void: "inner-void" }],
       61: [{ kind: "orb-expired", at: 61, void: "outer-void" }],
       62: fault === "no-boss-heal" ? [] : [{ kind: "boss-healed", at: 62, cause: { kind: "unclaimed-orb" }, receipt: { afterHp: 1380, applied: 25, beforeHp: 1355, requested: 25 } }],
     };
-    const skip = Array.from({ length: 64 }, (_, t) => ({ tick: t, playerAtPostTick: orbAt(10, 10, 99), events: skipEvents[t] ?? [] }));
+    const skip = Array.from({ length: 64 }, (_, t) => ({ tick: t, playerAtPostTick: orbAt(5, 1, 99), events: skipEvents[t] ?? [] }));
     write("orb-log.json", "lifeforce-orb", orb);
     write("orb-skip-log.json", "lifeforce-orb", skip);
     const walk = (x, y) => ({ kind: "walk-ordered", destination: { x, y } });
     const marked = (t, x, y) => ({ kind: "explosion-marked", at: t, void: t < 39 ? "inner-void" : "outer-void", tile: { x, y } });
     const resolved = (t, x, y, outcome, underBoss = false) => ({ kind: "explosion-resolved", at: t, tile: { x, y }, underBoss, outcome });
     const lateHit = { kind: "hit", receipt: { requested: 16, applied: 16, beforeHp: 99, afterHp: 83, prayer: null } };
-    const dodge = { 17: 10, 19: 12, 21: 10, 23: 12, 25: 10, 27: 12 };
+    const dodge = { 17: 5, 19: 3, 21: 5, 23: 3, 25: 5, 27: 3 };
     const dodgeRows = Array.from({ length: 51 }, (_, t) => {
       const markX = dodge[t], impactX = dodge[t - 1];
       return {
         tick: t,
-        playerAtBossStep: at(10, 10),
-        playerAtPostTick: t === 49 ? at(12, 10) : at(10, 10),
-        inputs: markX !== undefined ? [walk(22 - markX, 10)] : t === 49 ? [walk(12, 10)] : [],
+        playerAtBossStep: at(5, 1),
+        playerAtPostTick: t === 49 ? at(3, 1) : at(5, 1),
+        inputs: markX !== undefined ? [walk(8 - markX, 1)] : t === 49 ? [walk(3, 1)] : [],
         events: [
-          ...(markX !== undefined ? [marked(t, markX, 10)] : []),
-          ...(impactX !== undefined ? [resolved(t, impactX, 10, fault === "dodge-hit" && t === 22 ? lateHit : { kind: "avoided" })] : []),
-          ...(t === 48 ? [marked(48, 10, 10)] : []),
-          ...(t === 49 ? [resolved(49, 10, 10, fault === "late-spared" ? { kind: "avoided" } : lateHit)] : []),
+          ...(markX !== undefined ? [marked(t, markX, 1)] : []),
+          ...(impactX !== undefined ? [resolved(t, impactX, 1, fault === "dodge-hit" && t === 22 ? lateHit : { kind: "avoided" })] : []),
+          ...(t === 48 ? [marked(48, 5, 1)] : []),
+          ...(t === 49 ? [resolved(49, 5, 1, fault === "late-spared" ? { kind: "avoided" } : lateHit)] : []),
         ],
       };
     });
     const underRows = Array.from({ length: 30 }, (_, t) => ({
       tick: t,
       events: [
-        ...(dodge[t] !== undefined ? [marked(t, 10, 5)] : []),
+        ...(dodge[t] !== undefined ? [marked(t, 5, 6)] : []),
         ...(dodge[t - 1] !== undefined
-          ? [resolved(t, 10, 5, fault === "under-spared" ? { kind: "avoided" } : { kind: "hit", receipt: { requested: 16, applied: 16, beforeHp: 99 - 8 * (t - 18), afterHp: 99 - 8 * (t - 18) - 16, prayer: null } }, true)]
+          ? [resolved(t, 5, 6, fault === "under-spared" ? { kind: "avoided" } : { kind: "hit", receipt: { requested: 16, applied: 16, beforeHp: 99 - 8 * (t - 18), afterHp: 99 - 8 * (t - 18) - 16, prayer: null } }, true)]
           : []),
       ],
     }));
@@ -235,7 +236,7 @@ fixture_png() {
     const raw = Buffer.alloc(height * (1 + width * 3));
     for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) raw.set(colour(x, y), y * (1 + width * 3) + 1 + x * 3);
     require("fs").writeFileSync(file, Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]));
-  ' "$1" "$2" "${3:-0}" "${4:-0}" "$((1280 / 2 - ORB_CLICK_LEFT_PX))" "$((800 / 2 - ORB_CLICK_UP_PX))" "$ORB_BOX"
+  ' "$1" "$2" "${3:-0}" "${4:-0}" "$((1280 / 2 + ORB_CLICK_RIGHT_PX))" "$((800 / 2 - ORB_CLICK_UP_PX))" "$ORB_BOX"
 }
 
 OK_DORMANT_TEAL=(0 2.3 0.4 0 0 0)
@@ -254,8 +255,10 @@ fake_screenshot() {
     *:explosion-left.png) fixture_shards "$1" 0.44 ;;
     ok:void-flood.png | ok:flood-ring.png | noorb:void-flood.png | noorb:flood-ring.png | markerfollows:void-flood.png | markerfollows:flood-ring.png) fixture_png "$1" 60 ;;
     ok:void-inner.png | noorb:void-inner.png | markerfollows:void-inner.png) fixture_png "$1" 2 ;;
-    ok:orb-dormant-* | markerfollows:orb-dormant-*) fixture_png "$1" 0 "${OK_DORMANT_TEAL[frame - 1]}" ;;
-    ok:orb-glow-* | markerfollows:orb-glow-*) fixture_png "$1" 0 "${OK_GLOW_TEAL[frame - 1]}" ;;
+    swapped:void-flood.png | swapped:flood-ring.png) fixture_png "$1" 2 ;;
+    swapped:void-inner.png) fixture_png "$1" 5 ;;
+    ok:orb-dormant-* | markerfollows:orb-dormant-* | swapped:orb-dormant-*) fixture_png "$1" 0 "${OK_DORMANT_TEAL[frame - 1]}" ;;
+    ok:orb-glow-* | markerfollows:orb-glow-* | swapped:orb-glow-*) fixture_png "$1" 0 "${OK_GLOW_TEAL[frame - 1]}" ;;
     noorb:orb-dormant-*) fixture_png "$1" 0 "${NOORB_DORMANT_TEAL[frame - 1]}" ;;
     noorb:orb-glow-*) fixture_png "$1" 0 "${NOORB_GLOW_TEAL[frame - 1]}" 1 ;;
     *) fixture_png "$1" 0 ;;
@@ -283,6 +286,8 @@ fake_browser() {
   FINAL_TILE="$1"
   SCREENSHOT="${2:-ok}"
   FAULT="${7:-none}"
+  EDGE_TILE="${8:-$EDGE_STOP_TILE}"
+  EDGE_HELD_TICK="${9:-16}"
   fixture_logs "${3:-8}" "${4:-$FOCUS_DRILL}" "$FAULT"
   LEAD_IN_FIGHT="${5:-}" PRESENT_FIGHT="${6:-}"
   [[ -n "$LEAD_IN_FIGHT" ]] || LEAD_IN_FIGHT='{"run":{"kind":"running","tick":1},"boss":{"npcId":16677,"visible":false}}'
@@ -291,12 +296,14 @@ fake_browser() {
     case "$*" in
       "--json eval window.__archiveOcellusProbe.snapshot().fight") loadout_snapshot ;;
       "--json eval window.__archiveOcellusProbe.snapshot()")
-        local n tile='{"x":10,"y":10}' tick=8 fight="$LEAD_IN_FIGHT"
+        local n tile='{"x":5,"y":1}' tick=8 fight="$LEAD_IN_FIGHT"
         n=$(($(cat "$T/evals" 2>/dev/null || echo 0) + 1))
         echo "$n" >"$T/evals"
         [[ "$n" -ne 1 ]] || tick=6
         [[ "$n" -lt 3 ]] || { tile="$FINAL_TILE"; tick=12; fight="$PRESENT_FIGHT"; }
-        [[ "$(cat "$T/restarts" 2>/dev/null || echo 0)" -lt 3 ]] || tile='{"x":7,"y":9}'
+        [[ "$n" -ne 4 ]] || { tile="$EDGE_TILE"; tick=13; }
+        [[ "$n" -ne 5 ]] || { tile="$EDGE_TILE"; tick="$EDGE_HELD_TICK"; }
+        [[ "$(cat "$T/restarts" 2>/dev/null || echo 0)" -lt 3 ]] || tile='{"x":3,"y":2}'
         printf '{"data":{"result":{"ticking":true,"tick":%s,"player":%s,"destination":%s,"fight":%s}}}\n' "$tick" "$tile" "$tile" "$fight"
         ;;
       "--json eval window.__cueAudio") cat "$T/explosion-audio.json" ;;
@@ -333,80 +340,80 @@ fake_browser() {
 
 walk_to_the_documented_tile_passes() {
   setup
-  fake_browser '{"x":13,"y":11}'
+  fake_browser '{"x":8,"y":3}'
   drive >"$T/drive.log" 2>&1 || { cat "$T/drive.log"; return 1; }
 }
 
 walk_to_a_wrong_tile_fails() {
   setup
-  fake_browser '{"x":11,"y":10}'
-  if drive >"$T/drive.log" 2>&1; then echo "drive passed with the player on (11,10)"; return 1; fi
+  fake_browser '{"x":9,"y":3}'
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed with the player on (9,3)"; return 1; fi
 }
 
 failed_screenshot_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' fail
+  fake_browser '{"x":8,"y":3}' fail
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although every screenshot exited 1"; return 1; fi
 }
 
 missing_screenshot_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' empty
+  fake_browser '{"x":8,"y":3}' empty
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although no screenshot was written"; return 1; fi
 }
 
 cycle_off_schedule_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' ok 9
+  fake_browser '{"x":8,"y":3}' ok 9
   if drive >"$T/drive.log" 2>&1; then echo "drive passed with the first inner void at P4 tick 9"; return 1; fi
   grep -q '"stagesOnSchedule": false' "$T/drive.log" || { echo "the stage check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
 focus_not_applied_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' ok 8 full-fight
+  fake_browser '{"x":8,"y":3}' ok 8 full-fight
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although the reloaded drill ignored the focus"; return 1; fi
   grep -q '"focusApplied": false' "$T/drive.log" || { echo "the focus check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
 boss_drawn_in_lead_in_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '{"run":{"kind":"running","tick":1},"boss":{"npcId":16677,"visible":true}}'
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '{"run":{"kind":"running","tick":1},"boss":{"npcId":16677,"visible":true}}'
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although the boss was drawn at P4 tick 1"; return 1; fi
   grep -q '"bossHiddenInLeadIn": false' "$T/drive.log" || { echo "the lead-in check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
 lead_in_captured_after_the_hidden_ticks_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '{"run":{"kind":"running","tick":4},"boss":{"npcId":16677,"visible":false}}'
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '{"run":{"kind":"running","tick":4},"boss":{"npcId":16677,"visible":false}}'
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although the lead-in capture ran at P4 tick 4"; return 1; fi
   grep -q '"bossHiddenInLeadIn": false' "$T/drive.log" || { echo "the lead-in check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
 flood_hit_in_the_ring_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' ring-hit
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' ring-hit
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although the floor hit the player in the ring at P4 tick 50"; return 1; fi
   grep -q '"ringSparedInFlood": false' "$T/drive.log" || { echo "the ring check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
 ranged_shot_never_lands_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' no-ranged-landing
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' no-ranged-landing
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although the arrow fired across the flood never landed"; return 1; fi
   grep -q '"rangedShotLanded": false' "$T/drive.log" || { echo "the landing check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
 ranged_shot_from_the_ring_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' shot-from-the-ring
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' shot-from-the-ring
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although the bow fired only from the ring"; return 1; fi
   grep -q '"rangedShotFromTheFlood": false' "$T/drive.log" || { echo "the launch check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
 void_not_drawn_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' novoid
+  fake_browser '{"x":8,"y":3}' novoid
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although no screenshot showed the void"; return 1; fi
   grep -q '"floodDrawn": false' "$T/drive.log" || { echo "the drawing check did not name the failure"; cat "$T/drive.log"; return 1; }
   grep -q '"innerVoidDrawn": false' "$T/drive.log" || { echo "the inner drawing check did not name the failure"; cat "$T/drive.log"; return 1; }
@@ -414,84 +421,92 @@ void_not_drawn_fails() {
 
 orb_returned_a_tick_late_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' late-orb-return
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' late-orb-return
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although the orb returned two ticks after it was ready"; return 1; fi
   grep -q '"orbReturnedTickAfterArrival": false' "$T/drive.log" || { echo "the return check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
 skipped_orb_without_boss_heal_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' no-boss-heal
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' no-boss-heal
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although the skipped outer orb never healed the boss"; return 1; fi
   grep -q '"skippedOrbHealsBoss": false' "$T/drive.log" || { echo "the heal check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
 explosion_dodge_hit_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' dodge-hit
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' dodge-hit
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although a dodge on a mark tick was hit"; return 1; fi
   grep -q '"explosionsDodgedOnMarkTicks": false' "$T/drive.log" || { echo "the dodge check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
 late_step_spared_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' late-spared
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' late-spared
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although the step on the impact tick escaped the explosion"; return 1; fi
   grep -q '"lateStepHitOnMarkedTile": false' "$T/drive.log" || { echo "the late-step check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
 camping_under_boss_spared_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' under-spared
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' under-spared
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although the marks under the boss never hit"; return 1; fi
   grep -q '"campingUnderBossHit": false' "$T/drive.log" || { echo "the under-boss check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
 explosion_sound_on_the_impact_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' sound-on-impact
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' sound-on-impact
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although 12537 played a tick after each mark"; return 1; fi
   grep -q '"explosionSoundsOnSchedule": false' "$T/drive.log" || { echo "the sound check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
 explosion_sound_on_a_suspended_context_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' suspended-audio
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' suspended-audio
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although every sound started on a suspended audio context"; return 1; fi
   grep -q '"explosionSoundsOnSchedule": false' "$T/drive.log" || { echo "the sound check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
 explosion_marker_following_the_player_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' markerfollows
+  fake_browser '{"x":8,"y":3}' markerfollows
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although the marker was drawn on the player after the dodge"; return 1; fi
   grep -q '"markerStaysOnCapturedTile": false' "$T/drive.log" || { echo "the marker check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
 orb_glow_not_drawn_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' noorb
+  fake_browser '{"x":8,"y":3}' noorb
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although the orb kept its dormant look and the new teal was elsewhere on screen"; return 1; fi
   grep -q '"orbGlowDrawn": false' "$T/drive.log" || { echo "the orb drawing check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
+void_layers_swapped_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' swapped
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed with the inner square's share in the flood frames and the flood's in the inner frame"; return 1; fi
+  grep -q '"floodDrawn": false' "$T/drive.log" || { echo "the flood check did not name the failure"; cat "$T/drive.log"; return 1; }
+  grep -q '"innerVoidDrawn": false' "$T/drive.log" || { echo "the inner check did not name the failure"; cat "$T/drive.log"; return 1; }
+}
+
 boss_never_drawn_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '{"run":{"kind":"running","tick":70},"boss":{"npcId":16677,"visible":false}}'
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '{"run":{"kind":"running","tick":70},"boss":{"npcId":16677,"visible":false}}'
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although the boss was never drawn"; return 1; fi
   grep -q '"bossDrawnOncePresent": false' "$T/drive.log" || { echo "the presence check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
 loadout_not_switched_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' unswitched
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' unswitched
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although the inventory clicks changed no gear"; return 1; fi
   grep -q '"switchesWornByClick": false' "$T/drive.log" || { echo "the switch check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
 division_not_spent_fails() {
   setup
-  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' unspent
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' unspent
   if drive >"$T/drive.log" 2>&1; then echo "drive passed although Division never fired"; return 1; fi
   grep -q '"divisionSpentHalfTheBar": false' "$T/drive.log" || { echo "the special attack check did not name the failure"; cat "$T/drive.log"; return 1; }
   grep -q '"divisionDrainedBossDefence": false' "$T/drive.log" || { echo "the Defence check did not name the failure"; cat "$T/drive.log"; return 1; }
@@ -501,10 +516,31 @@ division_extra_drains_fail() {
   local drains
   for drains in three-drains two-drains; do
     setup
-    fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' "$drains"
+    fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' "$drains"
     if drive >"$T/drive.log" 2>&1; then echo "drive passed with ${drains} from seed 1's one damaging glaive"; return 1; fi
     grep -q '"divisionDrainedBossDefence": false' "$T/drive.log" || { echo "the Defence check did not name the ${drains} failure"; cat "$T/drive.log"; return 1; }
   done
+}
+
+walk_off_the_edge_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' none '{"x":8,"y":0}'
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed with the player on (8,0), off the platform"; return 1; fi
+  grep -q '"stoppedAtTheEdge": false' "$T/drive.log" || { echo "the edge check did not name the failure"; cat "$T/drive.log"; return 1; }
+}
+
+edge_read_before_the_hold_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' none "$EDGE_STOP_TILE" 14
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the edge stop was read 1 tick after arrival"; return 1; fi
+  grep -q '"stoppedAtTheEdge": false' "$T/drive.log" || { echo "the edge check did not name the failure"; cat "$T/drive.log"; return 1; }
+}
+
+edge_click_on_the_floor_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' edge-on-floor
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the edge click ordered the floor tile (8,1)"; return 1; fi
+  grep -q '"edgeClickOrderedOffThePlatform": false' "$T/drive.log" || { echo "the edge order check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
 failed=0
@@ -515,6 +551,9 @@ for t in \
   interrupt_leaves_the_recorded_instance \
   walk_to_the_documented_tile_passes \
   walk_to_a_wrong_tile_fails \
+  walk_off_the_edge_fails \
+  edge_read_before_the_hold_fails \
+  edge_click_on_the_floor_fails \
   failed_screenshot_fails \
   missing_screenshot_fails \
   cycle_off_schedule_fails \
@@ -525,6 +564,7 @@ for t in \
   ranged_shot_never_lands_fails \
   ranged_shot_from_the_ring_fails \
   void_not_drawn_fails \
+  void_layers_swapped_fails \
   boss_never_drawn_fails \
   orb_returned_a_tick_late_fails \
   skipped_orb_without_boss_heal_fails \

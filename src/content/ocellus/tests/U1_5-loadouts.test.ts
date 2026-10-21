@@ -52,7 +52,7 @@ function firstAttack(drill: Drill, at: Location, target: Target, maxedHits = Inf
 }
 
 const RANGED_TARGET: Target = { magic: 300, defence: 0, size: 1 };
-const SOUTH = { x: 10, y: 14 };
+const EAST_OF_SQUARE = { x: 8, y: 3 };
 
 function clickInventory(drill: Drill, cacheItemId: number): void {
   const item = drill.player().inventory.find((slot) => slot?.cacheItemId === cacheItemId);
@@ -80,19 +80,19 @@ describe("U1.5 loadouts", () => {
 
   test("full elite void raises the Twisted Bow's max hit, and without the gloves the set gives nothing", () => {
     const full = startDrill();
-    expect(firstAttack(full, SOUTH, RANGED_TARGET).received).toEqual([[62, "range"]]);
+    expect(firstAttack(full, EAST_OF_SQUARE, RANGED_TARGET).received).toEqual([[62, "range"]]);
     full.dispose();
 
     const noGloves = startDrill();
     noGloves.player().equipment.gloves?.unequip(noGloves.player());
-    expect(firstAttack(noGloves, SOUTH, RANGED_TARGET).received).toEqual([[55, "range"]]);
+    expect(firstAttack(noGloves, EAST_OF_SQUARE, RANGED_TARGET).received).toEqual([[55, "range"]]);
     noGloves.dispose();
   });
 
   test("elite void's damage factor is floored on effective ranged strength", () => {
     const drill = startDrill();
     drill.player().currentStats.range = 93;
-    expect(firstAttack(drill, SOUTH, RANGED_TARGET).received).toEqual([[58, "range"]]);
+    expect(firstAttack(drill, EAST_OF_SQUARE, RANGED_TARGET).received).toEqual([[58, "range"]]);
     drill.dispose();
   });
 
@@ -117,7 +117,7 @@ describe("U1.5 loadouts", () => {
     }
     jab.player().currentStats.strength = 118;
     jab.pray("Piety");
-    expect(firstAttack(jab, SOUTH, { magic: 1, defence: 0, size: 3 }).received).toEqual([[50, "crush"], [25, "crush"], [12, "crush"]]);
+    expect(firstAttack(jab, EAST_OF_SQUARE, { magic: 1, defence: 0, size: 3 }).received).toEqual([[50, "crush"], [25, "crush"], [12, "crush"]]);
     jab.dispose();
 
     const chop = startDrill({ selection: { setup: "melee" } });
@@ -126,7 +126,7 @@ describe("U1.5 loadouts", () => {
     AttackStylesController.controller.setWeaponAttackStyle(scythe, AttackStyle.AGGRESSIVESLASH);
     chop.player().currentStats.strength = 118;
     chop.pray("Piety");
-    expect(firstAttack(chop, SOUTH, { magic: 1, defence: 0, size: 3 }).received).toEqual([[49, "slash"], [24, "slash"], [12, "slash"]]);
+    expect(firstAttack(chop, EAST_OF_SQUARE, { magic: 1, defence: 0, size: 3 }).received).toEqual([[49, "slash"], [24, "slash"], [12, "slash"]]);
     chop.dispose();
   });
 
@@ -137,7 +137,7 @@ describe("U1.5 loadouts", () => {
       const weapon = drill.player().equipment.weapon;
       if (!weapon) throw new Error("no weapon worn");
       AttackStylesController.controller.setWeaponAttackStyle(weapon, style);
-      const dummy = new MaxRollDummy(drill.region, SOUTH, RANGED_TARGET, Infinity);
+      const dummy = new MaxRollDummy(drill.region, EAST_OF_SQUARE, RANGED_TARGET, Infinity);
       drill.region.addMob(dummy);
       drill.player().setAggro(dummy);
       for (let tick = 0; tick < 20 && new Set(dummy.thrownAt).size < 2; tick++) drill.region.world.tickWorld();
@@ -157,7 +157,7 @@ describe("U1.5 loadouts", () => {
     const drill = startDrill();
     clickInventory(drill, 28922);
     drill.player().useSpecialAttack = true;
-    const dummy = firstAttack(drill, SOUTH, { magic: 240, defence: 200, size: 1 });
+    const dummy = firstAttack(drill, EAST_OF_SQUARE, { magic: 240, defence: 200, size: 1 });
     expect([dummy.received, dummy.currentStats.defence, drill.region.snapshot()?.player.specialEnergy]).toEqual([[[18, "range"], [18, "range"]], 140, 50]);
     drill.dispose();
   });
@@ -166,7 +166,7 @@ describe("U1.5 loadouts", () => {
     const drill = startDrill({ seed: 1 });
     clickInventory(drill, 28922);
     drill.player().useSpecialAttack = true;
-    const dummy = firstAttack(drill, SOUTH, { magic: 2400, defence: 600, size: 1 }, 1);
+    const dummy = firstAttack(drill, EAST_OF_SQUARE, { magic: 2400, defence: 600, size: 1 }, 1);
     expect([dummy.received.map(([damage]) => damage > 0), dummy.currentStats.defence]).toEqual([[true, true], 0]);
     drill.dispose();
   });
@@ -174,7 +174,7 @@ describe("U1.5 loadouts", () => {
   test("Division drains Ocellus's Defence only for glaives that land damage, so a spec into the invulnerable lead-in drains nothing", () => {
     const spec = (throwAt: number, landedBy: number) => {
       const drill = startDrill({ seed: 1 });
-      drill.walkTo({ x: 10, y: 8 });
+      drill.walkTo({ x: 5, y: 2 });
       drill.tickTo(throwAt);
       clickInventory(drill, 28922);
       drill.player().useSpecialAttack = true;

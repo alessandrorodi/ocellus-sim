@@ -10,15 +10,16 @@ export type DrillOptions = Readonly<{ seed?: number; selection?: DrillSelection;
 export type At = Readonly<{ x: number; y: number }>;
 
 export const SPAWN_ON_FLOOD: At = OCELLUS_P4.geometry.playerSpawn.value;
-export const UNDER_BOSS: At = { x: 10, y: 5 };
-export const RING_SOUTH: At = { x: 10, y: 7 };
-export const FLOOD_SOUTH_OF_RING: At = { x: 10, y: 8 };
+export const UNDER_BOSS: At = { x: 5, y: 5 };
+export const RING_NORTH: At = { x: 5, y: 3 };
+export const FLOOD_NORTH_OF_RING: At = { x: 5, y: 2 };
 
-const inNearSquare = ({ x, y }: At) => x >= 8 && x <= 12 && y >= 3 && y <= 7;
+const inNearSquare = ({ x, y }: At) => x >= 3 && x <= 7 && y >= 3 && y <= 7;
+const onPlatform = ({ x, y }: At) => OCELLUS_P4.geometry.platform.value[y]?.[x] === "#";
 
 function besideOnSameFloor(home: At, insideSquare: boolean): At {
   const sides = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => ({ x: home.x + dx, y: home.y + dy }));
-  return sides.find((side) => inNearSquare(side) === insideSquare) ?? home;
+  return sides.find((side) => onPlatform(side) && inNearSquare(side) === insideSquare) ?? home;
 }
 
 export function startDrill(options: DrillOptions = {}) {
@@ -76,7 +77,7 @@ export function startDrill(options: DrillOptions = {}) {
         for (const event of row.events) {
           if (event.kind === "orb-spawned") goHome(event.tile);
           if (event.kind !== "stage-entered") continue;
-          if (event.stage === "outer-void") goHome(RING_SOUTH);
+          if (event.stage === "outer-void") goHome(RING_NORTH);
           if (event.stage === "after-outer") goHome(SPAWN_ON_FLOOD);
         }
         const stage = row.phase.stage;

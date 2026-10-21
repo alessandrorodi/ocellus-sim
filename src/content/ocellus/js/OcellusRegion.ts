@@ -1,4 +1,4 @@
-import { CardinalDirection, Region, Sound, SoundCache, cacheSound } from "osrs-sdk";
+import { InvisibleMovementBlocker, Region, Sound, SoundCache, cacheSound } from "osrs-sdk";
 import type { Item, Player } from "osrs-sdk";
 import type { DrillConfig } from "./OcellusTimings";
 import { OCELLUS_P4 } from "./OcellusTimings";
@@ -7,8 +7,10 @@ import { OcellusPlayer } from "./OcellusPlayer";
 import type { FightEvent, FightLog, FightSnapshot, SoundId, Tile, TickRow, VoidKind } from "./P4Types";
 import { ExplosionViews, FragmentFlash, OrbView, VoidField } from "./entities/P4Views";
 import { Ocellus } from "./mobs/Ocellus";
-import { voidUnder } from "./p4/floor";
+import { PLATFORM, voidUnder } from "./p4/floor";
 import { CombatStream } from "./p4/roll";
+
+const GRID = PLATFORM.extent();
 
 function itemId(item: Item | null | undefined): number | null {
   const id = item?.cacheItemId;
@@ -85,23 +87,17 @@ export class OcellusRegion extends Region {
   }
 
   override get width(): number {
-    return OCELLUS_P4.geometry.placeholderArena.value.width;
+    return GRID.width;
   }
 
   override get height(): number {
-    return OCELLUS_P4.geometry.placeholderArena.value.height;
-  }
-
-  override get initialFacing(): CardinalDirection {
-    return CardinalDirection.NORTH;
+    return GRID.height;
   }
 
   override drawWorldBackground(context: OffscreenCanvasRenderingContext2D, scale: number): void {
-    for (let x = 0; x < this.width; x++) {
-      for (let y = 0; y < this.height; y++) {
-        context.fillStyle = (x + y) % 2 === 0 ? "#4a4339" : "#3f392f";
-        context.fillRect(x * scale, y * scale, scale, scale);
-      }
+    for (const { x, y } of PLATFORM.tiles()) {
+      context.fillStyle = (x + y) % 2 === 0 ? "#4a4339" : "#3f392f";
+      context.fillRect(x * scale, y * scale, scale, scale);
     }
   }
 
@@ -123,6 +119,7 @@ export class OcellusRegion extends Region {
       explosions: new ExplosionViews(this),
     };
     [views.field, views.orbs["inner-void"], views.orbs["outer-void"], views.fragment].forEach((view) => this.addEntity(view));
+    for (const edge of PLATFORM.surround().tiles()) this.addEntity(new InvisibleMovementBlocker(this, { ...edge }));
     this.addPlayer(player);
     this.addMob(ocellus);
     this.setBoss(ocellus);

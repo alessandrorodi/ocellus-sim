@@ -165,11 +165,11 @@ describe("U1 cycle skeleton", () => {
   test("the log records a walk order and a protection prayer on the row they act in", () => {
     const drill = startDrill();
     drill.tickTo(9);
-    drill.walkTo({ x: 14, y: 10 });
+    drill.walkTo({ x: 9, y: 1 });
     drill.tickTo(10);
     drill.pray("Protect from Magic");
     drill.tickTo(11);
-    expect([drill.row(10).inputs, drill.row(10).playerAtPostTick.tile]).toEqual([[{ kind: "walk-ordered", destination: { x: 14, y: 10 } }], { x: 12, y: 10 }]);
+    expect([drill.row(10).inputs, drill.row(10).playerAtPostTick.tile]).toEqual([[{ kind: "walk-ordered", destination: { x: 9, y: 1 } }], { x: 7, y: 1 }]);
     expect([drill.row(11).inputs, drill.row(11).playerAtBossStep.prayer]).toEqual([[{ kind: "prayer-published", prayer: "magic" }], "magic"]);
     drill.dispose();
   });
