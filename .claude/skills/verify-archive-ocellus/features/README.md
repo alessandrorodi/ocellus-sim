@@ -45,3 +45,4 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Void floor](./void-floor.md) covers the inner square and outer flood, their damage, the safe 5x5 and how both draw in 3D.
 - [Lifeforce orb](./lifeforce-orb.md) covers the lifeforce tell and hit, the orb from spawn to glow, its return, its expiry and the boss heal from an unclaimed outer orb.
 - [Personal explosions](./explosions.md) covers the marks on the player's tile, the hit a tick later, dodging on mark ticks, the late step, standing under the boss and how the shards draw.
+- [Transition attack](./transition-attack.md) covers the boss's rise and landing, the three tells, the styled hit and the protection prayer judged when it lands.

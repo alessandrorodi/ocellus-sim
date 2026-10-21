@@ -1,4 +1,4 @@
-import type { GearSlot, ResolvedChoices } from "./OcellusTimings";
+import type { GearSlot, ResolvedChoices, SpecialStyle, TransitionCue } from "./OcellusTimings";
 
 declare const brand: unique symbol;
 type Brand<B extends string> = number & { readonly [brand]: B };
@@ -81,6 +81,7 @@ export type Mechanic = "void-floor" | "lifeforce-orb" | "explosions" | "transiti
 
 export type Beat =
   | Readonly<{ kind: "boss-shouts"; text: string; lasts: TickSpan }>
+  | Readonly<{ kind: "boss-landing-starts" }>
   | Readonly<{ kind: "lifeforce-tell"; void: VoidKind }>
   | Readonly<{ kind: "lifeforce-hit"; void: VoidKind }>
   | Readonly<{ kind: "orb-spawns"; void: VoidKind }>
@@ -93,6 +94,7 @@ export type Beat =
   | Readonly<{ kind: "floor-damage"; void: VoidKind }>
   | Readonly<{ kind: "special-tell"; ordinal: Ordinal; variant: Special }>
   | Readonly<{ kind: "special-hit"; ordinal: Ordinal; variant: Special }>
+  | Readonly<{ kind: "special-sound"; ordinal: Ordinal; cue: TransitionCue }>
   | Readonly<{ kind: "soul-split-heal"; ordinal: Ordinal }>
   | Readonly<{ kind: "rifts-spawn"; forCycle: Cycle }>
   | Readonly<{ kind: "rift-charge-ends"; forCycle: Cycle }>;
@@ -104,12 +106,14 @@ export type HitReceipt = Readonly<{ requested: number; applied: number; beforeHp
 export type HealReceipt = Readonly<{ requested: number; applied: number; beforeHp: number; afterHp: number }>;
 export type HealCause = Readonly<{ kind: "unclaimed-orb" }>;
 export type ExplosionOutcome = Readonly<{ kind: "hit"; receipt: HitReceipt }> | Readonly<{ kind: "avoided" }>;
+export type SpecialAttack<V extends Special = Special> = { [K in V]: Readonly<{ at: Tick; ordinal: Ordinal; variant: K; style: SpecialStyle<K> }> }[V];
 
 export type FightEvent =
   | Readonly<{ kind: "stage-entered"; at: Tick; stage: Stage }>
   | Readonly<{ kind: "overhead-switched"; at: Tick; overhead: BossOverhead }>
   | Readonly<{ kind: "boss-state-changed"; at: Tick; state: BossState }>
   | Readonly<{ kind: "boss-shouted"; at: Tick; text: string }>
+  | Readonly<{ kind: "boss-landing-started"; at: Tick }>
   | Readonly<{ kind: "player-hit-judged"; at: Tick; style: IncomingStyle; outcome: "passed" | "invulnerable"; requested: number }>
   | Readonly<{ kind: "floor-hit"; at: Tick; void: VoidKind; tile: Tile; receipt: HitReceipt }>
   | Readonly<{ kind: "lifeforce-told"; at: Tick; void: VoidKind }>
@@ -122,6 +126,9 @@ export type FightEvent =
   | Readonly<{ kind: "explosion-series-started"; at: Tick; void: VoidKind }>
   | Readonly<{ kind: "explosion-marked"; at: Tick; void: VoidKind; pulse: number; tile: Tile }>
   | Readonly<{ kind: "explosion-resolved"; at: Tick; void: VoidKind; pulse: number; tile: Tile; underBoss: boolean; outcome: ExplosionOutcome }>
+  | (Readonly<{ kind: "special-told" }> & SpecialAttack)
+  | (Readonly<{ kind: "special-hit"; receipt: HitReceipt }> & SpecialAttack)
+  | Readonly<{ kind: "special-sounded"; at: Tick; ordinal: Ordinal; cue: TransitionCue }>
   | Readonly<{ kind: "run-ended"; at: Tick; reason: RunEnd }>;
 
 export type PlayerObservation = Readonly<{ tile: Tile; hp: number; prayer: Style | null }>;

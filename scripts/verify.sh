@@ -29,7 +29,7 @@ CYCLE_OVERHEAD_SWITCHES='[[8,"deflect-melee"],[33,"soul-split"],[39,"deflect-ran
 CYCLE_SPECIAL_HITS='[[37,"vortex"],[65,"spike-disk"]]'
 FOCUS_DRILL="transition-attacks"
 FOCUS_LAST_TICK=40
-FOCUS_BEATS='["boss-shouts","soul-split-heal","special-hit","special-tell"]'
+FOCUS_BEATS='["boss-landing-starts","boss-shouts","soul-split-heal","special-hit","special-sound","special-tell"]'
 LOADOUT_QUERY="?seed=1&setup=ranged"
 LOADOUT_RANGED_WORN='{"weapon":20997,"offhand":null,"helmet":11664,"chest":13072,"legs":13073,"gloves":8842,"cape":28951,"necklace":19547,"feet":13237,"ring":28310,"ammo":11212}'
 LOADOUT_MELEE_WORN='{"weapon":22325,"offhand":null,"helmet":24419,"chest":24420,"legs":24421,"gloves":22981,"cape":21295,"necklace":19553,"feet":13239,"ring":25485,"ammo":11212}'
@@ -84,6 +84,28 @@ SOUND_SETTINGS_KEY="osrs-sdk:settings"
 SOUND_SAMPLES='{"12638":14332,"12537":8820}'
 EXPLOSION_SOUNDS='[[14,12638],[17,12537],[19,12537],[21,12537],[23,12537],[25,12537],[27,12537],[45,12638],[48,12537],[50,12537],[52,12537],[54,12537],[56,12537],[58,12537]]'
 EXPLOSION_EXPECTED='{"lateHit":{"requested":16,"applied":16,"beforeHp":99,"afterHp":83,"prayer":null},"under":[[18,{"x":5,"y":6},true,"hit",83],[20,{"x":5,"y":6},true,"hit",67],[22,{"x":5,"y":6},true,"hit",51],[24,{"x":5,"y":6},true,"hit",35],[26,{"x":5,"y":6},true,"hit",19],[28,{"x":5,"y":6},true,"hit",3]]}'
+SPECIAL_DRILL="transition-attacks"
+SPECIAL_QUERY="?seed=1&focus=${SPECIAL_DRILL}&specialSelection=replay-v2"
+PROTECT_MAGIC_RIGHT_PX=514
+PROTECT_RANGE_RIGHT_PX=551
+PROTECT_DOWN_PX=218
+SPECIAL_PRAY_TICK=33
+SPECIAL_RANGE_PRAY_TICK=61
+SPECIAL_HIT_TICK=37
+SPECIAL_BEFORE_SHOT_TICK=31
+SPECIAL_VORTEX_SHOT_TICK=35
+SPECIAL_SPIKE_SHOT_TICK=63
+SPECIAL_SEMICIRCLE_SHOT_TICK=93
+SPECIAL_BLACK_SHOT_TICK=95
+TELL_BOX='{"minX":-200,"maxX":200,"minY":-220,"maxY":-40}'
+TELL_CENTRE_BOX='{"minX":-50,"maxX":0,"minY":-110,"maxY":-75}'
+TRANSITION_SOUND_SAMPLES='{"12584":19845,"12587":33075,"12586":22050,"12585":22050,"12572":66150,"12567":33075,"12555":33075,"12556":44100,"12554":35280}'
+LANDING_SOUNDS='[[29.1,12584],[29.83,12587],[31.03,12586],[31.47,12585],[89.1,12584],[89.83,12587],[91.03,12586],[91.47,12585]]'
+LANDING_WINDOWS='[[29,32],[89,92]]'
+STYLE_SOUNDS='[[34.2,12554],[64.4,12555],[65.1,12556],[92.1,12572],[97.1,12567]]'
+STYLE_WINDOWS='[[32,37.5],[60,65.5],[92,97.5]]'
+SOUND_TOLERANCE_TICKS=0.2
+SPECIAL_EXPECTED='{"protected":[37,"magic",{"requested":8,"applied":8,"beforeHp":99,"afterHp":91,"prayer":"magic"}],"late":[37,"magic",{"requested":49,"applied":49,"beforeHp":99,"afterHp":50,"prayer":null}],"told":[[32,"vortex","magic"],[60,"spike-disk","ranged"],[92,"black-disk","melee"]]}'
 ORB_EXPECTED='{"told":[[11,"inner-void"]],"drained":[[12,49,50]],"spawned":[[13,{"x":3,"y":2},49]],"matured":[[24,{"x":3,"y":2}]],"returned":{"requested":49,"applied":49,"beforeHp":50,"afterHp":99},"skipExpired":[[30,"inner-void"],[61,"outer-void"]],"skipHeal":[[62,{"kind":"unclaimed-orb"},{"requested":25,"applied":25,"beforeHp":1355,"afterHp":1380}]]}'
 CREDIT_LINE="Created using intellectual property belonging to Jagex Limited under the terms of Jagex's Fan Content Policy. This content is not endorsed by or affiliated with Jagex."
 
@@ -277,7 +299,23 @@ save_sound_settings() {
 }
 
 record_audio_starts() {
-  ab eval '(() => { const starts = [], start = AudioBufferSourceNode.prototype.start; window.__cueAudio = starts; AudioBufferSourceNode.prototype.start = function (...args) { const run = window.__archiveOcellusProbe?.snapshot().fight?.run; starts.push({ tick: run?.kind === "running" ? run.tick : null, samples: this.buffer?.length ?? null, rate: this.buffer?.sampleRate ?? null, state: this.context.state }); return start.apply(this, args); }; })()' >/dev/null
+  ab eval '(() => {
+    const starts = [], seen = {}, start = AudioBufferSourceNode.prototype.start;
+    const tick = () => {
+      const run = window.__archiveOcellusProbe?.snapshot().fight?.run;
+      const t = run?.kind === "running" ? run.tick : run?.kind === "ended" ? run.at : null;
+      if (t !== null && seen[t] === undefined) seen[t] = performance.now();
+      return t;
+    };
+    const watch = () => { tick(); requestAnimationFrame(watch); };
+    watch();
+    window.__cueAudio = starts;
+    AudioBufferSourceNode.prototype.start = function (...args) {
+      const t = tick();
+      starts.push({ tick: t, phase: t === null ? null : Math.round((performance.now() - seen[t]) / 6) / 100, samples: this.buffer?.length ?? null, rate: this.buffer?.sampleRate ?? null, state: this.context.state });
+      return start.apply(this, args);
+    };
+  })()' >/dev/null
 }
 
 step_on_marks() {
@@ -368,12 +406,14 @@ drive_cycle() {
   ab screenshot "$VERIFY_DIR/boss.png" >/dev/null || { log "boss screenshot failed"; return 1; }
   canvas_centre || { log "canvas box unreadable"; return 1; }
   step_south_and_back_on_marks $EXPLOSION_INNER_MARKS || { log "the steps on the inner explosion marks were not clicked"; return 1; }
+  click_after_tick "$SPECIAL_PRAY_TICK" "$PROTECT_MAGIC_RIGHT_PX" "$PROTECT_DOWN_PX" || { log "Protect from Magic was not clicked before the vortex"; return 1; }
   fight_tick_at_least "$CYCLE_RING_TICK" 60000 || { log "the boss never stepped to P4 tick ${CYCLE_RING_TICK}"; return 1; }
   cx=$((CX + RING_CLICK_RIGHT_PX))
   cy=$((CY - RING_CLICK_UP_PX))
   echo "{\"x\":${cx},\"y\":${cy}}" >"$VERIFY_DIR/cycle-ring-click.json"
   click_at "$cx" "$cy" || return 1
   step_on_marks "$STEP_CLICK_SIDE_PX" $EXPLOSION_OUTER_MARKS || { log "the steps on the outer explosion marks were not clicked"; return 1; }
+  click_after_tick "$SPECIAL_RANGE_PRAY_TICK" "$PROTECT_RANGE_RIGHT_PX" "$PROTECT_DOWN_PX" || { log "Protect from Range was not clicked before the spike disk"; return 1; }
   fight_tick_at_least "$CYCLE_LAST_TICK" 90000 || { log "the boss never stepped to P4 tick ${CYCLE_LAST_TICK}"; return 1; }
   probe "snapshot()" >"$VERIFY_DIR/cycle-snapshot.json"
   probe "log()" >"$VERIFY_DIR/cycle.json"
@@ -381,9 +421,13 @@ drive_cycle() {
   ab --json errors | json data.errors >"$VERIFY_DIR/page-errors.json" || { log "page error capture failed"; return 1; }
 }
 
+choose_focus() {
+  ab select "#focus" "$1" >/dev/null || { log "focus control did not accept $1"; return 1; }
+  ab wait --fn "new URLSearchParams(location.search).get('focus') === '$1'" --timeout 30000 >/dev/null || { log "choosing $1 did not load focus=$1 without Restart"; return 1; }
+}
+
 drive_focus() {
-  ab select "#focus" "$FOCUS_DRILL" >/dev/null && ab click "#restart" >/dev/null || { log "focus control did not accept ${FOCUS_DRILL}"; return 1; }
-  ab wait --fn "new URLSearchParams(location.search).get('focus') === '${FOCUS_DRILL}'" --timeout 30000 >/dev/null || { log "restart did not load focus=${FOCUS_DRILL}"; return 1; }
+  choose_focus "$FOCUS_DRILL" || return 1
   fight_tick_at_least "$FOCUS_LAST_TICK" 120000 || { log "the reloaded boss never stepped to P4 tick ${FOCUS_LAST_TICK}"; return 1; }
   probe "log()" >"$VERIFY_DIR/focus.json"
   ab screenshot "$VERIFY_DIR/focus.png" >/dev/null || { log "focus screenshot failed"; return 1; }
@@ -458,8 +502,7 @@ drive_loadouts() {
 }
 
 drive_void_floor() {
-  ab select "#focus" "$VOID_DRILL" >/dev/null && ab click "#restart" >/dev/null || { log "focus control did not accept ${VOID_DRILL}"; return 1; }
-  ab wait --fn "new URLSearchParams(location.search).get('focus') === '${VOID_DRILL}'" --timeout 30000 >/dev/null || { log "restart did not load focus=${VOID_DRILL}"; return 1; }
+  choose_focus "$VOID_DRILL" || return 1
   fight_tick_at_least "$VOID_INNER_SHOT_TICK" 120000 || { log "the reloaded boss never stepped to P4 tick ${VOID_INNER_SHOT_TICK}"; return 1; }
   ab screenshot "$VERIFY_DIR/void-inner.png" >/dev/null || { log "inner void screenshot failed"; return 1; }
   fight_tick_at_least "$VOID_FLOOD_SHOT_TICK" 60000 || { log "the reloaded boss never stepped to P4 tick ${VOID_FLOOD_SHOT_TICK}"; return 1; }
@@ -472,8 +515,7 @@ drive_void_floor() {
 
 drive_lifeforce_orb() {
   local box ox oy frame
-  ab select "#focus" "$ORB_DRILL" >/dev/null && ab click "#restart" >/dev/null || { log "focus control did not accept ${ORB_DRILL}"; return 1; }
-  ab wait --fn "new URLSearchParams(location.search).get('focus') === '${ORB_DRILL}'" --timeout 30000 >/dev/null || { log "restart did not load focus=${ORB_DRILL}"; return 1; }
+  choose_focus "$ORB_DRILL" || return 1
   fight_tick_at_least 12 120000 || { log "the orb drill never reached the lifeforce hit"; return 1; }
   ab screenshot "$VERIFY_DIR/orb-hit.png" >/dev/null || { log "lifeforce hit screenshot failed"; return 1; }
   box="$(ab --json get box "#world")"
@@ -508,8 +550,7 @@ drive_lifeforce_orb() {
 drive_explosions() {
   local inner=($EXPLOSION_INNER_MARKS) outer=($EXPLOSION_OUTER_MARKS)
   save_sound_settings true || { log "the sound settings were not saved"; return 1; }
-  ab select "#focus" "$EXPLOSION_DRILL" >/dev/null && ab click "#restart" >/dev/null || { log "focus control did not accept ${EXPLOSION_DRILL}"; return 1; }
-  ab wait --fn "new URLSearchParams(location.search).get('focus') === '${EXPLOSION_DRILL}'" --timeout 30000 >/dev/null || { log "restart did not load focus=${EXPLOSION_DRILL}"; return 1; }
+  choose_focus "$EXPLOSION_DRILL" || return 1
   fight_tick_at_least 0 120000 || { log "the explosions drill never started"; return 1; }
   record_audio_starts || { log "the audio probe was not installed"; return 1; }
   canvas_centre || { log "canvas box unreadable"; return 1; }
@@ -535,6 +576,35 @@ drive_explosions() {
   ab --json errors | json data.errors >"$VERIFY_DIR/explosion-under-page-errors.json" || { log "page error capture failed"; return 1; }
 }
 
+drive_transition_attack() {
+  ab open "${URL}${SPECIAL_QUERY}" >/dev/null || return 1
+  canvas_centre || { log "canvas box unreadable"; return 1; }
+  shot_after_tick "$SPECIAL_BEFORE_SHOT_TICK" 0 special-before.png || { log "pre-tell screenshot failed"; return 1; }
+  click_after_tick "$SPECIAL_PRAY_TICK" "$PROTECT_MAGIC_RIGHT_PX" "$PROTECT_DOWN_PX" || { log "Protect from Magic was not clicked before the landing"; return 1; }
+  shot_after_tick "$SPECIAL_VORTEX_SHOT_TICK" 0 special-vortex.png || { log "vortex screenshot failed"; return 1; }
+  fight_tick_at_least $((SPECIAL_HIT_TICK + 1)) 30000 || { log "the transition drill never stepped past the landing at P4 tick ${SPECIAL_HIT_TICK}"; return 1; }
+  probe "log()" >"$VERIFY_DIR/special.json"
+  ab console >"$VERIFY_DIR/special-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/special-page-errors.json" || { log "page error capture failed"; return 1; }
+
+  save_sound_settings true || { log "the sound settings were not saved"; return 1; }
+  ab click "#restart" >/dev/null || { log "Restart was not clicked"; return 1; }
+  ab wait --fn "new URLSearchParams(location.search).has('setup')" --timeout 30000 >/dev/null || { log "Restart did not reload the transition drill"; return 1; }
+  fight_tick_at_least 0 120000 || { log "the late-prayer drill never started"; return 1; }
+  record_audio_starts || { log "the audio probe was not installed"; return 1; }
+  click_after_tick "$SPECIAL_HIT_TICK" "$PROTECT_MAGIC_RIGHT_PX" "$PROTECT_DOWN_PX" || { log "the late Protect from Magic was not clicked"; return 1; }
+  shot_after_tick "$SPECIAL_SPIKE_SHOT_TICK" 0 special-spike-disk.png || { log "spike disk screenshot failed"; return 1; }
+  shot_after_tick "$SPECIAL_SEMICIRCLE_SHOT_TICK" 0 special-semicircle.png || { log "semicircle screenshot failed"; return 1; }
+  shot_after_tick "$SPECIAL_BLACK_SHOT_TICK" 0 special-black-disk.png || { log "black disk screenshot failed"; return 1; }
+  ab wait --fn "window.__archiveOcellusProbe.snapshot().fight?.run.kind === 'ended'" --timeout 60000 >/dev/null || { log "the player who prayed late never died"; return 1; }
+  ab wait 1000 >/dev/null
+  probe "log()" >"$VERIFY_DIR/special-late.json"
+  ab --json eval "window.__cueAudio" | json data.result >"$VERIFY_DIR/special-audio.json" || { log "audio capture failed"; return 1; }
+  ab console >"$VERIFY_DIR/special-late-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/special-late-page-errors.json" || { log "page error capture failed"; return 1; }
+  save_sound_settings false || { log "the sound settings were not restored"; return 1; }
+}
+
 drive() {
   ab set viewport 1280 800 >/dev/null || return 1
   # A new browser's first screenshot takes about 10 s, longer than the hidden lead-in, so it goes to a blank page.
@@ -543,7 +613,7 @@ drive() {
   drive_lead_in || return 1
   ab wait --fn "window.__archiveOcellusProbe?.snapshot().ticking === true && window.__archiveOcellusProbe.snapshot().tick >= 8" \
     --timeout 90000 >/dev/null || { log "trainer never started ticking"; return 1; }
-  drive_walk && drive_edge && drive_cycle && drive_focus && drive_void_floor && drive_void_shot && drive_lifeforce_orb && drive_explosions && drive_loadouts || return 1
+  drive_walk && drive_edge && drive_cycle && drive_focus && drive_void_floor && drive_void_shot && drive_lifeforce_orb && drive_explosions && drive_transition_attack && drive_loadouts || return 1
 
   local capture
   for capture in hidden.json hidden.png before.json before.png after.json after.png edge-click.json edge-arrived.json edge.json edge.png boss.png cycle-ring-click.json cycle-snapshot.json cycle.json console.log page-errors.json focus.json focus.png focus-console.log focus-page-errors.json \
@@ -551,6 +621,7 @@ drive() {
     attack-click.json ring-click.json flood-ring.png void-shot.json void-shot-console.log void-shot-page-errors.json \
     orb-hit.png $(seq -f "orb-dormant-%g.png" 1 "$ORB_FRAMES") $(seq -f "orb-glow-%g.png" 1 "$ORB_FRAMES") orb-click.json orb.json orb-console.log orb-page-errors.json orb-skip.png orb-skip.json orb-skip-console.log orb-skip-page-errors.json \
     explosion-left.png explosion-standing.png explosions.json explosion-audio.json explosion-console.log explosion-page-errors.json explosion-under.png explosions-under.json explosion-under-console.log explosion-under-page-errors.json \
+    special-before.png special-vortex.png special-spike-disk.png special-semicircle.png special-black-disk.png special.json special-console.log special-page-errors.json special-late.json special-audio.json special-late-console.log special-late-page-errors.json \
     loadout-before.json loadout-ranged.png loadout-after.json loadout-melee.png loadout-spec.json loadout-spec.png \
     loadout-console.log loadout-page-errors.json loadout-selector.json loadout-selector-page-errors.json; do
     [[ -s "$VERIFY_DIR/$capture" ]] || { log "required capture ${capture} is missing or empty"; return 1; }
@@ -558,7 +629,8 @@ drive() {
 
   node -e '
     const [dir, spawn, target, edgeOrder, edgeStop, holdTicks, bossNpc, lastHiddenTick, lastTick, stages, overheads, specials, focusKey, focusBeats, square, floodDamage, floodLast, voidHits, voidEnd, voidPixel, rangedWorn, meleeWorn, drain, orbExpected, orbBox, orbFrames,
-      innerMarks, lateMark, explosionPixel, explosionExpected, soundSamples, explosionSounds] = process.argv.slice(1);
+      innerMarks, lateMark, explosionPixel, explosionExpected, soundSamples, explosionSounds, centreX, centreY, tellBox, specialExpected,
+      tellCentreBox, transitionSamples, landingSounds, landingWindows, styleSounds, styleWindows, soundTolerance] = process.argv.slice(1);
     const fs = require("fs");
     const read = (file) => JSON.parse(fs.readFileSync(`${dir}/${file}`, "utf8"));
     const [hidden, before, after, edgeArrived, edge, errors, cycle, snapshot, focus, focusErrors, voidLog, voidErrors, shot, shotErrors] =
@@ -567,6 +639,7 @@ drive() {
       ["loadout-before.json", "loadout-after.json", "loadout-spec.json", "loadout-selector.json", "loadout-page-errors.json", "loadout-selector-page-errors.json"].map(read);
     const [orbLog, orbClick, orbErrors, orbSkip, orbSkipErrors] = ["orb.json", "orb-click.json", "orb-page-errors.json", "orb-skip.json", "orb-skip-page-errors.json"].map(read);
     const [explosionLog, explosionAudio, explosionErrors, underLog, underErrors] = ["explosions.json", "explosion-audio.json", "explosion-page-errors.json", "explosions-under.json", "explosion-under-page-errors.json"].map(read);
+    const [specialLog, specialErrors, lateLog, lateErrors, transitionAudio] = ["special.json", "special-page-errors.json", "special-late.json", "special-late-page-errors.json", "special-audio.json"].map(read);
     const [spawnTile, targetTile, edgeOrderTile, edgeStopTile, nearSquare] = [spawn, target, edgeOrder, edgeStop, square].map((tile) => JSON.parse(tile));
     const same = (a, b) => a?.x === b.x && a?.y === b.y;
     const inSquare = (t) => t.x >= nearSquare.minX && t.x <= nearSquare.maxX && t.y >= nearSquare.minY && t.y <= nearSquare.maxY;
@@ -637,6 +710,23 @@ drive() {
     const markedAt = (rows, t) => kindOf(rows, "explosion-marked").find((e) => e.at === t);
     const resolvedAt = (rows, t) => kindOf(rows, "explosion-resolved").find((e) => e.at === t);
     const late = Number(lateMark);
+    const fromCentre = (box) => { const o = JSON.parse(box); return { minX: Number(centreX) + o.minX, maxX: Number(centreX) + o.maxX, minY: Number(centreY) + o.minY, maxY: Number(centreY) + o.maxY }; };
+    const [tellArea, centreArea] = [fromCentre(tellBox), fromCentre(tellCentreBox)];
+    const tellShare = (file) => pixelShare(file, (r, g, b) => b >= 150 && r >= 90 && g <= 90 && b - g >= 100, tellArea);
+    const centreShares = (file) => ({ white: pixelShare(file, (r, g, b) => r >= 235 && g >= 235 && b >= 235, centreArea), black: pixelShare(file, (r, g, b) => Math.max(r, g, b) <= 40, centreArea) });
+    const samplesOf = JSON.parse(transitionSamples);
+    const timed = (list) => JSON.parse(list).map(([at, id]) => [at, samplesOf[id]]);
+    const heardIn = (windows, expected) => {
+      const lengths = new Set(expected.map(([, samples]) => samples));
+      return transitionAudio
+        .filter((s) => s.rate === 22050 && s.tick !== null && lengths.has(s.samples) && JSON.parse(windows).some(([from, to]) => s.tick + s.phase >= from && s.tick + s.phase < to))
+        .map((s) => [Math.round((s.tick + s.phase) * 100) / 100, s.samples]);
+    };
+    const onSchedule = (heard, expected) => heard.length === expected.length && heard.every(([at, samples], i) => samples === expected[i][1] && Math.abs(at - expected[i][0]) <= Number(soundTolerance));
+    const [landingExpected, styleExpected] = [timed(landingSounds), timed(styleSounds)];
+    const prayedAt = (rows) => rows.find((row) => row.inputs.some((input) => input.kind === "prayer-published" && input.prayer === "magic"))?.tick ?? null;
+    const hitsOf = (rows) => kindOf(rows, "special-hit").map((e) => [e.at, e.style, e.receipt]);
+    const expectedSpecial = JSON.parse(specialExpected);
     const soundBySamples = Object.fromEntries(Object.entries(JSON.parse(soundSamples)).map(([id, samples]) => [samples, Number(id)]));
     const observed = {
       firstWalkOrders: cycle.rows.flatMap((row) => row.inputs.filter((i) => i.kind === "walk-ordered").map((i) => i.destination)).slice(0, 2),
@@ -691,12 +781,26 @@ drive() {
           starts: explosionAudio.length,
         },
       },
+      special: {
+        prayedAt: prayedAt(specialLog.rows),
+        hits: hitsOf(specialLog.rows),
+        latePrayedAt: prayedAt(lateLog.rows),
+        lateHits: hitsOf(lateLog.rows),
+        lateRunEnd: kindOf(lateLog.rows, "run-ended").map((e) => [e.at, e.reason]),
+        told: kindOf(lateLog.rows, "special-told").map((e) => [e.at, e.variant, e.style]),
+        tellShare: { box: tellArea, ...Object.fromEntries(["special-before.png", "special-vortex.png", "special-spike-disk.png", "special-semicircle.png"].map((file) => [file, tellShare(file)])) },
+        centreShares: { box: centreArea, ...Object.fromEntries(["special-vortex.png", "special-spike-disk.png", "special-black-disk.png"].map((file) => [file, centreShares(file)])) },
+        landingSounds: heardIn(landingWindows, landingExpected),
+        styleSounds: heardIn(styleWindows, styleExpected),
+        contexts: [...new Set(transitionAudio.map((s) => s.state))],
+      },
     };
     const sameJson = (a, b) => require("util").isDeepStrictEqual(a, JSON.parse(b));
     const share = observed.voidPixelShare;
     const orb = observed.orb;
     const { dodges, late: lateStep, under, shards: shardSpots, sounds } = observed.explosions;
     const [left, standing] = [shardSpots["explosion-left.png"], shardSpots["explosion-standing.png"]];
+    const special = observed.special;
     const readyAt = Math.max(orb.arrivedAt ?? Infinity, orb.matured[0]?.[0] ?? Infinity);
     const checks = {
       spawnedOnSpawnTile: same(before.player, spawnTile),
@@ -740,7 +844,14 @@ drive() {
       campingUnderBossHit: sameJson(under, JSON.stringify(expectedExplosions.under)),
       explosionSoundsOnSchedule: sameJson(sounds.heard, explosionSounds) && sameJson(sounds.contexts, JSON.stringify(["running"])),
       markerStaysOnCapturedTile: left.share >= 0.1 && left.dx !== null && left.dx <= -0.01 && standing.share >= 0.1 && standing.dx !== null && Math.abs(standing.dx) <= 0.016,
-      noPageErrors: [errors, focusErrors, voidErrors, shotErrors, orbErrors, orbSkipErrors, explosionErrors, underErrors, loadoutErrors, selectorErrors].every((list) => list.length === 0),
+      prayerBeforeLandingProtects: special.prayedAt !== null && special.prayedAt < expectedSpecial.protected[0] && sameJson(special.hits, JSON.stringify([expectedSpecial.protected])),
+      lateClickTakesFullHit: special.latePrayedAt !== null && special.latePrayedAt > expectedSpecial.late[0] && sameJson(special.lateHits[0], JSON.stringify(expectedSpecial.late)),
+      tellsToldOnSchedule: sameJson(special.told, JSON.stringify(expectedSpecial.told)),
+      tellsDrawn: special.tellShare["special-before.png"] < 0.3 && ["special-vortex.png", "special-spike-disk.png", "special-semicircle.png"].every((file) => special.tellShare[file] >= 1),
+      tellCentresDark: ["special-vortex.png", "special-spike-disk.png", "special-black-disk.png"].every((file) => special.centreShares[file].white < 1),
+      landingSoundsOnSchedule: onSchedule(special.landingSounds, landingExpected) && sameJson(special.contexts, JSON.stringify(["running"])),
+      styleSoundsOnSchedule: onSchedule(special.styleSounds, styleExpected) && sameJson(special.contexts, JSON.stringify(["running"])),
+      noPageErrors: [errors, focusErrors, voidErrors, shotErrors, orbErrors, orbSkipErrors, explosionErrors, underErrors, specialErrors, lateErrors, loadoutErrors, selectorErrors].every((list) => list.length === 0),
     };
     if (!checks.clickTargetedExpectedTile) {
       console.error(`verify: the click resolved to ${JSON.stringify(after.destination)}, not ${JSON.stringify(targetTile)}; the click-to-tile mapping for this viewport and camera changed`);
@@ -750,7 +861,8 @@ drive() {
   ' "$VERIFY_DIR" "$SPAWN_TILE" "$WALK_TARGET_TILE" "$EDGE_ORDER_TILE" "$EDGE_STOP_TILE" "$EDGE_HOLD_TICKS" "$BOSS_NPC" "$CYCLE_LAST_HIDDEN_TICK" "$CYCLE_LAST_TICK" "$CYCLE_STAGE_ENTRIES" "$CYCLE_OVERHEAD_SWITCHES" "$CYCLE_SPECIAL_HITS" "$FOCUS_DRILL" "$FOCUS_BEATS" \
     "$NEAR_SQUARE" "$FLOOD_DAMAGE_TICK" "$FLOOD_LAST_TICK" "$VOID_FLOOR_HITS" "$VOID_RUN_END" "$VOID_PIXEL" \
     "$LOADOUT_RANGED_WORN" "$LOADOUT_MELEE_WORN" "$LOADOUT_DIVISION_DRAIN" "$ORB_EXPECTED" "$ORB_BOX" "$ORB_FRAMES" \
-    "[${EXPLOSION_INNER_MARKS// /,}]" "${EXPLOSION_OUTER_MARKS%% *}" "$EXPLOSION_PIXEL" "$EXPLOSION_EXPECTED" "$SOUND_SAMPLES" "$EXPLOSION_SOUNDS" >"$VERIFY_DIR/observed.json"
+    "[${EXPLOSION_INNER_MARKS// /,}]" "${EXPLOSION_OUTER_MARKS%% *}" "$EXPLOSION_PIXEL" "$EXPLOSION_EXPECTED" "$SOUND_SAMPLES" "$EXPLOSION_SOUNDS" "$CX" "$CY" "$TELL_BOX" "$SPECIAL_EXPECTED" \
+    "$TELL_CENTRE_BOX" "$TRANSITION_SOUND_SAMPLES" "$LANDING_SOUNDS" "$LANDING_WINDOWS" "$STYLE_SOUNDS" "$STYLE_WINDOWS" "$SOUND_TOLERANCE_TICKS" >"$VERIFY_DIR/observed.json"
   local verdict=$?
   cat "$VERIFY_DIR/observed.json"
   return $verdict

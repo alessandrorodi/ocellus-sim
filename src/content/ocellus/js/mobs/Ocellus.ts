@@ -10,10 +10,13 @@ import type {
   HitReceipt,
   IncomingStyle,
   InputObservation,
+  Ordinal,
   Phase,
   PlayerObservation,
   RunEnd,
   RunState,
+  Special,
+  SpecialAttack,
   Tick,
   TickRow,
   Tile,
@@ -86,6 +89,10 @@ function phaseEvents(last: Phase | null, now: Phase, at: Tick): FightEvent[] {
   return events;
 }
 
+function specialAttack<V extends Special>(at: Tick, ordinal: Ordinal, variant: V): SpecialAttack<V> {
+  return { at, ordinal, variant, style: OCELLUS_P4.special.styles[variant].value };
+}
+
 export class Ocellus extends Mob {
   private readonly schedule: Schedule;
   private run: Run = { kind: "waiting", inputs: [] };
@@ -133,6 +140,11 @@ export class Ocellus extends Mob {
 
   override canBeAttacked(): boolean {
     return this.phase().boss !== "hidden";
+  }
+
+  override get idlePoseId(): number {
+    const { deflectLoop, idle } = OCELLUS_P4.presentation.bossPoses;
+    return this.phase().stage === "inner-void" ? deflectLoop.value : idle.value;
   }
 
   override movementStep(): void {}
@@ -290,6 +302,8 @@ export class Ocellus extends Mob {
         this.setOverheadText(beat.text);
         this.overheadTextTimer = beat.lasts;
         return { kind: "boss-shouted", at, text: beat.text };
+      case "boss-landing-starts":
+        return { kind: "boss-landing-started", at };
       case "floor-damage":
         this.strikeFloor(beat.void, at, player);
         return null;
@@ -313,7 +327,12 @@ export class Ocellus extends Mob {
       case "explosion-impact":
         return this.detonate(beat.void, beat.pulse, at, player.tile);
       case "special-tell":
+        return { kind: "special-told", ...specialAttack(at, beat.ordinal, beat.variant) };
       case "special-hit":
+        this.strikeSpecial(beat.ordinal, beat.variant, at);
+        return null;
+      case "special-sound":
+        return { kind: "special-sounded", at, ordinal: beat.ordinal, cue: beat.cue };
       case "soul-split-heal":
       case "rifts-spawn":
       case "rift-charge-ends":
@@ -330,6 +349,14 @@ export class Ocellus extends Mob {
     if (rule.kind === "harmless" || !VOID_MASKS[kind].contains(player.tile)) return;
     const requested = rollInt(this.config.seed, "floorDamage", at, rule.perTick, 0);
     const hit = new P4Hit(this, this.target, () => requested, (receipt) => this.recordEvent({ kind: "floor-hit", at, void: kind, tile: player.tile, receipt }));
+    this.target.addProjectile(hit);
+  }
+
+  private strikeSpecial(ordinal: Ordinal, variant: Special, at: Tick): void {
+    const { protectedDamage, unprotectedDamage } = OCELLUS_P4.special;
+    const special = specialAttack(at, ordinal, variant);
+    const amount = () => rollInt(this.config.seed, "specialDamage", at, this.target.protection === special.style ? protectedDamage.value : unprotectedDamage.value, 0);
+    const hit = new P4Hit(this, this.target, amount, (receipt) => this.recordEvent({ kind: "special-hit", ...special, receipt }));
     this.target.addProjectile(hit);
   }
 

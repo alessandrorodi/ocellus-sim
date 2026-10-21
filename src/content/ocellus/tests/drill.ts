@@ -3,7 +3,7 @@ import type { Mob, Player, Unit } from "osrs-sdk";
 import { OcellusRegion } from "../js/OcellusRegion";
 import type { DrillSelection } from "../js/OcellusTimings";
 import { OCELLUS_P4, resolveDrill } from "../js/OcellusTimings";
-import type { FightEvent, TickRow } from "../js/P4Types";
+import type { FightEvent, Style, TickRow } from "../js/P4Types";
 import { seed } from "../js/P4Types";
 
 export type DrillOptions = Readonly<{ seed?: number; selection?: DrillSelection; keepGetReady?: boolean }>;
@@ -13,6 +13,9 @@ export const SPAWN_ON_FLOOD: At = OCELLUS_P4.geometry.playerSpawn.value;
 export const UNDER_BOSS: At = { x: 5, y: 5 };
 export const RING_NORTH: At = { x: 5, y: 3 };
 export const FLOOD_NORTH_OF_RING: At = { x: 5, y: 2 };
+
+type ProtectionPrayer = "Protect from Magic" | "Protect from Range" | "Protect from Melee";
+const PROTECTS_FROM: Readonly<Record<Style, ProtectionPrayer>> = { magic: "Protect from Magic", ranged: "Protect from Range", melee: "Protect from Melee" };
 
 const inNearSquare = ({ x, y }: At) => x >= 3 && x <= 7 && y >= 3 && y <= 7;
 const onPlatform = ({ x, y }: At) => OCELLUS_P4.geometry.platform.value[y]?.[x] === "#";
@@ -43,6 +46,7 @@ export function startDrill(options: DrillOptions = {}) {
     else if (at.x === side.x && at.y === side.y) walkTo(home);
   };
   const ended = () => region.snapshot()?.run.kind === "ended";
+  const pray = (name: ProtectionPrayer | "Piety") => player().prayerController.findPrayerByName(name).toggle(player());
   const lastTick = () => {
     const all = rows();
     return all.length === 0 ? -1 : all[all.length - 1].tick;
@@ -75,6 +79,7 @@ export function startDrill(options: DrillOptions = {}) {
       };
       advance(t, (row) => {
         for (const event of row.events) {
+          if (event.kind === "special-told" && row.playerAtPostTick.prayer !== event.style) pray(PROTECTS_FROM[event.style]);
           if (event.kind === "orb-spawned") goHome(event.tile);
           if (event.kind !== "stage-entered") continue;
           if (event.stage === "outer-void") goHome(RING_NORTH);
@@ -95,9 +100,7 @@ export function startDrill(options: DrillOptions = {}) {
         .filter((event): event is Extract<FightEvent, { kind: K }> => event.kind === kind);
     },
     walkTo,
-    pray(name: "Protect from Magic" | "Protect from Range" | "Protect from Melee" | "Piety") {
-      player().prayerController.findPrayerByName(name).toggle(player());
-    },
+    pray,
     hit(from: Unit, to: Unit, damage: number) {
       to.addProjectile(new Projectile(null, damage, from, to, "typeless", { setDelay: 1 }));
     },

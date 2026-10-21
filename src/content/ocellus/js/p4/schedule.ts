@@ -31,6 +31,7 @@ function specialFor(selection: SpecialSelection, nth: number, seed: Seed, hitAt:
 function mechanicOf(beat: Beat): Mechanic | null {
   switch (beat.kind) {
     case "boss-shouts":
+    case "boss-landing-starts":
       return null;
     case "lifeforce-tell":
     case "lifeforce-hit":
@@ -47,6 +48,7 @@ function mechanicOf(beat: Beat): Mechanic | null {
       return "void-floor";
     case "special-tell":
     case "special-hit":
+    case "special-sound":
     case "soul-split-heal":
       return "transition-attacks";
     case "rifts-spawn":
@@ -72,7 +74,7 @@ export class Schedule {
   ) {}
 
   static compile(seed: Seed, choices: ResolvedChoices): Schedule {
-    const { leadIn, cycle: stages, overheads, lifeforce, orb, bossHeals, rifts, explosion: explosionCues } = OCELLUS_P4;
+    const { leadIn, cycle: stages, overheads, lifeforce, orb, special, bossHeals, rifts, explosion: explosionCues, presentation } = OCELLUS_P4;
     const hidden = leadIn.hiddenFor.value;
     const leadInLength = hidden + leadIn.presentFor.value;
     const shout = leadIn.shout.value;
@@ -137,9 +139,16 @@ export class Schedule {
       put(start + tellAfterStart.value, `${kind} transition tell`, (c, s) => ({ kind: "special-tell", ordinal: nth(c), variant: variant(c, s) }));
       put(start + hitAfterStart.value, `${kind} transition hit`, (c, s) => ({ kind: "special-hit", ordinal: nth(c), variant: variant(c, s) }));
       put(start + hitAfterStart.value + bossHeals.soulSplitAfterHit.value, `${kind} Soul Split heal`, (c) => ({ kind: "soul-split-heal", ordinal: nth(c) }));
+      for (const told of VARIANTS) {
+        for (const { value: cue } of special.cues[special.styles[told].value]) {
+          inside(tellAfterStart.value + cue.afterTell, duration.value, `${kind} ${cue.sound}`);
+          put(start + tellAfterStart.value + cue.afterTell, `${kind} ${cue.sound}`, (c, s) => (variant(c, s) === told ? { kind: "special-sound", ordinal: nth(c), cue } : null));
+        }
+      }
     };
 
     voidBeats(inner, 0);
+    put(afterInnerStart - presentation.landingBeforeInnerClears.value, "boss landing", () => ({ kind: "boss-landing-starts" }));
     transitionBeats(afterInner, afterInnerStart);
     voidBeats(outer, outerStart);
     transitionBeats(afterOuter, afterOuterStart);

@@ -45,7 +45,8 @@ describe("U1 cycle skeleton", () => {
     const drill = startDrill({ selection: { focus: "transition-attacks" } });
     drill.tickTo(67);
     expect(drill.rows().flatMap((row) => row.beats.map((b) => [row.tick, b.kind]))).toEqual([
-      [5, "boss-shouts"], [32, "special-tell"], [37, "special-hit"], [39, "soul-split-heal"], [60, "special-tell"], [65, "special-hit"], [67, "soul-split-heal"],
+      [5, "boss-shouts"], [29, "boss-landing-starts"], [32, "special-tell"], [32, "special-sound"], [37, "special-hit"], [37, "special-sound"], [39, "soul-split-heal"],
+      [60, "special-tell"], [60, "special-sound"], [65, "special-hit"], [65, "special-sound"], [67, "soul-split-heal"],
     ]);
     expect(drill.events("stage-entered").map((e) => e.at)).toEqual([0, 8, 30, 39, 59]);
     drill.dispose();

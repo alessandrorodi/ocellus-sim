@@ -57,9 +57,8 @@ const label = (key: string) => key.charAt(0).toUpperCase() + key.slice(1).replac
 
 function DrillControls({ config }: Readonly<{ config: DrillConfig }>) {
   const [setup, setSetup] = useState<string>(config.choices.setup.key);
-  const [focus, setFocus] = useState<string>(config.choices.focus.key);
   const [seed, setSeed] = useState(String(config.seed));
-  const restart = () => {
+  const restart = (focus: string) => {
     const url = new URL(window.location.href);
     url.searchParams.set("setup", setup);
     url.searchParams.set("focus", focus);
@@ -68,7 +67,7 @@ function DrillControls({ config }: Readonly<{ config: DrillConfig }>) {
   };
 
   return (
-    <form id="drill_controls" onSubmit={(event) => { event.preventDefault(); restart(); }}>
+    <form id="drill_controls" onSubmit={(event) => { event.preventDefault(); restart(config.choices.focus.key); }}>
       <label>
         Setup{" "}
         <select id="setup" value={setup} onChange={(event) => setSetup(event.target.value)}>
@@ -77,7 +76,7 @@ function DrillControls({ config }: Readonly<{ config: DrillConfig }>) {
       </label>
       <label>
         Focus{" "}
-        <select id="focus" value={focus} onChange={(event) => setFocus(event.target.value)}>
+        <select id="focus" value={config.choices.focus.key} onChange={(event) => restart(event.target.value)}>
           {FOCUS_KEYS.map((key) => <option key={key} value={key}>{label(key)}</option>)}
         </select>
       </label>

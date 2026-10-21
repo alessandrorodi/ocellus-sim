@@ -1,5 +1,5 @@
 import type { TwistedBow } from "osrs-sdk";
-import type { Cycle, Mechanic, Seed, SoundId, Special, TickSpan, Tile, TransitionKind, VoidKind } from "./P4Types";
+import type { Cycle, Mechanic, Seed, SoundId, Special, Style, TickSpan, Tile, TransitionKind, VoidKind } from "./P4Types";
 import { cycle, seed, soundId, span, tile } from "./P4Types";
 
 type Basis = "footage-repeated" | "footage-once" | "spec-confirmed" | "spec-single" | "inferred" | "assumption";
@@ -104,6 +104,13 @@ export type SpecialSelection =
   | Readonly<{ kind: "replay"; order: readonly [Special, ...Special[]] }>;
 
 export type UnclaimedOrbRule = Readonly<{ kind: "heals-boss"; afterHit: TickSpan }> | Readonly<{ kind: "off" }>;
+type SpecialRecipe = Readonly<{
+  styles: Readonly<{ "black-disk": Selected<"melee">; "spike-disk": Selected<"ranged">; vortex: Selected<"magic"> }>;
+  protectedDamage: Selected<DamageRange>;
+  unprotectedDamage: Selected<DamageRange>;
+  cues: Readonly<Record<Style, readonly Selected<TransitionCue>[]>>;
+}>;
+export type SpecialStyle<V extends Special> = SpecialRecipe["styles"][V]["value"];
 type BossHealRecipe = Readonly<{ soulSplitAfterHit: Selected<TickSpan> }>;
 type RiftRecipe = Readonly<{ spawnBeforeOnset: Selected<TickSpan>; chargeAfterSpawn: Selected<TickSpan> }>;
 
@@ -135,13 +142,18 @@ type BossPose =
   | "unleashLoop"
   | "unleashOut";
 
-type CueSound = "explosionSeriesStart" | "explosionMark";
+export type TransitionSound = "meleeTell" | "meleeHit" | "rangedBeforeHit" | "rangedHit" | "magicWindUp";
+export type TransitionCue = Readonly<{ sound: TransitionSound; afterTell: TickSpan; delayMs: number }>;
+type CueSound = "explosionSeriesStart" | "explosionMark" | TransitionSound;
 type SoundPlayback = Readonly<{ volume: number; range: number; retain: number }>;
 
 type PresentationRecipe = Readonly<{
   bossPoses: Readonly<Record<BossPose, Selected<number>>>;
   sounds: Readonly<Record<CueSound, Selected<SoundId>>>;
   soundPlayback: Selected<SoundPlayback>;
+  landingBeforeInnerClears: Selected<TickSpan>;
+  transitionTells: Readonly<Record<Special, Selected<number>>>;
+  tellCentre: Selected<Readonly<{ faceColour: number; rgb: number }>>;
 }>;
 
 type StyleBonuses = Readonly<{ stab: number; slash: number; crush: number; magic: number; range: number }>;
@@ -249,6 +261,32 @@ const LIFEFORCE: LifeforceRecipe = {
 
 const ORB: OrbRecipe = {
   lastHealAfterHit: selected(span(18), "footage-once", "team-4", "latest observed heal; a lower bound on expiry", vod("V1", "G175")),
+};
+
+const cue = (sound: TransitionSound, afterTell: number, delayMs: number, note: string, first: Source, ...rest: Source[]): Selected<TransitionCue> =>
+  selected({ sound, afterTell: span(afterTell), delayMs }, "footage-repeated", "team-4-and-5", note, first, ...rest);
+
+const SPECIAL: SpecialRecipe = {
+  styles: {
+    "black-disk": selected("melee", "footage-repeated", "team-4-and-5", "Kirby on Protect from Melee takes 7 and a teammate 50; the streamer on Magic takes 43 while four others take 6", vod("V1", "G62, G90"), vod("V2", "k137")),
+    "spike-disk": selected("ranged", "footage-repeated", "team-4-and-5", "players on Protect from Missiles take 7, 5 and 9", vod("V1", "G122"), vod("V2", "k105, k197")),
+    vortex: selected("magic", "footage-repeated", "team-5", "players on Protect from Magic take 7 twice", vod("V2", "k77, k165")),
+  },
+  protectedDamage: selected({ min: 5, max: 9 }, "footage-repeated", "team-4-and-5", "7, 6, 7, 6, 9 on Kirby and 7, 5, 7, 9 on the streamer under the matching prayer; the solo carry-over is inferred", vod("V1", "G62, G90, G122, G150, G182"), vod("V2", "k77, k105, k165, k197")),
+  unprotectedDamage: selected({ min: 43, max: 50 }, "footage-repeated", "team-4-and-5", "50 on a teammate whose prayer is not seen, 43 on the streamer under the wrong prayer; the solo carry-over is inferred", vod("V1", "G62"), vod("V2", "k137")),
+  cues: {
+    melee: [
+      cue("meleeTell", 0, 60, "tell + 0.1 in all 5 melee attacks; 0.1 tick is 60 ms", vod("V1", "3:54:32.45, t60.1")),
+      cue("meleeHit", 5, 60, "tell + 5.1, on the hit tick, in all 5 melee attacks", vod("V1", "3:54:18.66, t37.1")),
+    ],
+    ranged: [
+      cue("rangedBeforeHit", 4, 240, "tell + 4.4, the median of 4.4, 4.4 and 4.6 in 3 of 4 ranged attacks, about 0.6 tick before the hit; the fourth was at tell + 0.9; 0.4 tick is 240 ms", vod("V1", "3:54:54.23, t96.4"), vod("V2", "5:20:58.27, t64.6")),
+      cue("rangedHit", 5, 60, "tell + 5.1, on the hit tick, in 3 of 4 ranged attacks", vod("V1", "t97.1, t157.1"), vod("V2", "t65.3")),
+    ],
+    magic: [
+      cue("magicWindUp", 2, 120, "tell + 2.2, the median of 0.7, 2.2 and 2.3 in 3 of 3 magic attacks; 0.2 tick is 120 ms. The magic hit's 12553 is spotanim 4329's own frame sound", vod("V2", "5:20:39.13, t32.7"), vod("V2", "t122.3, t214.2")),
+    ],
+  },
 };
 
 const BOSS_HEALS: BossHealRecipe = {
@@ -374,9 +412,9 @@ const PRESENTATION: PresentationRecipe = {
   bossPoses: {
     idle: pose(14840, "phase3_idle", "spec-confirmed", "boss stand animation"),
     walk: pose(14849, "phase3_walk", "spec-confirmed", "boss walk animation"),
-    deflectIn: pose(14863, "phase3_deflect_in", "inferred", "rise into the inner void, 2 ticks; name and the wiki's rise"),
-    deflectLoop: pose(14864, "phase3_deflect_loop", "inferred", "hover over the inner void, 2-tick loop"),
-    deflectOut: pose(14865, "phase3_deflect_out", "inferred", "landing as the inner void clears, 4 ticks"),
+    deflectIn: pose(14863, "phase3_deflect_in", "inferred", "rise as the inner void forms, 2 ticks; name and the wiki's rise"),
+    deflectLoop: pose(14864, "phase3_deflect_loop", "inferred", "hover high over the inner void, 2-tick loop, as V2 shows from k49 to k69"),
+    deflectOut: pose(14865, "phase3_deflect_out", "inferred", "landing as the inner void clears, 4 ticks; the boss is on the ground again by S+23 (k71)"),
     silentDeflectIn: pose(14866, "silent deflect in", "inferred", "outer-void Deflect candidate, 2 ticks"),
     silentDeflectLoop: pose(14867, "silent deflect loop", "inferred", "outer-void Deflect candidate, 2-tick loop"),
     silentDeflectOut: pose(14868, "silent deflect out", "inferred", "outer-void Deflect candidate, 4 ticks"),
@@ -385,7 +423,7 @@ const PRESENTATION: PresentationRecipe = {
     prayerIn: pose(14869, "phase3_prayer_in", "inferred", "overhead switch, 5.6 ticks"),
     prayerLoop: pose(14870, "phase3_prayer_loop", "inferred", "overhead switch loop, 3 ticks"),
     prayerOut: pose(14871, "phase3_prayer_out", "inferred", "overhead switch end, 1.5 ticks"),
-    meleeHybrid: pose(14844, "phase3_melee_hybrid", "inferred", "transition attack candidate with magic and ranged spotanim variants, 7 ticks"),
+    meleeHybrid: pose(14844, "phase3_melee_hybrid", "inferred", "transition attack cast at each tell, 7 ticks; its melee, magic and ranged spotanims match the three tells"),
     meleePrayer: pose(14845, "phase3_melee_prayer", "inferred", "transition attack candidate, 3 ticks"),
     unleashIn: pose(14857, "phase3_unleash_in", "inferred", "transition attack candidate, 2 ticks"),
     unleashLoop: pose(14858, "phase3_unleash_loop", "inferred", "transition attack candidate, 2-tick loop"),
@@ -394,8 +432,28 @@ const PRESENTATION: PresentationRecipe = {
   sounds: {
     explosionSeriesStart: sound(12638, "starts each explosion series, in 5 V1 and 5 V2 voids; no sequence references it, so the server sends it", vod("V1", "3:54:04.77, t14"), vod("V2", "5:20:27.89, t14")),
     explosionMark: sound(12537, "one per explosion mark, six per void every 2 ticks from hit + 5, in 3 V1 and 3 V2 cycles", vod("V1", "3:54:06.58, t17"), vod("V2", "5:20:29.70, t17")),
+    meleeTell: sound(12572, "the melee transition tell, in all 5 melee attacks and none of the other 7; no sequence references it, so the server sends it", vod("V1", "3:54:32.45, t60.1")),
+    meleeHit: sound(12567, "the melee transition hit, in all 5 melee attacks and none of the other 7; the server sends it", vod("V1", "3:54:18.66, t37.1")),
+    rangedBeforeHit: sound(12555, "before the ranged transition hit, in all 4 ranged attacks, scoring at most 0.21 in the other styles; the server sends it", vod("V1", "3:54:54.23, t96.4"), vod("V2", "5:20:58.27, t64.6")),
+    rangedHit: sound(12556, "the ranged transition hit, in 3 of 4 ranged attacks; the server sends it", vod("V1", "t97.1, t157.1"), vod("V2", "t65.3")),
+    magicWindUp: sound(12554, "the magic transition wind-up, in 3 of 3 magic attacks, scoring at most 0.09 in the other styles; the server sends it", vod("V2", "5:20:39.13, t32.7")),
   },
   soundPlayback: selected({ volume: 0.1, range: 31, retain: 31 }, "inferred", "unscaled", "played as area sounds on the player's tile, so they share the area-sound toggle with the boss; range and retain copy the boss's own frame sounds and volume the SDK's level for them, because the clips cannot show the server's values", cache("seq 14863 frame sound 12613 location 31, retain 31")),
+  landingBeforeInnerClears: selected(span(1), "footage-repeated", "team-4-and-5", "the landing's frame sounds 12584, 12587, 12586 and 12585 at S+21.1, S+21.8, S+23.0 and S+23.5 put its start at S+21, a tick before the inner void clears; 12586 is heard in 3 V1 and 3 V2 cycles", vod("V1", "3:54:15.01, t31.0"), vod("V2", "5:20:38.13, t31.0"), cache("seq 14865 frames 3, 25, 61 and 74")),
+  transitionTells: {
+    vortex: selected(4329, "inferred", "unscaled", "a purple starburst over the footprint, then a purple-rimmed ring about 7 tiles across", cache("spotanim 4329 phase3_melee_hybrid_magic"), vod("V2", "k72 to k78")),
+    "spike-disk": selected(4330, "inferred", "unscaled", "a dark disk with purple spikes radiating toward the players", cache("spotanim 4330 phase3_melee_hybrid_ranged"), vod("V2", "k100 to k106")),
+    "black-disk": selected(4328, "inferred", "unscaled", "a purple semicircle, then a disk over the footprint", cache("spotanim 4328 phase3_melee_hybrid"), vod("V2", "k132 to k137")),
+  },
+  tellCentre: selected(
+    { faceColour: 4, rgb: 0x020203 },
+    "inferred",
+    "unscaled",
+    "the three tells share model 62698, whose centre is 144 faces of colour 4 textured with 215, a near-black starfield; the SDK draws spotanims without textures, so those faces show their lighting as near white, and recolouring colour 4 to the texture's mean texel draws them black as the footage does. The 296 untextured colour-4 faces were already near black",
+    cache("model 62698 faces of colour 4 with texture 215"),
+    cache("texture 215 sprite 8803, mean texel #020203"),
+    vod("V2", "k72 to k78, k100 to k106, k132 to k137"),
+  ),
 };
 
 const OSRS_WIKI = "https://oldschool.runescape.wiki/w/";
@@ -451,6 +509,7 @@ export const OCELLUS_P4 = {
   overheads: OVERHEADS,
   lifeforce: LIFEFORCE,
   orb: ORB,
+  special: SPECIAL,
   bossHeals: BOSS_HEALS,
   rifts: RIFTS,
   geometry: GEOMETRY,
