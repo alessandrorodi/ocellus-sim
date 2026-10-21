@@ -70,9 +70,9 @@ describe("U1 cycle skeleton", () => {
       drill.dispose();
       return boss;
     };
-    expect(entry({})).toEqual({ npcId: 16677, hp: 1355, maxHp: 5420, visible: false });
-    expect(entry({ selection: { bossMaxHp: "cache" } })).toEqual({ npcId: 16677, hp: 1312, maxHp: 5250, visible: false });
-    expect(entry({ selection: { entryHpFraction: "v1-observed" } })).toEqual({ npcId: 16677, hp: 1349, maxHp: 5420, visible: false });
+    expect(entry({})).toEqual({ npcId: 16677, hp: 1355, maxHp: 5420, visible: false, defence: 250 });
+    expect(entry({ selection: { bossMaxHp: "cache" } })).toEqual({ npcId: 16677, hp: 1312, maxHp: 5250, visible: false, defence: 250 });
+    expect(entry({ selection: { entryHpFraction: "v1-observed" } })).toEqual({ npcId: 16677, hp: 1349, maxHp: 5420, visible: false, defence: 250 });
   });
 
   test("a restart starts a new run: entry HP again and a log from P4 tick 0", () => {

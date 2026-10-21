@@ -2,6 +2,7 @@
 set -uo pipefail
 
 CHECK="$(cd "$(dirname "$0")" && pwd)/check-types.mjs"
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -63,7 +64,26 @@ expect_finding() {
   grep -q "^${file}:[0-9]*:[0-9]* ${rule}" "$T/out.txt" || { echo "missing '${rule}' finding for ${file}"; cat "$T/out.txt"; return 1; }
 }
 
+expect_compile_error() {
+  local file="$1" from="$2" to="$3" error="$4" source
+  T="$(mktemp -d "$WORK/case.XXXXXX")"
+  cp -R "$REPO/src" "$REPO/test" "$REPO/tsconfig.json" "$T/" && ln -s "$REPO/node_modules" "$T/node_modules" || return 1
+  source="$(cat "$T/$file")"
+  [[ "$source" == *"$from"* ]] || { echo "${file} no longer contains: ${from}"; return 1; }
+  printf '%s\n' "${source/"$from"/"$to"}" >"$T/$file"
+  if (cd "$T" && node_modules/.bin/tsc --noEmit -p .) >"$T/out.txt" 2>&1; then
+    echo "tsc accepted ${to} in ${file}"
+    return 1
+  fi
+  grep -F "${file}(" "$T/out.txt" | grep -qF "$error" || { echo "missing '${error}' in ${file}"; cat "$T/out.txt"; return 1; }
+}
+
 clean_tree_passes() { expect_clean; }
+helmet_factory_rejects_a_weapon() {
+  expect_compile_error src/content/ocellus/js/OcellusLoadout.ts \
+    "voidRangerHelm: () => new VoidRangerHelm()" "voidRangerHelm: () => new OcellusScythe()" \
+    "error TS2322: Type 'OcellusScythe' is not assignable to type 'Helmet'."
+}
 explicit_any_fails() { expect_finding src/content/ocellus/js/p4/roll.ts 'export const x: any = 1;' "explicit any"; }
 as_cast_fails() { expect_finding src/content/ocellus/js/p4/roll.ts 'export const x = (1 as number);' "type assertion with as"; }
 double_cast_fails() { expect_finding src/App.tsx 'export const x = ("1" as unknown as number);' "type assertion with as"; }
@@ -105,7 +125,8 @@ for t in \
   require_of_internal_fails \
   js_reexport_of_internal_fails \
   declaration_file_import_of_internal_fails \
-  absolute_import_of_internal_fails; do
+  absolute_import_of_internal_fails \
+  helmet_factory_rejects_a_weapon; do
   if ("$t") >"$WORK/$t.log" 2>&1; then
     echo "PASS $t"
   else

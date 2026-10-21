@@ -25,6 +25,22 @@ CYCLE_SPECIAL_HITS='[[37,"vortex"],[65,"spike-disk"]]'
 FOCUS_DRILL="transition-attacks"
 FOCUS_LAST_TICK=40
 FOCUS_BEATS='["boss-shouts","soul-split-heal","special-hit","special-tell"]'
+LOADOUT_QUERY="?seed=1&setup=ranged"
+LOADOUT_RANGED_WORN='{"weapon":20997,"offhand":null,"helmet":11664,"chest":13072,"legs":13073,"gloves":8842,"cape":28951,"necklace":19547,"feet":13237,"ring":28310,"ammo":11212}'
+LOADOUT_MELEE_WORN='{"weapon":22325,"offhand":null,"helmet":24419,"chest":24420,"legs":24421,"gloves":22981,"cape":21295,"necklace":19553,"feet":13239,"ring":25485,"ammo":11212}'
+LOADOUT_INVENTORY_TAB_X=1164
+LOADOUT_INVENTORY_TAB_Y=745
+LOADOUT_SLOT_X=1125
+LOADOUT_SLOT_Y=508
+LOADOUT_SLOT_DX=39
+LOADOUT_SLOT_DY=32
+LOADOUT_SPECIAL_SLOT=0
+LOADOUT_SWITCHES=9
+LOADOUT_SPECIAL_ORB_X=1140
+LOADOUT_SPECIAL_ORB_Y=157
+LOADOUT_BOSS_CLICK_RIGHT_PX=-10
+LOADOUT_BOSS_CLICK_DOWN_PX=-160
+LOADOUT_DIVISION_DRAIN=37
 CREDIT_LINE="Created using intellectual property belonging to Jagex Limited under the terms of Jagex's Fan Content Policy. This content is not endorsed by or affiliated with Jagex."
 
 log() { echo "verify: $*"; }
@@ -45,9 +61,13 @@ ensure_deps() {
 }
 
 manifest_ready() {
-  [[ -f "$MANIFEST" ]] && node -e '
-    const m = require(process.argv[1]);
-    process.exit(m.cache?.source === "openrs2:2746" && m.assets?.[`npc-${process.argv[2]}`] ? 0 : 1);
+  [[ -f "$MANIFEST" ]] && node --input-type=module -e '
+    import { loadConfig } from "osrs-sdk-assets";
+    import { readFileSync } from "node:fs";
+    const { assets } = await loadConfig();
+    const m = JSON.parse(readFileSync(process.argv[1], "utf8"));
+    const items = Object.values(assets.items).every(({ id }) => m.playerItems?.[`item:${id}`]);
+    process.exit(m.cache?.source === "openrs2:2746" && m.assets?.[`npc-${process.argv[2]}`] && items ? 0 : 1);
   ' "$MANIFEST" "$BOSS_NPC"
 }
 
@@ -69,7 +89,7 @@ stage_test() {
 
 stage_assets() {
   if manifest_ready; then
-    log "assets: manifest already has npc-${BOSS_NPC} from openrs2:2746, skipping rebuild" | tee "$VERIFY_DIR/assets.log"
+    log "assets: manifest already has npc-${BOSS_NPC} and every configured item from openrs2:2746, skipping rebuild" | tee "$VERIFY_DIR/assets.log"
     return 0
   fi
   npm run assets -- --cache-dir "$OSRS_CACHE_DIR" --reader-path "$OSRS_CACHE_READER" >"$VERIFY_DIR/assets.log" 2>&1 && manifest_ready
@@ -234,6 +254,53 @@ drive_focus() {
   ab --json errors | json data.errors >"$VERIFY_DIR/focus-page-errors.json" || { log "page error capture failed"; return 1; }
 }
 
+click_at() {
+  ab mouse move "$1" "$2" >/dev/null && ab mouse down left >/dev/null && ab mouse up left >/dev/null
+}
+
+click_inventory_slot() {
+  click_at $((LOADOUT_SLOT_X + $1 % 4 * LOADOUT_SLOT_DX)) $((LOADOUT_SLOT_Y + $1 / 4 * LOADOUT_SLOT_DY))
+}
+
+drive_loadouts() {
+  local slot box
+  ab open "${URL}${LOADOUT_QUERY}" >/dev/null || return 1
+  fight_tick_at_least 9 120000 || { log "the loadout drill never stepped to P4 tick 9"; return 1; }
+  probe "snapshot().fight" >"$VERIFY_DIR/loadout-before.json"
+  click_at "$LOADOUT_INVENTORY_TAB_X" "$LOADOUT_INVENTORY_TAB_Y" || return 1
+  ab wait 600 >/dev/null
+  ab screenshot "$VERIFY_DIR/loadout-ranged.png" >/dev/null || { log "ranged setup screenshot failed"; return 1; }
+
+  for slot in $(seq $((LOADOUT_SPECIAL_SLOT + 1)) "$LOADOUT_SWITCHES"); do
+    click_inventory_slot "$slot" || return 1
+    ab wait 150 >/dev/null
+  done
+  ab wait 1200 >/dev/null
+  probe "snapshot().fight" >"$VERIFY_DIR/loadout-after.json"
+  ab screenshot "$VERIFY_DIR/loadout-melee.png" >/dev/null || { log "switched setup screenshot failed"; return 1; }
+
+  click_inventory_slot "$LOADOUT_SPECIAL_SLOT" || return 1
+  ab wait 700 >/dev/null
+  click_at "$LOADOUT_SPECIAL_ORB_X" "$LOADOUT_SPECIAL_ORB_Y" || return 1
+  box="$(ab --json get box "#world")"
+  click_at $(( $(json data.x <<<"$box") + $(json data.width <<<"$box") / 2 + LOADOUT_BOSS_CLICK_RIGHT_PX )) \
+    $(( $(json data.y <<<"$box") + $(json data.height <<<"$box") / 2 + LOADOUT_BOSS_CLICK_DOWN_PX )) || return 1
+  ab wait --fn "window.__archiveOcellusProbe.snapshot().fight.player.specialEnergy < 100" --timeout 15000 >/dev/null || log "the special attack was not spent"
+  ab wait --fn "window.__archiveOcellusProbe.log().rows.flatMap((row) => row.events).filter((event) => event.kind === 'player-hit-judged').length >= 2" \
+    --timeout 15000 >/dev/null || log "the glaives never landed"
+  probe "snapshot().fight" >"$VERIFY_DIR/loadout-spec.json"
+  ab wait 1200 >/dev/null
+  ab screenshot "$VERIFY_DIR/loadout-spec.png" >/dev/null || { log "special attack screenshot failed"; return 1; }
+  ab console >"$VERIFY_DIR/loadout-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/loadout-page-errors.json" || { log "page error capture failed"; return 1; }
+
+  ab select "#setup" melee >/dev/null && ab click "#restart" >/dev/null || { log "setup control did not accept melee"; return 1; }
+  ab wait --fn "new URLSearchParams(location.search).get('setup') === 'melee'" --timeout 30000 >/dev/null || { log "restart did not load setup=melee"; return 1; }
+  fight_tick_at_least 1 120000 || { log "the reloaded melee drill never stepped to P4 tick 1"; return 1; }
+  probe "snapshot().fight" >"$VERIFY_DIR/loadout-selector.json"
+  ab --json errors | json data.errors >"$VERIFY_DIR/loadout-selector-page-errors.json" || { log "page error capture failed"; return 1; }
+}
+
 drive() {
   ab set viewport 1280 800 >/dev/null || return 1
   # A new browser's first screenshot takes about 10 s, longer than the hidden lead-in, so it goes to a blank page.
@@ -242,18 +309,22 @@ drive() {
   drive_lead_in || return 1
   ab wait --fn "window.__archiveOcellusProbe?.snapshot().ticking === true && window.__archiveOcellusProbe.snapshot().tick >= 8" \
     --timeout 90000 >/dev/null || { log "trainer never started ticking"; return 1; }
-  drive_walk && drive_cycle && drive_focus || return 1
+  drive_walk && drive_cycle && drive_focus && drive_loadouts || return 1
 
   local capture
-  for capture in hidden.json hidden.png before.json before.png after.json after.png boss.png cycle-snapshot.json cycle.json console.log page-errors.json focus.json focus.png focus-console.log focus-page-errors.json; do
+  for capture in hidden.json hidden.png before.json before.png after.json after.png boss.png cycle-snapshot.json cycle.json console.log page-errors.json focus.json focus.png focus-console.log focus-page-errors.json \
+    loadout-before.json loadout-ranged.png loadout-after.json loadout-melee.png loadout-spec.json loadout-spec.png \
+    loadout-console.log loadout-page-errors.json loadout-selector.json loadout-selector-page-errors.json; do
     [[ -s "$VERIFY_DIR/$capture" ]] || { log "required capture ${capture} is missing or empty"; return 1; }
   done
 
   node -e '
-    const [dir, spawn, target, bossNpc, lastHiddenTick, lastTick, stages, overheads, specials, focusKey, focusBeats] = process.argv.slice(1);
+    const [dir, spawn, target, bossNpc, lastHiddenTick, lastTick, stages, overheads, specials, focusKey, focusBeats, rangedWorn, meleeWorn, drain] = process.argv.slice(1);
     const read = (file) => JSON.parse(require("fs").readFileSync(`${dir}/${file}`, "utf8"));
     const [hidden, before, after, errors, cycle, snapshot, focus, focusErrors] =
       ["hidden.json", "before.json", "after.json", "page-errors.json", "cycle.json", "cycle-snapshot.json", "focus.json", "focus-page-errors.json"].map(read);
+    const [dressed, switched, spec, selector, loadoutErrors, selectorErrors] =
+      ["loadout-before.json", "loadout-after.json", "loadout-spec.json", "loadout-selector.json", "loadout-page-errors.json", "loadout-selector-page-errors.json"].map(read);
     const [spawnTile, targetTile] = [JSON.parse(spawn), JSON.parse(target)];
     const same = (a, b) => a?.x === b.x && a?.y === b.y;
     const upTo = (rows, last) => rows.filter((row) => row.tick <= last);
@@ -263,8 +334,13 @@ drive() {
       overheadSwitches: events(cycle.rows, "overhead-switched", (e) => [e.at, e.overhead]),
       specialHits: upTo(cycle.rows, Number(lastTick)).flatMap((row) => row.beats.filter((b) => b.kind === "special-hit").map((b) => [row.tick, b.variant])),
       focusBeats: [...new Set(focus.rows.flatMap((row) => row.beats.map((b) => b.kind)))].sort(),
+      loadout: {
+        worn: [dressed.player.equipped, switched.player.equipped, selector.player.equipped],
+        specialEnergy: [switched.player.specialEnergy, spec.player.specialEnergy],
+        bossDefence: [switched.boss.defence, spec.boss.defence],
+      },
     };
-    const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(JSON.parse(b));
+    const sameJson = (a, b) => require("util").isDeepStrictEqual(a, JSON.parse(b));
     const checks = {
       spawnedOnSpawnTile: same(before.player, spawnTile),
       clickTargetedExpectedTile: same(after.destination, targetTile),
@@ -278,14 +354,20 @@ drive() {
       overheadsOnSchedule: sameJson(observed.overheadSwitches, overheads),
       transitionAttacksReplayed: sameJson(observed.specialHits, specials),
       focusApplied: focus.header.choices.focus.key === focusKey && sameJson(observed.focusBeats, focusBeats),
-      noPageErrors: errors.length === 0 && focusErrors.length === 0,
+      rangedSetupWorn: sameJson(dressed.player.equipped, rangedWorn),
+      switchesWornByClick: sameJson(switched.player.equipped, meleeWorn),
+      divisionSpentHalfTheBar: switched.player.specialEnergy === 100 && spec.player.specialEnergy === 50,
+      divisionDrainedBossDefence: switched.boss.defence - spec.boss.defence === Number(drain),
+      setupSelectorApplied: sameJson(selector.player.equipped, meleeWorn),
+      noPageErrors: [errors, focusErrors, loadoutErrors, selectorErrors].every((list) => list.length === 0),
     };
     if (!checks.clickTargetedExpectedTile) {
       console.error(`verify: the click resolved to ${JSON.stringify(after.destination)}, not ${JSON.stringify(targetTile)}; the click-to-tile mapping for this viewport and camera changed`);
     }
     console.log(JSON.stringify({ hidden, before, after, target: targetTile, observed, checks }, null, 2));
     process.exit(Object.values(checks).every(Boolean) ? 0 : 1);
-  ' "$VERIFY_DIR" "$SPAWN_TILE" "$WALK_TARGET_TILE" "$BOSS_NPC" "$CYCLE_LAST_HIDDEN_TICK" "$CYCLE_LAST_TICK" "$CYCLE_STAGE_ENTRIES" "$CYCLE_OVERHEAD_SWITCHES" "$CYCLE_SPECIAL_HITS" "$FOCUS_DRILL" "$FOCUS_BEATS" >"$VERIFY_DIR/observed.json"
+  ' "$VERIFY_DIR" "$SPAWN_TILE" "$WALK_TARGET_TILE" "$BOSS_NPC" "$CYCLE_LAST_HIDDEN_TICK" "$CYCLE_LAST_TICK" "$CYCLE_STAGE_ENTRIES" "$CYCLE_OVERHEAD_SWITCHES" "$CYCLE_SPECIAL_HITS" "$FOCUS_DRILL" "$FOCUS_BEATS" \
+    "$LOADOUT_RANGED_WORN" "$LOADOUT_MELEE_WORN" "$LOADOUT_DIVISION_DRAIN" >"$VERIFY_DIR/observed.json"
   local verdict=$?
   cat "$VERIFY_DIR/observed.json"
   return $verdict

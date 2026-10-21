@@ -5,7 +5,7 @@ description: Verify Archive Ocellus Trainer, a browser trainer built on osrs-sdk
 
 # Verify Archive Ocellus Trainer
 
-The trainer is a web page: a three.js canvas (`#world`) with the osrs-sdk HUD around it. A user loads the page, sees the arena, their player and Ocellus (NPC 16677), clicks floor tiles to walk, and watches the phase 4 cycle run. A focus selector, a seed field and a Restart button sit at the bottom left. There is no backend. `scripts/verify.sh` runs every stage below and prints `PASS <stage>` or `FAIL <stage>`. It exits non-zero when any stage fails.
+The trainer is a web page: a three.js canvas (`#world`) with the osrs-sdk HUD around it. A user loads the page, sees the arena, their player and Ocellus (NPC 16677), clicks floor tiles to walk, switches gear from the inventory, and watches the phase 4 cycle run. A setup selector, a focus selector, a seed field and a Restart button sit at the bottom left. There is no backend. `scripts/verify.sh` runs every stage below and prints `PASS <stage>` or `FAIL <stage>`. It exits non-zero when any stage fails.
 
 ```sh
 source ~/osrs-sims/env.sh            # Node 22 on this machine; elsewhere use any Node 22
@@ -52,7 +52,7 @@ agent-browser wait --fn "window.__archiveOcellusProbe?.snapshot().tick >= 8" --t
 
 Drive with real input only: page loads, `agent-browser mouse move/down/up` on the canvas, and visible elements by CSS id. The canvas has no accessible children, so tiles are reached by pixel position relative to `agent-browser get box "#world"`. The camera centres on the player. At a 1280x800 viewport, the point `WALK_CLICK_RIGHT_PX` (160) right of and `WALK_CLICK_DOWN_PX` (50) below the canvas centre is a floor tile; from the spawn tile (10, 10) the player walks to `WALK_TARGET_TILE` (13, 11). The three constants sit together at the top of `scripts/verify.sh`. The `browser` stage fails when the click resolves to any other tile, so a changed viewport, camera or default setting shows up as a failure. It does not pass silently.
 
-Development builds expose a verification probe, `window.__archiveOcellusProbe`. `snapshot()` returns a fresh copy of `{ ticking, tick, player, destination, fight, rejected }`: `tick` is the SDK world tick, `fight` is `{ run, boss }` with the P4 tick and phase in `run` and, in `boss.visible`, whether the renderer draws the boss model. `rejected` lists URL options the drill ignored. `log()` returns the fight log: a header with the seed and every resolved choice, and one row per boss step with its phase, beats, inputs and events. Each row samples the player and the boss HP twice. `playerAtBossStep` and `bossHp.atBossStep` are read when the boss steps, after prayers publish and before hits land. `playerAtPostTick` and `bossHp.atPostTick` are read in the region's `postTick`, after every unit has moved. The probe has no setters. Use it to record state the UI does not show. Never use it, `eval`, or SDK internals to change state; a proof that mutates the world through code proves nothing about the user path. Production builds (`npm run build`) do not contain the handle.
+Development builds expose a verification probe, `window.__archiveOcellusProbe`. `snapshot()` returns a fresh copy of `{ ticking, tick, player, destination, fight, rejected }`: `tick` is the SDK world tick, `fight` is `{ run, boss, player }` with the P4 tick and phase in `run`, the boss's HP and Defence in `boss` and, in `boss.visible`, whether the renderer draws the boss model, and the worn and carried item ids and the special energy in `player`. `rejected` lists URL options the drill ignored. `log()` returns the fight log: a header with the seed and every resolved choice, and one row per boss step with its phase, beats, inputs and events. Each row samples the player and the boss HP twice. `playerAtBossStep` and `bossHp.atBossStep` are read when the boss steps, after prayers publish and before hits land. `playerAtPostTick` and `bossHp.atPostTick` are read in the region's `postTick`, after every unit has moved. The probe has no setters. Use it to record state the UI does not show. Never use it, `eval`, or SDK internals to change state; a proof that mutates the world through code proves nothing about the user path. Production builds (`npm run build`) do not contain the handle.
 
 Per-feature recipes are in [features/README.md](features/README.md).
 
@@ -75,7 +75,12 @@ Each run writes to `.verify/<UTC timestamp>/` (gitignored; override with `VERIFY
 | `cycle-snapshot.json`, `cycle.json` | Probe snapshot and fight log once P4 tick 70 has run |
 | `focus.json`, `focus.png` | Fight log and screen after the focus control reloaded the drill on `transition-attacks` |
 | `focus-console.log`, `focus-page-errors.json` | Console and page errors of the reloaded page |
-| `observed.json` | Lead-in, before and after state, the cycle's stage, overhead and transition attack ticks, the focused beats, and each check's result |
+| `loadout-before.json`, `loadout-ranged.png` | Fight snapshot and screen of `?seed=1&setup=ranged` with the inventory tab open |
+| `loadout-after.json`, `loadout-melee.png` | Snapshot and screen after clicking the nine switches |
+| `loadout-spec.json`, `loadout-spec.png` | Snapshot and screen after Division on the boss |
+| `loadout-console.log`, `loadout-page-errors.json` | Console and page errors of the loadout page |
+| `loadout-selector.json`, `loadout-selector-page-errors.json` | Snapshot and page errors after the setup control reloaded the drill on `melee` |
+| `observed.json` | Lead-in, before and after state, the cycle's stage, overhead and transition attack ticks, the focused beats, the worn setups, special energy and boss Defence, and each check's result |
 | `cleanup.log` | Confirmation that the recorded PID stopped |
 
 A browser proof captures the action and the resulting state, not only the last screen. A test count of zero fails the `test` stage. A page error fails the `browser` stage, and so does a failed or empty screenshot, state, console or page-error capture.
@@ -97,4 +102,4 @@ scripts/verify.sh stop
 - `scripts/verify.test.sh`: browser-free checks of `verify.sh` itself, with the dev server and agent-browser stubbed. Run it after changing `verify.sh`; CI runs it too.
 - `scripts/install-beta-sdk.sh`: installs the beta SDK packages with `--no-save`. CI calls it without `OSRS_SDK_PACKS`, so it builds from the pinned commit.
 
-The `assets` stage skips extraction when `public/osrs-assets/manifest.json` already contains `npc-16677` from `openrs2:2746`. The boss's P4 poses come from the presentation recipe in `OcellusTimings.ts`; a pose added there is extracted on the next rebuild. Delete `public/osrs-assets/` to force a rebuild. Extracted assets are never committed.
+The `assets` stage skips extraction when `public/osrs-assets/manifest.json` already contains `npc-16677` and a player model for every item the asset config declares, from `openrs2:2746`. The boss's P4 poses come from the presentation recipe in `OcellusTimings.ts`; a pose added there is extracted on the next rebuild. The trainer's gear item ids come from the gear recipe in the same file. Delete `public/osrs-assets/` to force a rebuild. Extracted assets are never committed.

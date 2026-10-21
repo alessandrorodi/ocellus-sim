@@ -1,3 +1,4 @@
+import type { TwistedBow } from "osrs-sdk";
 import type { Cycle, Mechanic, Seed, Special, TickSpan, Tile, TransitionKind, VoidKind } from "./P4Types";
 import { cycle, seed, span, tile } from "./P4Types";
 
@@ -138,6 +139,54 @@ type BossPose =
 
 type PresentationRecipe = Readonly<{ bossPoses: Readonly<Record<BossPose, Selected<number>>> }>;
 
+type StyleBonuses = Readonly<{ stab: number; slash: number; crush: number; magic: number; range: number }>;
+export type ItemStats = Readonly<{
+  attack: StyleBonuses;
+  defence: StyleBonuses;
+  other: Readonly<{ meleeStrength: number; rangedStrength: number; magicDamage: number; prayer: number }>;
+}>;
+type TrainerItem = Readonly<{ itemId: Selected<number>; stats: Selected<ItemStats> }>;
+
+export const GEAR_SLOTS = ["weapon", "helmet", "chest", "legs", "gloves", "cape", "necklace", "feet", "ring", "ammo"] as const;
+export type GearSlot = (typeof GEAR_SLOTS)[number];
+export type GearKeys = Readonly<{
+  weapon: "twistedBow" | "scytheOfVitur" | "tonalzticsOfRalos";
+  helmet: "voidRangerHelm" | "inquisitorsGreatHelm";
+  chest: "eliteVoidTop" | "inquisitorsHauberk";
+  legs: "eliteVoidRobe" | "inquisitorsPlateskirt";
+  gloves: "voidKnightGloves" | "ferociousGloves";
+  cape: "dizanasQuiver" | "infernalCape";
+  necklace: "necklaceOfAnguish" | "amuletOfTorture";
+  feet: "pegasianBoots" | "primordialBoots";
+  ring: "venatorRing" | "ultorRing";
+  ammo: "dragonArrows";
+}>;
+export type Setup = Readonly<{ [S in GearSlot]: GearKeys[S] }>;
+export type TrainerItemKey =
+  | "voidRangerHelm"
+  | "eliteVoidTop"
+  | "eliteVoidRobe"
+  | "voidKnightGloves"
+  | "inquisitorsGreatHelm"
+  | "inquisitorsHauberk"
+  | "inquisitorsPlateskirt"
+  | "tonalzticsOfRalos";
+type InquisitorPiece = "inquisitorsGreatHelm" | "inquisitorsHauberk" | "inquisitorsPlateskirt";
+type RangedStrengthPrayer = "Sharp Eye" | "Hawk Eye" | "Eagle Eye" | "Deadeye" | "Rigour";
+export type StanceSpeeds<T extends number = TickSpan> = Readonly<{ rapidSpeed: T; otherSpeed: T }>;
+
+type GearRecipe = Readonly<{
+  items: Readonly<Record<TrainerItemKey, TrainerItem>>;
+  twistedBow: Selected<StanceSpeeds<TwistedBow["attackSpeed"]>>;
+  ralos: Selected<StanceSpeeds & Readonly<{ range: number; longrangeRange: number; hits: number; hitMaxFraction: number }>>;
+  division: Selected<Readonly<{ energy: number; accuracyFactor: number; defenceDrainOfMagic: number }>>;
+  eliteVoid: Selected<Readonly<{ accuracy: number; damage: number }>>;
+  inquisitorCrushPerMille: Selected<Readonly<Record<InquisitorPiece, number>>>;
+  rangedStrengthPrayers: Selected<Readonly<Record<RangedStrengthPrayer, number>>>;
+  scytheStance: Selected<"jab">;
+  specialWeapon: Selected<GearKeys["weapon"]>;
+}>;
+
 const BOSS: BossRecipe = {
   npcId: selected(16677, "inferred", "unscaled", "tfa_ocellus_p3, the only combat form after phase 2; live level 1601 differs from cache 1197 (C7)", cache("npc 16677"), BOSS_PAGE),
   size: selected(3, "spec-confirmed", "unscaled", "3x3 marker in both clips", cache("npc 16677 size"), vod("V1", "G29"), vod("V2", "k44")),
@@ -240,6 +289,47 @@ const PRESENTATION: PresentationRecipe = {
   },
 };
 
+const OSRS_WIKI = "https://oldschool.runescape.wiki/w/";
+const MAX_RANGED_HIT = wiki(`${OSRS_WIKI}Maximum_ranged_hit`, 15199053);
+const RANGED_ACCURACY = wiki(`${OSRS_WIKI}Damage_per_second/Ranged`, 14906132);
+const VOID_SET = wiki(`${OSRS_WIKI}Void_Knight_equipment`, 15363192);
+const INQUISITOR_SET = wiki(`${OSRS_WIKI}Inquisitor%27s_armour`, null);
+const TWISTED_BOW_PAGE = wiki(`${OSRS_WIKI}Twisted_bow`, 15363157);
+const RALOS_PAGE = wiki(`${OSRS_WIKI}Tonalztics_of_ralos`, 15368852);
+const SCYTHE_PAGE = wiki(`${OSRS_WIKI}Scythe_of_Vitur`, 15372833);
+
+type Five = readonly [stab: number, slash: number, crush: number, magic: number, range: number];
+const stats = (attack: Five, defence: Five, other: readonly [meleeStrength: number, rangedStrength: number, magicDamage: number, prayer: number]): ItemStats => ({
+  attack: { stab: attack[0], slash: attack[1], crush: attack[2], magic: attack[3], range: attack[4] },
+  defence: { stab: defence[0], slash: defence[1], crush: defence[2], magic: defence[3], range: defence[4] },
+  other: { meleeStrength: other[0], rangedStrength: other[1], magicDamage: other[2], prayer: other[3] },
+});
+const item = (itemId: number, page: string, oldid: number, itemStats: ItemStats): TrainerItem => ({
+  itemId: selected(itemId, "spec-single", "unscaled", "infobox item id", wiki(`${OSRS_WIKI}${page}`, oldid)),
+  stats: selected(itemStats, "spec-single", "unscaled", "infobox combat bonuses", wiki(`${OSRS_WIKI}${page}`, oldid)),
+});
+
+const GEAR: GearRecipe = {
+  items: {
+    voidRangerHelm: item(11664, "Void_ranger_helm", 15260468, stats([0, 0, 0, 0, 0], [6, 6, 6, 6, 6], [0, 0, 0, 0])),
+    eliteVoidTop: item(13072, "Elite_void_top", 15260476, stats([0, 0, 0, 0, 0], [45, 45, 45, 45, 45], [0, 0, 0, 3])),
+    eliteVoidRobe: item(13073, "Elite_void_robe", 15260481, stats([0, 0, 0, 0, 0], [30, 30, 30, 30, 30], [0, 0, 0, 3])),
+    voidKnightGloves: item(8842, "Void_knight_gloves", 15304461, stats([0, 0, 0, 0, 0], [6, 6, 6, 4, 6], [0, 0, 0, 0])),
+    inquisitorsGreatHelm: item(24419, "Inquisitor%27s_great_helm", 15352822, stats([0, 0, 10, -5, -5], [19, 10, 21, 0, 12], [6, 0, 0, 1])),
+    inquisitorsHauberk: item(24420, "Inquisitor%27s_hauberk", 15352823, stats([0, 0, 16, -11, -10], [67, 55, 71, 0, 35], [4, 0, 0, 2])),
+    inquisitorsPlateskirt: item(24421, "Inquisitor%27s_plateskirt", 15352824, stats([0, 0, 12, -9, -5], [42, 30, 49, 0, 22], [2, 0, 0, 2])),
+    tonalzticsOfRalos: item(28922, "Tonalztics_of_ralos", 15368852, stats([0, 0, 0, 0, 115], [0, 0, 0, 0, 0], [0, 55, 0, 2])),
+  },
+  twistedBow: selected({ rapidSpeed: 5, otherSpeed: 6 }, "spec-single", "unscaled", "attack speed by stance: 5 ticks on Rapid, 6 on Accurate and Longrange", TWISTED_BOW_PAGE),
+  ralos: selected({ rapidSpeed: span(6), otherSpeed: span(7), range: 7, longrangeRange: 9, hits: 2, hitMaxFraction: 0.75 }, "spec-single", "unscaled", "charged, one-handed thrown: two independent hits, each 0 to 75% of the max ranged hit", RALOS_PAGE),
+  division: selected({ energy: 50, accuracyFactor: 1.5, defenceDrainOfMagic: 0.125 }, "spec-single", "unscaled", "+50% accuracy; each hit that deals damage lowers Defence by 12.5% of Magic (10% before 2026-07-22) and, on NPCs, before the second roll; the drain applies as each glaive lands, so a hit the target rejects drains nothing (inferred); rounding not stated, floored (inferred)", RALOS_PAGE),
+  eliteVoid: selected({ accuracy: 1.1, damage: 1.125 }, "spec-single", "unscaled", "void ranger helm, gloves, elite top and robe; each factor is floored on the effective ranged level it scales, accuracy and strength", VOID_SET, MAX_RANGED_HIT, RANGED_ACCURACY),
+  inquisitorCrushPerMille: selected({ inquisitorsGreatHelm: 5, inquisitorsHauberk: 10, inquisitorsPlateskirt: 10 }, "spec-single", "unscaled", "crush accuracy and damage per piece; the 2026-07-22 update moved the 1% set bonus onto the hauberk and plateskirt", wiki(`${OSRS_WIKI}Inquisitor%27s_hauberk`, 15352823), wiki(`${OSRS_WIKI}Inquisitor%27s_plateskirt`, 15352824), INQUISITOR_SET),
+  rangedStrengthPrayers: selected({ "Sharp Eye": 1.05, "Hawk Eye": 1.1, "Eagle Eye": 1.15, Deadeye: 1.18, Rigour: 1.23 }, "spec-single", "unscaled", "prayer bonus to effective ranged strength", MAX_RANGED_HIT),
+  scytheStance: selected("jab", "spec-single", "unscaled", "Jab is the scythe's crush style; the owner wants the Scythe setup on crush", SCYTHE_PAGE, owner("melee setup")),
+  specialWeapon: selected("tonalzticsOfRalos", "assumption", "unscaled", "owner: players tend to use Ralos to spec the boss", owner("special attack weapon")),
+};
+
 const PRACTICE = owner("practice one mechanic at a time; a drill option, not game data");
 const drill = (first: Mechanic, ...rest: Mechanic[]): Selected<Focus> =>
   selected<Focus>({ kind: "drill", mechanics: [first, ...rest] }, "assumption", "unscaled", "the cycle runs in full; only these mechanics act", PRACTICE);
@@ -256,7 +346,20 @@ export const OCELLUS_P4 = {
   rifts: RIFTS,
   geometry: GEOMETRY,
   presentation: PRESENTATION,
+  gear: GEAR,
   choices: {
+    setup: choice("ranged", {
+      ranged: selected<Setup>(
+        { weapon: "twistedBow", helmet: "voidRangerHelm", chest: "eliteVoidTop", legs: "eliteVoidRobe", gloves: "voidKnightGloves", cape: "dizanasQuiver", necklace: "necklaceOfAnguish", feet: "pegasianBoots", ring: "venatorRing", ammo: "dragonArrows" },
+        "assumption", "unscaled", "owner-named full elite void with void gloves, ranger helm and Twisted Bow; arrows, cape, neck, feet and ring are SDK items (assumption); the default because the first void's Deflect Melee leaves ranged open",
+        owner("ranged setup"),
+      ),
+      melee: selected<Setup>(
+        { weapon: "scytheOfVitur", helmet: "inquisitorsGreatHelm", chest: "inquisitorsHauberk", legs: "inquisitorsPlateskirt", gloves: "ferociousGloves", cape: "infernalCape", necklace: "amuletOfTorture", feet: "primordialBoots", ring: "ultorRing", ammo: "dragonArrows" },
+        "assumption", "unscaled", "owner-named Inquisitor's armour with the Scythe of Vitur on crush; gloves, cape, neck, feet and ring are SDK items (assumption)",
+        owner("melee setup"),
+      ),
+    }),
     bossMaxHp: choice("footage-fit", {
       "footage-fit": selected(5420, "inferred", "team-4-and-5", "9820 at 4 and 12020 at 5 is 2200 per player plus 1020, at the 2-player scale solo uses", vod("V1", "HUD 9820"), vod("V2", "HUD 12020"), SOLO_SCALE),
       cache: selected(5250, "spec-confirmed", "unscaled", "cache hitpoints; matched neither team bar", cache("npc 16677 stats")),
@@ -335,6 +438,7 @@ function resolveChoices(lookup: (name: ChoiceName) => string | undefined, reject
     return new ResolvedChoice(name, fallback);
   };
   return {
+    setup: pick("setup"),
     bossMaxHp: pick("bossMaxHp"),
     entryHpFraction: pick("entryHpFraction"),
     explosions: pick("explosions"),

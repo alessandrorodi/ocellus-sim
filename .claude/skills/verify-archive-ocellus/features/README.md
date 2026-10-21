@@ -41,3 +41,4 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Click to walk](./click-to-walk.md) covers walking the player to a clicked floor tile.
 - [Credit line](./credit-line.md) covers the Fan Content Policy credit that must stay visible.
 - [P4 cycle](./p4-cycle.md) covers the boss, the lead-in, the 60-tick cycle's stages and overheads, the fight log and the drill focus control.
+- [Loadouts](./loadouts.md) covers the ranged and melee setups, inventory switches, Ralos's Division special attack and the setup control.

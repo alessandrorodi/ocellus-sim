@@ -1,4 +1,4 @@
-import type { ResolvedChoices } from "./OcellusTimings";
+import type { GearSlot, ResolvedChoices } from "./OcellusTimings";
 
 declare const brand: unique symbol;
 type Brand<B extends string> = number & { readonly [brand]: B };
@@ -125,9 +125,17 @@ export type RunState =
   | Readonly<{ kind: "running"; tick: Tick; phase: Phase }>
   | Readonly<{ kind: "ended"; at: Tick; reason: RunEnd }>;
 
+type EquipmentSlot = GearSlot | "offhand";
+type LoadoutSnapshot = Readonly<{
+  equipped: Readonly<Record<EquipmentSlot, number | null>>;
+  inventory: readonly (number | null)[];
+  specialEnergy: number;
+}>;
+
 export type FightSnapshot = Readonly<{
   run: RunState;
-  boss: Readonly<{ npcId: number; hp: number; maxHp: number; visible: boolean }>;
+  boss: Readonly<{ npcId: number; hp: number; maxHp: number; visible: boolean; defence: number }>;
+  player: LoadoutSnapshot;
 }>;
 
 export type FightLog = Readonly<{ header: Readonly<{ seed: Seed; choices: ResolvedChoices }>; rows: readonly TickRow[] }>;

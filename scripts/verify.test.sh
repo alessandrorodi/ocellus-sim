@@ -5,8 +5,8 @@ SCRIPT="$(cd "$(dirname "$0")" && pwd)/verify.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-eval "$(grep -E '^(DRILL_QUERY|BOSS_NPC|SPAWN_TILE|WALK_CLICK_RIGHT_PX|WALK_CLICK_DOWN_PX|WALK_TARGET_TILE|CYCLE_[A-Z_]+|FOCUS_[A-Z_]+|CREDIT_LINE)=' "$SCRIPT")"
-for fn in json process_start serve state doctor stop probe fight_tick_at_least drive_lead_in drive_walk drive_cycle drive_focus drive release_browser stage_browser; do
+eval "$(grep -E '^(DRILL_QUERY|BOSS_NPC|SPAWN_TILE|WALK_CLICK_RIGHT_PX|WALK_CLICK_DOWN_PX|WALK_TARGET_TILE|CYCLE_[A-Z_]+|FOCUS_[A-Z_]+|LOADOUT_[A-Z_]+|CREDIT_LINE)=' "$SCRIPT")"
+for fn in json process_start serve state doctor stop probe fight_tick_at_least drive_lead_in drive_walk drive_cycle drive_focus click_at click_inventory_slot drive_loadouts drive release_browser stage_browser; do
   eval "$(sed -n "/^${fn}() {\$/,/^}\$/p" "$SCRIPT")"
 done
 
@@ -105,6 +105,23 @@ fixture_logs() {
   ' "$T" "$inner_void_tick" "$focus"
 }
 
+loadout_snapshot() {
+  local n worn="$LOADOUT_RANGED_WORN" energy=100 defence=250
+  n=$(($(cat "$T/loadout-probes" 2>/dev/null || echo 0) + 1))
+  echo "$n" >"$T/loadout-probes"
+  case "$n:$LOADOUT" in
+    2:unswitched) ;;
+    2:* | 4:*) worn="$LOADOUT_MELEE_WORN" ;;
+    3:unspent) worn="$LOADOUT_MELEE_WORN" ;;
+    3:two-drains) worn="$LOADOUT_MELEE_WORN" energy=50 defence=176 ;;
+    3:three-drains) worn="$LOADOUT_MELEE_WORN" energy=50 defence=139 ;;
+    3:*) worn="$LOADOUT_MELEE_WORN" energy=50 defence=213 ;;
+  esac
+  # agent-browser returns object keys sorted, unlike the literals in verify.sh.
+  worn="$(command node -e 'const v = JSON.parse(process.argv[1]); console.log(JSON.stringify(Object.fromEntries(Object.entries(v).sort())))' "$worn")"
+  printf '{"data":{"result":{"boss":{"defence":%s},"player":{"equipped":%s,"specialEnergy":%s}}}}\n' "$defence" "$worn" "$energy"
+}
+
 fake_browser() {
   FINAL_TILE="$1"
   SCREENSHOT="${2:-ok}"
@@ -112,8 +129,10 @@ fake_browser() {
   LEAD_IN_FIGHT="${5:-}" PRESENT_FIGHT="${6:-}"
   [[ -n "$LEAD_IN_FIGHT" ]] || LEAD_IN_FIGHT='{"run":{"kind":"running","tick":1},"boss":{"npcId":16677,"visible":false}}'
   [[ -n "$PRESENT_FIGHT" ]] || PRESENT_FIGHT='{"run":{"kind":"running","tick":70},"boss":{"npcId":16677,"visible":true}}'
+  LOADOUT="${7:-ok}"
   ab() {
     case "$*" in
+      "--json eval window.__archiveOcellusProbe.snapshot().fight") loadout_snapshot ;;
       "--json eval window.__archiveOcellusProbe.snapshot()")
         local n tile='{"x":10,"y":10}' tick=8 fight="$LEAD_IN_FIGHT"
         n=$(($(cat "$T/evals" 2>/dev/null || echo 0) + 1))
@@ -200,6 +219,31 @@ boss_never_drawn_fails() {
   grep -q '"bossDrawnOncePresent": false' "$T/drive.log" || { echo "the presence check did not name the failure"; cat "$T/drive.log"; return 1; }
 }
 
+loadout_not_switched_fails() {
+  setup
+  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' unswitched
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the inventory clicks changed no gear"; return 1; fi
+  grep -q '"switchesWornByClick": false' "$T/drive.log" || { echo "the switch check did not name the failure"; cat "$T/drive.log"; return 1; }
+}
+
+division_not_spent_fails() {
+  setup
+  fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' unspent
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although Division never fired"; return 1; fi
+  grep -q '"divisionSpentHalfTheBar": false' "$T/drive.log" || { echo "the special attack check did not name the failure"; cat "$T/drive.log"; return 1; }
+  grep -q '"divisionDrainedBossDefence": false' "$T/drive.log" || { echo "the Defence check did not name the failure"; cat "$T/drive.log"; return 1; }
+}
+
+division_extra_drains_fail() {
+  local drains
+  for drains in three-drains two-drains; do
+    setup
+    fake_browser '{"x":13,"y":11}' ok 8 "$FOCUS_DRILL" '' '' "$drains"
+    if drive >"$T/drive.log" 2>&1; then echo "drive passed with ${drains} from seed 1's one damaging glaive"; return 1; fi
+    grep -q '"divisionDrainedBossDefence": false' "$T/drive.log" || { echo "the Defence check did not name the ${drains} failure"; cat "$T/drive.log"; return 1; }
+  done
+}
+
 failed=0
 for t in \
   refused_serve_does_not_stop_the_recorded_instance \
@@ -214,7 +258,10 @@ for t in \
   focus_not_applied_fails \
   boss_drawn_in_lead_in_fails \
   lead_in_captured_after_the_hidden_ticks_fails \
-  boss_never_drawn_fails; do
+  boss_never_drawn_fails \
+  loadout_not_switched_fails \
+  division_not_spent_fails \
+  division_extra_drains_fail; do
   if ("$t") >"$WORK/$t.log" 2>&1; then
     echo "PASS $t"
   else

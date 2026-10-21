@@ -52,7 +52,7 @@ export function startDrill(options: DrillOptions = {}) {
     walkTo(x: number, y: number) {
       player().moveTo(x, y);
     },
-    pray(name: "Protect from Magic" | "Protect from Range" | "Protect from Melee") {
+    pray(name: "Protect from Magic" | "Protect from Range" | "Protect from Melee" | "Piety") {
       player().prayerController.findPrayerByName(name).toggle(player());
     },
     hit(from: Unit, to: Unit, damage: number) {

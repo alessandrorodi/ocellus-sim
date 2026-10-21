@@ -51,14 +51,17 @@ function createTrainer() {
   return { trainer, config };
 }
 
+const SETUP_KEYS = Object.keys(OCELLUS_P4.choices.setup.options);
 const FOCUS_KEYS = Object.keys(OCELLUS_P4.choices.focus.options);
 const label = (key: string) => key.charAt(0).toUpperCase() + key.slice(1).replace(/-/g, " ");
 
 function DrillControls({ config }: Readonly<{ config: DrillConfig }>) {
+  const [setup, setSetup] = useState<string>(config.choices.setup.key);
   const [focus, setFocus] = useState<string>(config.choices.focus.key);
   const [seed, setSeed] = useState(String(config.seed));
   const restart = () => {
     const url = new URL(window.location.href);
+    url.searchParams.set("setup", setup);
     url.searchParams.set("focus", focus);
     url.searchParams.set("seed", seed);
     window.location.assign(url.href);
@@ -66,6 +69,12 @@ function DrillControls({ config }: Readonly<{ config: DrillConfig }>) {
 
   return (
     <form id="drill_controls" onSubmit={(event) => { event.preventDefault(); restart(); }}>
+      <label>
+        Setup{" "}
+        <select id="setup" value={setup} onChange={(event) => setSetup(event.target.value)}>
+          {SETUP_KEYS.map((key) => <option key={key} value={key}>{label(key)}</option>)}
+        </select>
+      </label>
       <label>
         Focus{" "}
         <select id="focus" value={focus} onChange={(event) => setFocus(event.target.value)}>

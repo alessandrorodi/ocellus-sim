@@ -1,7 +1,7 @@
 import type { CacheAssets } from "osrs-sdk/asset-manifest";
 import { OCELLUS_P4 } from "./content/ocellus/js/OcellusTimings";
 
-const { boss, presentation } = OCELLUS_P4;
+const { boss, gear, presentation } = OCELLUS_P4;
 
 export const ARCHIVE_OCELLUS_ASSETS = {
   npcs: {
@@ -10,4 +10,5 @@ export const ARCHIVE_OCELLUS_ASSETS = {
       animations: Object.fromEntries(Object.entries(presentation.bossPoses).map(([pose, sequence]) => [pose, sequence.value])),
     },
   },
+  items: Object.fromEntries(Object.entries(gear.items).map(([key, item]) => [key, { id: item.itemId.value }])),
 } as const satisfies CacheAssets;
