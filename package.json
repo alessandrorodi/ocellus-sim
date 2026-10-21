@@ -1,0 +1,40 @@
+{
+  "name": "archive-ocellus-trainer",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A free practice simulator for phase 4 of the Ocellus fight in The Fractured Archive.",
+  "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Julian-Dasilva/ArchiveOcellusTrainer.git"
+  },
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "start": "webpack serve --mode development",
+    "build": "webpack --mode production",
+    "test": "jest",
+    "assets": "osrs-sdk-assets build"
+  },
+  "devDependencies": {
+    "@types/jest": "^27.4.1",
+    "@types/node": "16.4.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@types/three": "^0.163.0",
+    "copy-webpack-plugin": "^9.0.1",
+    "jest": "^27.5.1",
+    "ts-jest": "^27.1.4",
+    "ts-loader": "^9.5.1",
+    "typescript": "^4.9.5",
+    "webpack": "^5.91.0",
+    "webpack-cli": "^4.9.2",
+    "webpack-dev-server": "^3.11.3"
+  },
+  "dependencies": {
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "three": "^0.163.0"
+  }
+}
