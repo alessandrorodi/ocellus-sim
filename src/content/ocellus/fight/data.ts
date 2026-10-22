@@ -273,8 +273,9 @@ export const P2 = {
   lineDamage: range(19, 25),
   /**
    * A volley lands on the tile d out from its portal at speed x d - speed client cycles (30 to a tick): 6 for the
-   * lit portals, 5 for the all-twelve volley. [R] Each tile is judged as the volley reaches it, so running through
-   * the wave skips it, as with the Wardens' skulls in Tombs of Amascut. [owner, from the reference VOD]
+   * lit portals, 5 for the all-twelve volley. [R] Each tile is judged on the tick the volley is over it, so running
+   * through the wave skips it, as with the Wardens' skulls in Tombs of Amascut. [O] J R V's "Ocellus P2 Portal Skip"
+   * (youtube c4PSUxjNUiY): stand 6 out diagonally, click 4 out one tick before the volley.
    */
   lineCyclesPerTile: 6,
   crossfireCyclesPerTile: 5,
@@ -314,9 +315,12 @@ export const P3 = {
   basicHitUnprotected: range(12, 19),
   slashAfter: 6,
   slashDamage: range(25, 28),
-  slashLength: 5,
+  /** The shadow slash and Insolence: 3 tiles wide, to the platform edge. [V] duo 20:24, Bubba OSRS guide 4:56 [W] */
+  waveWidth: 3,
   spinLoopEvery: 3,
   spinDamage: range(15, 27),
+  /** "Severing your prayer!" locks protection prayers this long: back on 3 ticks later in [V] duo 18:53-18:55. */
+  severTicks: 3,
   volleyDamage: range(20, 26),
   patchDamage: range(6, 7),
   patchLasts: range(21, 51),
@@ -328,7 +332,6 @@ export const P3 = {
   insolenceSlashes: 3,
   insolenceEvery: 5,
   insolenceDamage: range(39, 41),
-  insolenceWidth: 4,
   insolenceDebrisLasts: 16,
   riftHp: 44,
   riftLasts: 12,
@@ -347,14 +350,14 @@ export const P3 = {
     slamAfterDamage: range(18, 19),
     /** The purple-bordered zone under him: his 3x3 plus two tiles. [W] */
     zoneRing: 2,
-    /** "You've been injured and can't use protection prayers!" during Untether. [V] */
-    prayerDisableTicks: 8,
     obliteration: 31,
     escapeLine: 42,
     gone: 44,
     nextSegment: 48,
   },
   hpFloors: [0.75, 0.5, 0.25],
+  /** A threshold reached between attacks still collapses the quadrant within this many ticks. [V] duo 18:20-18:26 */
+  collapseWithin: 10,
   jumpTicks: 2,
 } as const;
 

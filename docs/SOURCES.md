@@ -25,11 +25,18 @@ Where every timing, damage number and id in the full-fight simulator comes from.
 ## Decisions where the sources disagree or are silent
 
 - **Phase 2 skip.** [R] gives the volley's flight (the tile d out lands at 6d - 6 client cycles; 5 for the
-  all-twelve volley) but not how hits are judged. Per [O], each tile is judged as the volley reaches it, so running
-  through the wave skips it, as with the Wardens' skulls in Tombs of Amascut.
-- **Quadrant falls.** [R]'s two fights collapse 31 ticks after Untether with his HP already at the floor. [W] and [O]
-  say the quadrant only falls once he is at 75 / 50 / 25%: the sim collapses after Untether if he is there, otherwise
-  he lands, repeats the quadrant's rotation and collapses on the hit that reaches it.
+  all-twelve volley) but not how hits are judged. Per [O] each tile is judged on the tick the volley is over it
+  (tiles 1-5 the firing tick, 6-10 the next), so running through the wave skips it, as with the Wardens' skulls in
+  Tombs of Amascut. That reproduces [J R V's skip](https://www.youtube.com/watch?v=c4PSUxjNUiY): stand 6 out
+  diagonally, click 4 out one tick before each volley.
+- **Quadrant falls.** [R]'s two fights collapse 31 ticks after Untether with his HP already at the floor. [W], [O]
+  and the duo's HP bar ([V], 18:20-18:26, 20:42-20:43, 23:21) say the quadrant falls once his whole-number HP% shows
+  75 / 50 / 25 (under 76% and so on), at his next attack. Untether comes once a quadrant; a slow kill loops the
+  rest of the rotation.
+- **The spin.** Each saw forms a tick before it cuts; an overhead up as it forms is severed ("Ocellus disrupts your
+  concentration, severing your prayer!") and locked for 3 ticks ([V] duo 18:53-18:55). Flick: off as it forms, on
+  for the cut. One saw per quadrant destroyed, plus one.
+- **Shadow slash and Insolence.** A band 3 tiles wide to the platform edge ([V] duo 20:24, Bubba OSRS guide 4:56).
 - **Tendrils.** [R] recorded 3-5 per blocked line; [W] heals you after the last tendril; [O] says they shouldn't hurt.
   The sim shows the chips and gives them back at the explosion (and at the middle's strike).
 - **"Your panic... is futile..."** [R] recorded it at fixed ticks; [W] says it is his answer to a tank out of melee
@@ -44,5 +51,4 @@ Where every timing, damage number and id in the full-fight simulator comes from.
   shot per 24 meter, as [R]'s engine guesses.
 - What Deflect Melee / Deflect Range send back.
 - The Void Rift's "empower" buff.
-- How long "You've been injured and can't use protection prayers!" locks your overheads (the sim: 8 ticks).
 - The censers: [W] reads the Bandosian and Armadylean ones as style-specific max hits; the sim gives any style one.

@@ -52,9 +52,13 @@ function firedTiles(portal: Portal, q: Quadrant): ATile[] {
 
 const CYCLES_PER_TICK = 30;
 
-/** Ticks after firing until a volley at `cyclesPerTile` reaches the tile d out. */
+/**
+ * The tick, counted from the firing tick, on which a volley at `cyclesPerTile` is over the tile d out: tiles 1-5 the
+ * firing tick, 6-10 the next, 11-12 the one after. That is what makes J R V's skip work: stand 6 out, click 4 out
+ * one tick before the volley, and the wave misses you on both ticks.
+ */
 function reachTick(d: number, cyclesPerTile: number): number {
-  return Math.ceil((cyclesPerTile * d - cyclesPerTile) / CYCLES_PER_TICK);
+  return Math.floor((cyclesPerTile * d - cyclesPerTile) / CYCLES_PER_TICK);
 }
 
 export class Phase2 implements PhaseScript {
