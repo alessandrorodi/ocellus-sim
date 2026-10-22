@@ -1,35 +1,121 @@
+<div align="center">
+
 # Ocellus Simulator
 
-A free practice simulator for **Ocellus**, the final boss of The Fractured Archive (Raid 4), covering **all four phases**
-in one fight, with the game's own models, animations, effects and sounds.
+**Practise the whole Ocellus fight from The Fractured Archive (Raid 4), all four phases, in your browser.**
 
-This is a fork of [ArchiveOcellusTrainer](https://github.com/Julian-Dasilva/ArchiveOcellusTrainer) by Julian-Dasilva,
-which drills phase 4. It keeps that drill (`?mode=p4drill`) and adds phases 1 to 3, the transitions between them, and the
-interface around the fight. It is built on [osrs-sdk](https://github.com/OldSchoolSDK/osrs-sdk), the engine behind
-[colosim.com](https://colosim.com) (Sol Heredit) and [infernotrainer.com](https://www.infernotrainer.com).
+[**▶ Play it at ocellus-sim.vercel.app**](https://ocellus-sim.vercel.app)
 
-**Status:** playable start to finish. Timings come from a tick-exact analysis of six recorded fights; some damage
-numbers and a few rules are still unknown and are marked as such in [docs/SOURCES.md](docs/SOURCES.md).
+[![Play](https://img.shields.io/badge/play-ocellus--sim.vercel.app-1fb5a8)](https://ocellus-sim.vercel.app)
+[![Licence: GPL-3.0](https://img.shields.io/badge/licence-GPL--3.0-blue)](LICENSE)
+[![Follow @alrodi on X](https://img.shields.io/badge/follow-%40alrodi-000000?logo=x)](https://x.com/alrodi)
+
+![Phase 2: ten portals lit purple, one orange gap on each arm, the player running to where the gaps' lines cross](docs/screenshots/phase2-portals.jpg)
+
+</div>
+
+Ocellus is drawn from the game's own models, animations, effects and sounds, extracted from the OSRS cache at build
+time. His attacks follow a tick-by-tick analysis of recorded kills. No download and no account: open the link and
+fight.
+
+> Created using intellectual property belonging to Jagex Limited under the terms of Jagex's Fan Content Policy. This
+> content is not endorsed by or affiliated with Jagex.
+
+## What's in it
+
+- **All four phases in one fight**, with the transformations between them, or start at any phase.
+- **Game assets**: cache models and animations for every body he takes, the phase 2 portals, rifts, the vine, his
+  spells, and the sounds each animation plays.
+- **Prayer that matters**: shots are checked against your overhead when they land, his own overheads block your
+  style, and turning on a protection prayer as he starts to spin gets you "injured".
+- **Practice tools**: danger-tile highlighting, community tile markers, a no-death practice mode, HP scaling for
+  1-5 raiders, ranged and melee setups, and seeds you can replay.
+- **Phase 4 drills**: Julian-Dasilva's original phase 4 trainer, kept as `?mode=p4drill`.
 
 ## The fight
 
-| Phase | What happens | What to do |
-|---|---|---|
-| **1 · Corners** (2,500 HP, teal bar) | He walks corner to corner under Protect from Melee, firing fire (ranged) or water (magic) volleys every 5 ticks. At each corner, 7 crack lines grow toward him, then he explodes. At 66% and 25% he teleports to the middle for four beats of diagonal cracks and a final strike. | Pray Missiles or Magic; the prayer is checked when the shot lands. Stand on closing cracks, or each one feeds his yellow meter and heals him; a full meter turns "Death... awaits..." into "Embrace... annihilation...". Be 3+ tiles away when he explodes. |
-| **2 · The Blade** (5,250 HP pool, green bar) | A fixed 131-tick script. 24 portals make a "+" wall. Three rounds: lit (purple) portals fire across their rows every 5 ticks, the orange gaps mark the safe 2x2, then pools and an orange escape portal before all twelve fire. | Attack The Blade; stand on the crossing of the gaps; take the floor portal to the next quadrant. |
-| **3 · Quadrants** | The "+" becomes chasms crossed by stepping stones. Three segments, each ending with the destruction of your quadrant: melee triples and the shadow slash, spins, void bombs, "Your panic... is futile...", the Void Vine, "Insolence...", rifts, Untether, then Obliteration. | Protect from Melee for the swings, then step out of the slash. Turn your overhead **off** when he starts to spin (or "You've been injured and can't use protection prayers!"), then Protect from Melee for the saw blades. Break the vine. For Untether, stand inside the purple zone for the eruption and step out before the slam. Jump the stones before the quadrant falls. |
-| **4 · Last quadrant** | A 60-tick loop: inner void + Deflect Melee, a wind that halves your HP, six personal explosions, a hybrid attack under Soul Split, then outer void + Deflect Range and the same again. | Range from outside the 5x5, then melee inside it. Take your lifeforce orb back. Step a tile each time an explosion marks you. Match the hybrid's tell. |
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/phase1-corner.jpg" alt="Phase 1: crack lines growing toward Ocellus at a corner"></td>
+<td>
 
-The sidebar lets you start at any phase, scale his HP for 1-5 raiders, switch between the ranged and melee setups,
-highlight danger tiles, show community tile markers, and practise without dying. Sound is on by default.
+**Phase 1 · Corners** (2,500 HP, teal bar)
+
+He walks corner to corner under Protect from Melee, firing fire (ranged) or water (magic) volleys. At each corner
+seven crack lines grow toward him: stand on them as they close, or each one heals him and fills his yellow meter. Then
+he explodes. At 66% and 25% he teleports to the middle for diagonal cracks and a strike that grows with the meter.
+
+</td>
+</tr>
+<tr>
+<td>
+
+**Phase 2 · The Blade** (5,250 HP pool, green bar)
+
+A fixed 131-tick script. Twenty-four portals form a "+". Every five ticks ten of the twelve portals around your
+quadrant light purple; the one orange portal left on each arm marks the safe spot, where their two lines cross. Then
+pools, an orange floor portal to the next quadrant, and all twelve fire at once.
+
+</td>
+<td><img src="docs/screenshots/phase2-escape.jpg" alt="Phase 2: all twelve portals lit, pools on the floor, the player stepping onto the escape portal"></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/phase3-stones.jpg" alt="Phase 3: the player safe across the chasm while the old quadrant collapses under Obliteration"></td>
+<td>
+
+**Phase 3 · Quadrants**
+
+The "+" breaks into chasms with stepping stones. Three segments, each ending with your quadrant falling into the
+void: melee triples and the shadow slash, spins, void bombs, "Your panic... is futile...", the Void Vine,
+"Insolence...", rifts, and Untether. Jump the stones before the floor goes.
+
+</td>
+</tr>
+<tr>
+<td>
+
+**Phase 4 · Last quadrant**
+
+A 60-tick loop: inner void and Deflect Melee, a wind that halves your HP, personal explosions, a hybrid attack under
+Soul Split, then outer void and Deflect Range. Take your lifeforce orb back before he does.
+
+</td>
+<td><img src="docs/screenshots/phase4-void.jpg" alt="Phase 4: the inner void under Ocellus"></td>
+</tr>
+</table>
+
+<p align="center"><img src="docs/screenshots/sidebar.jpg" alt="The sidebar: start phase, team size, setup, practice options and phase tips" width="80%"></p>
+
+## Options
+
+Everything is in the sidebar, and each option is also a URL parameter, so a setup can be shared as a link:
+
+| Parameter | Values | |
+|---|---|---|
+| `phase` | `1`-`4` | where the fight starts |
+| `party` | `1`-`5` | scales his HP (1 and 2 raiders share the same HP) |
+| `setup` | `ranged`, `melee` | your gear |
+| `tiles` | `0`, `1` | highlight danger and safe tiles |
+| `markers` | `0`, `1` | community tile markers |
+| `vine` | `0`, `1` | solo rule: attack your own vine |
+| `practice` | `0`, `1` | you can't die |
+| `seed` | a number | replay the same fight |
+| `mode` | `p4drill` | the original phase 4 trainer |
+
+## How accurate is it?
+
+Timings come from MRobertEvers' RSProx analysis of six recorded fights, matched to the tick, plus the OSRS Wiki and
+ShadowStalkerTM's duo kill for the visuals. Some damage numbers and a few rules are still unknown, and the arena floor
+is drawn by hand because the cache's map data is encrypted. [docs/SOURCES.md](docs/SOURCES.md) lists every source and
+every open question. If something doesn't match the game, open an issue with a clip or a tick count.
 
 ## Development
 
-Requires Node 22 and Git Bash on Windows.
+Requires Node 22 and, on Windows, Git Bash.
 
 ```sh
 npm ci
-scripts/install-beta-sdk.sh   # beta osrs-sdk packages, installed without saving; rerun after any npm ci
+scripts/install-beta-sdk.sh   # the beta osrs-sdk packages, installed without saving; rerun after any npm ci
 npm run assets -- --cache-dir <openrs2 cache dir> --reader-path <osrscachereader checkout>
 npm start                     # http://127.0.0.1:8002
 ```
@@ -37,11 +123,10 @@ npm start                     # http://127.0.0.1:8002
 `npm run assets` downloads OpenRS2 cache 2746 (213 MB, once) and extracts every model, animation, effect and sound the
 fight uses into `public/osrs-assets/`, which is never committed. The cache reader is
 [Julian-Dasilva/osrscachereader](https://github.com/Julian-Dasilva/osrscachereader) at `8ba9131`.
-`scripts/patch-sdk-assets.mjs` fixes the beta asset tool on Windows and lets it skip sounds the cache does not ship.
+`scripts/patch-sdk-assets.mjs` fixes the beta asset tool on Windows and lets it skip sounds the cache doesn't ship.
 
-Useful URL parameters: `phase=1..4`, `party=1..5`, `setup=ranged|melee`, `seed=<n>`, `tiles=0|1`, `markers=0|1`,
-`vine=0|1`, `practice=0|1`, and `mode=p4drill` for the original phase 4 drill. The browser console exposes
-`__ocellus` (`state()`, `pray("magic")`, `walk(x, z)`, `click(x, z)`, `bossHp(0.5)`, `speed(ms)`) for testing.
+The browser console exposes `__ocellus` for testing: `state()`, `pray("magic")`, `walk(x, z)`, `click(x, z)`,
+`bossHp(0.5)` and `speed(ms)`.
 
 ### Code map
 
@@ -53,33 +138,34 @@ src/content/ocellus/fight/
   phase1.ts .. phase4.ts   one script per phase
   arena.ts        the room: engraved floor, cliffs, stepping stones, censers, torches
   effects.ts      cache spotanims on tiles, danger-tile overlay, void floor
-  portals.ts      phase 2's portal flames
+  portals.ts      phase 2's portals, the game's own objects
   units.ts        Ocellus's bodies, the vine and rifts, the player
   bossBar.ts      the game's teal-then-green boss bar with the phase 1 meter
-src/FightApp.tsx  the page: HUD, chatbox, sidebar, result panel
+src/FightApp.tsx  the page: HUD, chatbox, sidebar, loading splash, result panel
 ```
 
-## Deploy
+### Deploying
 
-The site is a static `dist/`, deployed on Vercel from this repository: every push to `main` builds and goes live.
-`vercel.json` sets the build to `scripts/vercel-build.sh`, which installs the pinned beta SDK and cache reader, downloads
-OpenRS2 cache 2746, extracts the assets and runs webpack (about five minutes cold). The hashed asset payloads are served
-as immutable. A manual deploy from a logged-in [Vercel CLI](https://vercel.com/docs/cli) is `npm run deploy`.
+The site is a static `dist/` on Vercel, built from this repository: every push to `main` goes live.
+`scripts/vercel-build.sh` installs the pinned beta SDK and cache reader, downloads the cache, extracts the assets and
+runs webpack (about four minutes). The hashed model files are served as immutable.
 
-## Credit
+## Credits
 
-Created using intellectual property belonging to Jagex Limited under the terms of Jagex's Fan Content Policy. This
-content is not endorsed by or affiliated with Jagex.
+- **Julian-Dasilva**: [ArchiveOcellusTrainer](https://github.com/Julian-Dasilva/ArchiveOcellusTrainer), the phase 4
+  trainer this grew from, and the cache reader fork.
+- **ShadowStalkerTM**: [Duo The Fractured Archive | OSRS Raid 4](https://www.youtube.com/watch?v=HAgq_qg0OIY), the
+  reference fight.
+- **MRobertEvers**: the RSProx tick analysis in
+  [oldschool-clientc](https://github.com/MRobertEvers/oldschool-clientc).
+- **OldSchoolSDK / Supalosa**: [osrs-sdk](https://github.com/OldSchoolSDK/osrs-sdk), the engine behind
+  [colosim.com](https://colosim.com) and [infernotrainer.com](https://www.infernotrainer.com).
+- **The OSRS Wiki editors**: [Ocellus](https://oldschool.runescape.wiki/w/Ocellus).
+- **Jagex**: every game asset. No game files are stored in this repository; they are extracted from the cache when
+  the site builds.
 
-Game models are extracted from the game cache at build time; none are stored in this repository.
-
-- Phase 4 and the trainer scaffolding come from Julian-Dasilva's
-  [ArchiveOcellusTrainer](https://github.com/Julian-Dasilva/ArchiveOcellusTrainer).
-- The reference fight is ShadowStalkerTM's
-  [Duo The Fractured Archive | OSRS Raid 4](https://www.youtube.com/watch?v=HAgq_qg0OIY).
-- Fight timings come from MRobertEvers' RSProx analysis and the OSRS Wiki; see [docs/SOURCES.md](docs/SOURCES.md).
-- The engine is [osrs-sdk](https://github.com/OldSchoolSDK/osrs-sdk).
+Made by [@alrodi](https://x.com/alrodi). Follow for updates and new sims.
 
 ## Licence
 
-GPL-3.0, as the upstream trainer and osrs-sdk. See [LICENSE](LICENSE).
+GPL-3.0, like the trainer it forks and osrs-sdk. See [LICENSE](LICENSE).

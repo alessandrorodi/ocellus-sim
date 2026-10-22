@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { CacheRender, ControlPanelController, Settings, SoundCache, Trainer, TrainerInstance, Viewport } from "osrs-sdk";
-import type { Player, Region, TrainerLoadingState } from "osrs-sdk";
-import { DefaultSidebar, GameOverlay, RuneScapeButton, TrainerApp } from "osrs-sdk-react";
+import type { Player, Region, SettingsSnapshot, TrainerLoadingState } from "osrs-sdk";
+import { DefaultSidebar, GameOverlay, RuneScapeButton, TrainerApp, useSettingsSnapshot } from "osrs-sdk-react";
 import { dress } from "./content/ocellus/js/OcellusLoadout";
 import { resolveDrill } from "./content/ocellus/js/OcellusTimings";
 import { seed as brandSeed } from "./content/ocellus/js/P4Types";
@@ -21,6 +21,8 @@ window.addEventListener("unhandledrejection", (event) => {
 
 export const CREDIT_LINE =
   "Created using intellectual property belonging to Jagex Limited under the terms of Jagex's Fan Content Policy. This content is not endorsed by or affiliated with Jagex.";
+
+const FOLLOW_URL = "https://x.com/alrodi";
 
 const CREDITS: readonly Readonly<{ who: string; what: string; href: string }>[] = [
   { who: "Julian-Dasilva", what: "ArchiveOcellusTrainer, the phase 4 trainer this grew from", href: "https://github.com/Julian-Dasilva/ArchiveOcellusTrainer" },
@@ -260,6 +262,9 @@ function Result({ fight, params }: Readonly<{ fight: Fight; params: Params }>) {
         <RuneScapeButton type="button" onClick={() => writeParams(params)}>Try again</RuneScapeButton>
         <RuneScapeButton type="button" onClick={() => writeParams(params, false)}>Same seed</RuneScapeButton>
       </div>
+      <p className="fight-result-follow">
+        Updates and new sims: <a href={FOLLOW_URL} target="_blank" rel="noreferrer">@alrodi on X</a>
+      </p>
     </div>
   );
 }
@@ -305,6 +310,39 @@ function SoundToggle() {
       />
       Sound (game audio)
     </label>
+  );
+}
+
+/**
+ * RuneLite's Tile Indicators. The SDK draws all four, but its toggles sit behind "Advanced settings" at the foot of
+ * the sidebar; these apply at once, mid-fight.
+ */
+const TILE_INDICATORS: readonly Readonly<{ label: string; on: (s: SettingsSnapshot) => boolean; set: (on: boolean) => void }>[] = [
+  { label: "Destination tile (where you clicked)", on: (s) => s.targetTileEnabled, set: (on) => Settings.set({ targetTileEnabled: on }) },
+  { label: "True tile (where the server has you)", on: (s) => s.trueTileEnabled, set: (on) => Settings.set({ trueTileEnabled: on }) },
+  { label: "Hovered tile", on: (s) => s.hoveredTileEnabled, set: (on) => Settings.set({ hoveredTileEnabled: on }) },
+  { label: "Player and NPC outlines", on: (s) => s.entityIndicatorEnabled, set: (on) => Settings.set({ entityIndicatorEnabled: on }) },
+];
+
+function TileIndicators() {
+  const settings = useSettingsSnapshot();
+  return (
+    <div className="fight-indicators">
+      <div className="fight-tips-title">Tile indicators</div>
+      {TILE_INDICATORS.map(({ label, on, set }) => (
+        <label key={label} className="fight-check">
+          <input
+            type="checkbox"
+            checked={on(settings)}
+            onChange={(event) => {
+              set(event.target.checked);
+              Settings.notifyChanged();
+            }}
+          />
+          {label}
+        </label>
+      ))}
+    </div>
   );
 }
 
@@ -363,6 +401,8 @@ function Sidebar({ params, fight }: Readonly<{ params: Params; fight: Fight | nu
       <RuneScapeButton type="button" style={{ width: "100%" }} onClick={() => writeParams(draft)}>Start fight</RuneScapeButton>
       <RuneScapeButton type="button" style={{ width: "100%" }} onClick={() => Trainer.reset()}>Restart</RuneScapeButton>
       <hr />
+      <TileIndicators />
+      <hr />
       <div className="fight-tips">
         <div className="fight-tips-title">{`Phase ${phaseNow}`}</div>
         <ul>{TIPS[phaseNow].map((tip) => <li key={tip}>{tip}</li>)}</ul>
@@ -371,6 +411,7 @@ function Sidebar({ params, fight }: Readonly<{ params: Params; fight: Fight | nu
       <RuneScapeButton type="button" style={{ width: "100%" }} onClick={() => ControlPanelController.controller.setActiveControl("SETTINGS")}>Keybinds</RuneScapeButton>
       <RuneScapeButton type="button" style={{ width: "100%" }} onClick={() => window.location.assign(`${window.location.pathname}?mode=p4drill`)}>Phase 4 drills</RuneScapeButton>
       <RuneScapeButton type="button" style={{ width: "100%" }} onClick={() => setCredits((open) => !open)}>Credits & sources</RuneScapeButton>
+      <RuneScapeButton type="button" style={{ width: "100%" }} onClick={() => window.open(FOLLOW_URL, "_blank", "noopener")}>Follow @alrodi on X</RuneScapeButton>
       {credits && (
         <ul className="fight-credits">
           <li>Jagex (all game assets)</li>

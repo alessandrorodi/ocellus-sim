@@ -1,7 +1,11 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
+import { inject } from "@vercel/analytics";
 import { ArchiveOcellusApp } from "./ArchiveOcellusApp";
 import { FightApp } from "./FightApp";
+
+// Vercel Web Analytics: cookieless page views, only on the deployed site.
+if (process.env.NODE_ENV === "production") inject({ mode: "production" });
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root element");
