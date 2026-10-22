@@ -112,6 +112,40 @@
         color: #0000ff;
       }
 
+      .fight-loading {
+        position: absolute;
+        inset: 0;
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-family: "OSRS", sans-serif;
+        font-size: 16pt;
+        color: #ffff00;
+        text-shadow: 1px 1px 0 black;
+        pointer-events: none;
+      }
+
+      .fight-loading-bar {
+        width: min(50%, 420px);
+        height: 14px;
+        background: #282828;
+        border: 1px solid #ffff00;
+      }
+
+      .fight-loading-bar > div {
+        height: 100%;
+        background: #ffff00;
+        transition: width 0.2s linear;
+      }
+
+      .fight-loading-note {
+        font-size: 11pt;
+        color: #c8b88a;
+      }
+
       .fight-result {
         position: absolute;
         top: 30%;
@@ -207,6 +241,10 @@
       .fight-tips li,
       .fight-credits li {
         margin-bottom: 5px;
+      }
+
+      .fight-credits a {
+        color: #ff981f;
       }
 
       @media (max-width: 900px), (max-height: 600px) {

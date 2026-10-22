@@ -4,13 +4,15 @@ import type { Fight, PhaseScript } from "./Fight";
 import { CHAT } from "./Fight";
 import { P2, SEQ, SOUND, SPOT } from "./data";
 import type { ATile, Arm, Quadrant } from "./geometry";
-import { ARM_DIR, MIDDLE, QUADRANT_SIGN, TileSet, at, armsOf, clockwise, inRoom, key, quadrantOf, same, sideOf } from "./geometry";
-import type { PortalLook, PortalTile } from "./portals";
+import { ARM_DIR, MIDDLE, QUADRANT_SIGN, ROOM_DIAGONAL, TileSet, at, armsOf, clockwise, inRoom, key, quadrantOf, same, sideOf } from "./geometry";
+import type { PortalView } from "./portals";
 import { PortalCross } from "./portals";
 import type { Style } from "./units";
 import { Emitter } from "./units";
 
 const PORTALS_PER_ARM = 6;
+/** Each arm's portal rotation, in quarter turns. [R] */
+const ROTATION: Readonly<Record<Arm, number>> = { N: 3, E: 0, S: 1, W: 2 };
 
 type Portal = Readonly<{ arm: Arm; index: number; tiles: readonly [ATile, ATile]; emitter: Emitter }>;
 
@@ -158,14 +160,19 @@ export class Phase2 implements PhaseScript {
     fight.after(P2.allFireAt, () => this.fire(round, true));
   }
 
-  /** Ten of the twelve portals light, a gap on each arm; the gaps' rows and columns cross on the safe 2x2. */
+  /**
+   * Ten of the twelve portals light, a gap on each arm; the gaps' rows and columns cross on the safe 2x2. Gaps g and h
+   * put its inner tile at (2h + 1, 2g + 1), which the octagon's cut corners only keep in the room while g + h <= 7.
+   */
   private light(round: Round): void {
     const { rng } = this.fight;
-    for (const arm of armsOf(round.q)) {
-      const previous = round.gaps.get(arm);
-      const next = previous === undefined ? rng.int(0, PORTALS_PER_ARM - 1) : Math.max(0, Math.min(PORTALS_PER_ARM - 1, previous + rng.int(-2, 2)));
-      round.gaps.set(arm, next);
-    }
+    const pick = (previous: number | undefined, max: number) =>
+      previous === undefined ? rng.int(0, max) : Math.max(0, Math.min(max, previous + rng.int(-2, 2)));
+    const arms = armsOf(round.q);
+    const [first, second] = rng.chance(0.5) ? arms : [arms[1], arms[0]];
+    const gap = pick(round.gaps.get(first), PORTALS_PER_ARM - 1);
+    round.gaps.set(first, gap);
+    round.gaps.set(second, pick(round.gaps.get(second), Math.min(PORTALS_PER_ARM - 1, (ROOM_DIAGONAL - 2) / 2 - gap)));
     round.lit = true;
   }
 
@@ -263,18 +270,10 @@ export class Phase2 implements PhaseScript {
     fight.sound(SOUND.swordDischarge, MIDDLE);
   }
 
-  private portalLooks(): PortalTile[] {
+  private portalLooks(): PortalView[] {
     const round = this.round;
-    const litKeys = new Set<string>();
-    if (round && round.lit) for (const p of this.litPortals(round)) p.tiles.forEach((t) => litKeys.add(key(t)));
-    const out: PortalTile[] = [];
-    for (const portal of this.portals) {
-      for (const tile of portal.tiles) {
-        const look: PortalLook = litKeys.has(key(tile)) ? "lit" : "inactive";
-        out.push({ tile, look });
-      }
-    }
-    return out;
+    const lit = new Set(round && round.lit ? this.litPortals(round) : []);
+    return this.portals.map((portal) => ({ tiles: portal.tiles, rotation: ROTATION[portal.arm], look: lit.has(portal) ? "lit" : "inactive" }));
   }
 
   marks(): readonly TileMark[] {

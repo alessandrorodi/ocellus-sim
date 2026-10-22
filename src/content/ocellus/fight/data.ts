@@ -6,7 +6,7 @@
  *      docs/rsprox-analysis/guthixian_archive/ocellus_plan.md (2026-10-21)
  *  [W] OSRS Wiki, Ocellus and The Fractured Archive/Strategies (2026-10-21)
  *  [G] RuneLite gameval AnimationID / SpotanimID / NpcID (cache 241)
- *  [V] the owner's reference VOD, youtube.com/watch?v=HAgq_qg0OIY (duo, 12:17 kill)
+ *  [V] ShadowStalkerTM, "Duo The Fractured Archive | OSRS Raid 4", youtube.com/watch?v=HAgq_qg0OIY (12:17 kill)
  * Ticks are 600 ms game ticks unless marked cc (20 ms client cycles).
  */
 
@@ -66,6 +66,16 @@ export const SEQ = {
   p3PrayerLoop: 14870,
   p3PrayerOut: 14871,
   p3Death: 14872,
+} as const;
+
+/**
+ * [G] ObjectID tfa_ocellus_quadrant_wall_inactive (62684) and _active (62685), phase 2's portals. Read from cache 2746:
+ * one model each, both looping seq 14830 (vfx_ocellus_p2_portal_idle), 2x1 tiles.
+ */
+export const PORTAL = {
+  inactiveModel: 62758,
+  activeModel: 62757,
+  idle: 14830,
 } as const;
 
 /** [G] SpotanimID */

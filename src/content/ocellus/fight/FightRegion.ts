@@ -1,8 +1,8 @@
-import { CardinalDirection, CollisionType, Entity, LineOfSightMask, Region, SoundCache, cacheSound } from "osrs-sdk";
+import { CacheRenderModel, CacheRenderReferences, CardinalDirection, CollisionType, Entity, LineOfSightMask, Region, SoundCache, cacheSound } from "osrs-sdk";
 import type { Model, Player } from "osrs-sdk";
 import { EmptyModel } from "osrs-sdk";
 import { ArenaFloor } from "./arena";
-import { SOUND } from "./data";
+import { NPC, SOUND } from "./data";
 import { TileMarks, VoidFloor } from "./effects";
 import type { FightOptions, PhaseScript, StartPhase } from "./Fight";
 import { Fight } from "./Fight";
@@ -43,6 +43,9 @@ class FightClock extends Entity {
     return EmptyModel.forRenderable(this);
   }
 }
+
+/** The body he spawns in for each start phase (phase 1's hooded intro wears the phase 1 model). */
+export const START_NPC: Readonly<Record<StartPhase, number>> = { 1: NPC.p1, 2: NPC.p2, 3: NPC.p3, 4: NPC.p3 };
 
 export function makePhase(n: StartPhase, fight: Fight): PhaseScript {
   switch (n) {
@@ -113,6 +116,16 @@ export class FightRegion extends Region {
     Object.values(SOUND).flat().forEach((id) => SoundCache.preload(cacheSound(id)));
     this.listeners.forEach((listener) => listener());
     return { player };
+  }
+
+  /**
+   * He only spawns when the fight starts, after the loading splash, so load his first body with the arena: otherwise
+   * the splash clears onto an empty room and he downloads in front of the player.
+   */
+  override async preload(): Promise<void> {
+    const anchor = this.entities[0];
+    const boss = anchor ? CacheRenderModel.forRenderable(anchor, CacheRenderReferences.npc(START_NPC[this.options.startPhase])).preload() : Promise.resolve();
+    await Promise.all([super.preload(), boss]);
   }
 
   override onGameOver(): void {

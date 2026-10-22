@@ -71,9 +71,14 @@ as immutable. A manual deploy from a logged-in [Vercel CLI](https://vercel.com/d
 Created using intellectual property belonging to Jagex Limited under the terms of Jagex's Fan Content Policy. This
 content is not endorsed by or affiliated with Jagex.
 
-Game models are extracted from the game cache at build time; none are stored in this repository. Phase 4 and the trainer
-scaffolding come from Julian-Dasilva's ArchiveOcellusTrainer. Fight timings come from MRobertEvers' RSProx analysis and
-the OSRS Wiki; see [docs/SOURCES.md](docs/SOURCES.md).
+Game models are extracted from the game cache at build time; none are stored in this repository.
+
+- Phase 4 and the trainer scaffolding come from Julian-Dasilva's
+  [ArchiveOcellusTrainer](https://github.com/Julian-Dasilva/ArchiveOcellusTrainer).
+- The reference fight is ShadowStalkerTM's
+  [Duo The Fractured Archive | OSRS Raid 4](https://www.youtube.com/watch?v=HAgq_qg0OIY).
+- Fight timings come from MRobertEvers' RSProx analysis and the OSRS Wiki; see [docs/SOURCES.md](docs/SOURCES.md).
+- The engine is [osrs-sdk](https://github.com/OldSchoolSDK/osrs-sdk).
 
 ## Licence
 

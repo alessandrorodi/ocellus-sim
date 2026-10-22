@@ -1,5 +1,5 @@
 import type { CacheAssets } from "osrs-sdk/asset-manifest";
-import { NPC, SEQ, SOUND, SPOT } from "./data";
+import { NPC, PORTAL, SEQ, SOUND, SPOT } from "./data";
 
 const p1Seqs = {
   idle: SEQ.p1Idle,
@@ -71,3 +71,9 @@ export const FIGHT_ASSETS = {
   spotAnims: spots(),
   sounds: sounds(),
 } satisfies CacheAssets;
+
+/** Phase 2's portals are scenery, not NPCs, so they come in as bare cache models with their looping idle. */
+export const FIGHT_MODELS = {
+  fightPortalInactive: { id: PORTAL.inactiveModel, animations: { idle: PORTAL.idle } },
+  fightPortalActive: { id: PORTAL.activeModel, animations: { idle: PORTAL.idle } },
+};

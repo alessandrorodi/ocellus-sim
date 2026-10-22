@@ -1,6 +1,6 @@
 import { defineConfig } from "osrs-sdk-assets";
 import { ARCHIVE_OCELLUS_ASSETS, ARCHIVE_OCELLUS_OVERRIDES } from "./src/assets";
-import { FIGHT_ASSETS } from "./src/content/ocellus/fight/assets";
+import { FIGHT_ASSETS, FIGHT_MODELS } from "./src/content/ocellus/fight/assets";
 import { SEQ } from "./src/content/ocellus/fight/data";
 
 // Every declared animation is baked into the NPC's payload as vertex frames, so keep only the ones some code plays:
@@ -21,6 +21,7 @@ export default defineConfig({
   cache: { openrs2: 2746 },
   assets: {
     npcs: { ocellus: DRILL_OCELLUS, ...FIGHT_ASSETS.npcs },
+    models: FIGHT_MODELS,
     items: ARCHIVE_OCELLUS_ASSETS.items,
     spotAnims: { ...ARCHIVE_OCELLUS_ASSETS.spotAnims, ...FIGHT_ASSETS.spotAnims },
     sounds: { ...ARCHIVE_OCELLUS_ASSETS.sounds, ...FIGHT_ASSETS.sounds },

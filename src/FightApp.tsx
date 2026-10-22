@@ -1,14 +1,14 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { CacheRender, ControlPanelController, Settings, SoundCache, Trainer, TrainerInstance, Viewport } from "osrs-sdk";
 import type { Player, Region, TrainerLoadingState } from "osrs-sdk";
-import { DefaultSidebar, GameOverlay, RuneScapeButton, TrainerApp, TrainerLoadingSplash } from "osrs-sdk-react";
+import { DefaultSidebar, GameOverlay, RuneScapeButton, TrainerApp } from "osrs-sdk-react";
 import { dress } from "./content/ocellus/js/OcellusLoadout";
 import { resolveDrill } from "./content/ocellus/js/OcellusTimings";
 import { seed as brandSeed } from "./content/ocellus/js/P4Types";
 import { installBossBar } from "./content/ocellus/fight/bossBar";
 import type { ChatLine, Fight, FightOptions, StartPhase } from "./content/ocellus/fight/Fight";
 import { formatTicks } from "./content/ocellus/fight/Fight";
-import { FightRegion } from "./content/ocellus/fight/FightRegion";
+import { FightRegion, START_NPC } from "./content/ocellus/fight/FightRegion";
 import { fromSdk } from "./content/ocellus/fight/geometry";
 import { keepHoverTextOnCanvas } from "./hoverText";
 
@@ -21,6 +21,14 @@ window.addEventListener("unhandledrejection", (event) => {
 
 export const CREDIT_LINE =
   "Created using intellectual property belonging to Jagex Limited under the terms of Jagex's Fan Content Policy. This content is not endorsed by or affiliated with Jagex.";
+
+const CREDITS: readonly Readonly<{ who: string; what: string; href: string }>[] = [
+  { who: "Julian-Dasilva", what: "ArchiveOcellusTrainer, the phase 4 trainer this grew from", href: "https://github.com/Julian-Dasilva/ArchiveOcellusTrainer" },
+  { who: "ShadowStalkerTM", what: "Duo The Fractured Archive, the reference fight", href: "https://www.youtube.com/watch?v=HAgq_qg0OIY" },
+  { who: "MRobertEvers", what: "RSProx tick analysis of the fight", href: "https://github.com/MRobertEvers/oldschool-clientc" },
+  { who: "OldSchoolSDK", what: "osrs-sdk, the engine", href: "https://github.com/OldSchoolSDK/osrs-sdk" },
+  { who: "OSRS Wiki editors", what: "Ocellus", href: "https://oldschool.runescape.wiki/w/Ocellus" },
+];
 
 type Setup = "ranged" | "melee";
 type Params = FightOptions & Readonly<{ setup: Setup }>;
@@ -102,10 +110,12 @@ function createTrainer() {
 
 /**
  * Ocellus's later bodies are big (each animation is baked as vertex frames: 12 MB for phase 2, 34 MB for phase 3).
- * Fetch them while phase 1 plays so the transformations do not stall; the hashed files are cached as immutable.
+ * Fetch them one at a time once the fight has loaded (his first body loads behind the splash), so the transformations
+ * do not stall; the hashed files are cached as immutable.
  */
 function prefetchLaterPhases(start: StartPhase): void {
-  const ids = start <= 1 ? ["npc-16675", "npc-16677"] : start === 2 ? ["npc-16677"] : [];
+  const later = PHASES.filter((phase) => phase > start).map((phase) => START_NPC[phase]);
+  const ids = [...new Set(later)].filter((npc) => npc !== START_NPC[start]).map((npc) => `npc-${npc}`);
   void CacheRender.bundle().then(async (bundle) => {
     for (const id of ids) {
       try {
@@ -115,6 +125,69 @@ function prefetchLaterPhases(start: StartPhase): void {
       }
     }
   });
+}
+
+type Download = Readonly<{ done: number; total: number }>;
+
+/**
+ * The SDK's splash counts only its own small files, so it sits at 100% while the cache models download. Count those
+ * instead: every effect graphic (each actor model loads them all) and his first body, sized from the manifest.
+ */
+function useFirstDownload(start: StartPhase, active: boolean): Download | null {
+  const [download, setDownload] = useState<Download | null>(null);
+  useEffect(() => {
+    if (!active) return;
+    let observer: PerformanceObserver | null = null;
+    let stopped = false;
+    performance.setResourceTimingBufferSize(2000);
+    void CacheRender.bundle().then((bundle) => {
+      if (stopped) return;
+      const sizes = new Map<string, number>();
+      for (const [id, asset] of Object.entries(bundle.manifest.assets)) {
+        if (id.startsWith("spotanim-") || id === `npc-${START_NPC[start]}`) sizes.set(asset.file, asset.bytes ?? 0);
+      }
+      const total = [...sizes.values()].reduce((sum, bytes) => sum + bytes, 0);
+      const arrived = new Set<string>();
+      let done = 0;
+      observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          const file = entry.name.split("/").pop() ?? "";
+          const bytes = sizes.get(file);
+          if (bytes === undefined || arrived.has(file)) continue;
+          arrived.add(file);
+          done += bytes;
+        }
+        setDownload({ done, total });
+      });
+      observer.observe({ type: "resource", buffered: true });
+      setDownload({ done, total });
+    });
+    return () => {
+      stopped = true;
+      observer?.disconnect();
+    };
+  }, [start, active]);
+  return download;
+}
+
+function LoadingSplash({ state, download }: { state?: TrainerLoadingState; download: Download | null }) {
+  if (state?.status === "ready") return null;
+  const failed = state?.status === "error";
+  const progress = download && download.total > 0 ? Math.min(1, download.done / download.total) : 0;
+  const mb = (bytes: number) => Math.round(bytes / 1e6);
+  return (
+    <div id="trainer-loading" className="fight-loading">
+      <div>{failed ? `Loading failed: ${state?.error?.message ?? "Unknown error"}` : download ? `Loading Ocellus: ${mb(download.done)} / ${mb(download.total)} MB` : "Loading Ocellus"}</div>
+      {!failed && (
+        <>
+          <div className="fight-loading-bar">
+            <div style={{ width: `${progress * 100}%` }} />
+          </div>
+          <div className="fight-loading-note">The game models download once, then your browser keeps them.</div>
+        </>
+      )}
+    </div>
+  );
 }
 
 function useFight(region: FightRegion): Fight | null {
@@ -301,10 +374,11 @@ function Sidebar({ params, fight }: Readonly<{ params: Params; fight: Fight | nu
       {credits && (
         <ul className="fight-credits">
           <li>Jagex (all game assets)</li>
-          <li>Julian-Dasilva, ArchiveOcellusTrainer (phase 4 base)</li>
-          <li>OldSchoolSDK / Supalosa, osrs-sdk</li>
-          <li>MRobertEvers, RSProx fight analysis</li>
-          <li>OSRS Wiki editors</li>
+          {CREDITS.map(({ who, what, href }) => (
+            <li key={href}>
+              {who}, <a href={href} target="_blank" rel="noreferrer">{what}</a>
+            </li>
+          ))}
           <li>Seed {params.seed}</li>
         </ul>
       )}
@@ -317,6 +391,7 @@ export function FightApp() {
   const [loading, setLoading] = useState<TrainerLoadingState>();
   const fight = useFight(region);
   const ready = loading?.status === "ready";
+  const download = useFirstDownload(params.startPhase, !ready);
 
   useEffect(() => {
     if (ready) prefetchLaterPhases(params.startPhase);
@@ -381,7 +456,7 @@ export function FightApp() {
   return (
     <TrainerApp trainer={trainer} onLoadingStateChange={setLoading}>
       <GameOverlay>
-        <TrainerLoadingSplash state={loading} />
+        <LoadingSplash state={loading} download={download} />
         {fight && <Hud fight={fight} />}
         {fight && <Chatbox fight={fight} />}
         {fight && <Result fight={fight} params={params} />}

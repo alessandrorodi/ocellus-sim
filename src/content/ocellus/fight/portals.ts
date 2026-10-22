@@ -1,82 +1,62 @@
 import * as THREE from "three";
-import { CollisionType, Entity, LineOfSightMask, Settings } from "osrs-sdk";
+import { CacheRenderInstancedModel, CacheRenderReferences, CollisionType, Entity, LineOfSightMask, Settings } from "osrs-sdk";
 import type { Location3, Model, Region } from "osrs-sdk";
+import { PORTAL } from "./data";
 import type { ATile } from "./geometry";
 import { key, toSdk } from "./geometry";
 
-export type PortalLook = "inactive" | "lit" | "safe";
-export type PortalTile = Readonly<{ tile: ATile; look: PortalLook }>;
+export type PortalLook = "inactive" | "lit";
+/** One 2x1 portal: its two tiles along the arm, its OSRS rotation in quarter turns, and how it looks now. */
+export type PortalView = Readonly<{ tiles: readonly [ATile, ATile]; rotation: number; look: PortalLook }>;
 
-const COLOURS: Readonly<Record<PortalLook, number>> = {
-  inactive: 0xff9a2e,
-  lit: 0xb455ff,
-  safe: 0xffb347,
-};
+const MODELS: Readonly<Record<PortalLook, number>> = { inactive: PORTAL.inactiveModel, lit: PORTAL.activeModel };
+/** The 2D view's stand-ins: orange while idle or a gap, purple while lit to fire. */
+const COLOURS: Readonly<Record<PortalLook, string>> = { inactive: "#ff9a2e", lit: "#b455ff" };
 
-/** A soft flame-shaped glow, drawn once and tinted per portal. */
-function flameTexture(): THREE.CanvasTexture {
-  const w = 64;
-  const h = 128;
-  const canvas = new OffscreenCanvas(w, h);
-  const ctx = canvas.getContext("2d");
-  if (ctx) {
-    const gradient = ctx.createRadialGradient(w / 2, h * 0.62, 2, w / 2, h * 0.62, w / 2);
-    gradient.addColorStop(0, "rgba(255,255,255,1)");
-    gradient.addColorStop(0.35, "rgba(255,255,255,0.85)");
-    gradient.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.moveTo(w / 2, 2);
-    ctx.bezierCurveTo(w * 0.95, h * 0.35, w * 0.98, h * 0.75, w / 2, h - 4);
-    ctx.bezierCurveTo(w * 0.02, h * 0.75, w * 0.05, h * 0.35, w / 2, 2);
-    ctx.fill();
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
+type Shown = { look: PortalLook; model: CacheRenderInstancedModel };
 
+/** The game's own portal objects, one instanced cache model each, swapped between the inactive and active model. */
 class PortalModel implements Model {
-  private readonly group = new THREE.Group();
-  private readonly texture = flameTexture();
-  private readonly sprites = new Map<string, THREE.Sprite>();
-  private time = 0;
+  private readonly shown = new Map<string, Shown>();
 
-  constructor(private readonly portals: () => readonly PortalTile[]) {}
+  constructor(private readonly cross: PortalCross) {
+    // Load both looks up front so the first lighting doesn't wait on a fetch.
+    for (const id of Object.values(MODELS)) {
+      const warm = CacheRenderInstancedModel.forRenderable(cross, CacheRenderReferences.model(id));
+      void warm.preload().then(() => warm.destroy(new THREE.Scene()));
+    }
+  }
 
-  draw(scene: THREE.Scene, clockDelta: number, tickPercent: number, location: Location3, angleRadians: number, pitchRadians: number, visible: boolean): void {
-    if (this.group.parent !== scene) scene.add(this.group);
-    this.time += clockDelta;
+  draw(scene: THREE.Scene, clockDelta: number, tickPercent: number, _location: Location3, _angle: number, pitchRadians: number, visible: boolean): void {
     const wanted = new Set<string>();
-    for (const { tile, look } of this.portals()) {
-      const k = key(tile);
+    for (const portal of this.cross.portals()) {
+      const k = key(portal.tiles[0]);
       wanted.add(k);
-      let sprite = this.sprites.get(k);
-      if (!sprite) {
-        sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.texture, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
-        const s = toSdk(tile);
-        sprite.position.set(s.x + 0.5, -0.5 + 0.55, s.y - 0.5);
-        this.sprites.set(k, sprite);
-        this.group.add(sprite);
+      let shown = this.shown.get(k);
+      if (shown && shown.look !== portal.look) {
+        shown.model.destroy(scene);
+        shown = undefined;
       }
-      const flicker = 1 + 0.08 * Math.sin(this.time * 7 + tile.x * 1.7 + tile.z * 2.3);
-      sprite.scale.set(0.75 * flicker, 1.25 * flicker, 1);
-      sprite.material.color.setHex(COLOURS[look]);
-      sprite.material.opacity = look === "lit" ? 1 : 0.85;
+      if (!shown) {
+        shown = { look: portal.look, model: CacheRenderInstancedModel.forRenderable(this.cross, CacheRenderReferences.model(MODELS[portal.look])) };
+        this.shown.set(k, shown);
+      }
+      // A 2x1 loc is drawn about the middle of its footprint. The instanced model adds a quarter turn for actors'
+      // facing; a loc's rotation 0 already lies along x, so take it back off.
+      const [a, b] = portal.tiles.map(toSdk);
+      const middle = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: 0 };
+      shown.model.draw(scene, clockDelta, tickPercent, middle, (-(portal.rotation + 1) * Math.PI) / 2, pitchRadians, visible, []);
     }
-    for (const [k, sprite] of this.sprites) {
+    for (const [k, shown] of this.shown) {
       if (wanted.has(k)) continue;
-      this.group.remove(sprite);
-      sprite.material.dispose();
-      this.sprites.delete(k);
+      shown.model.destroy(scene);
+      this.shown.delete(k);
     }
-    this.group.visible = visible;
   }
 
   destroy(scene: THREE.Scene): void {
-    scene.remove(this.group);
-    this.sprites.forEach((sprite) => sprite.material.dispose());
-    this.texture.dispose();
+    this.shown.forEach((shown) => shown.model.destroy(scene));
+    this.shown.clear();
   }
 
   getWorldPosition(): THREE.Vector3 {
@@ -86,9 +66,9 @@ class PortalModel implements Model {
   async preload(): Promise<void> {}
 }
 
-/** Phase 2's "+" of portals: orange while idle or a gap, purple while lit to fire. */
+/** Phase 2's "+" of 24 portals: inactive (orange) while idle or a gap, active (purple) while lit to fire. */
 export class PortalCross extends Entity {
-  constructor(region: Region, private readonly portals: () => readonly PortalTile[]) {
+  constructor(region: Region, readonly portals: () => readonly PortalView[]) {
     super(region, { x: 0, y: 0 });
   }
 
@@ -106,14 +86,16 @@ export class PortalCross extends Entity {
 
   override draw(tickPercent: number, context: OffscreenCanvasRenderingContext2D): void {
     const scale = Settings.tileSize;
-    for (const { tile, look } of this.portals()) {
-      const s = toSdk(tile);
-      context.fillStyle = `#${COLOURS[look].toString(16).padStart(6, "0")}`;
-      context.fillRect((s.x + 0.2) * scale, (s.y + 0.2) * scale, scale * 0.6, scale * 0.6);
+    for (const { tiles, look } of this.portals()) {
+      context.fillStyle = COLOURS[look];
+      for (const tile of tiles) {
+        const s = toSdk(tile);
+        context.fillRect((s.x + 0.2) * scale, (s.y + 0.2) * scale, scale * 0.6, scale * 0.6);
+      }
     }
   }
 
   protected override create3dModel(): Model {
-    return new PortalModel(this.portals);
+    return new PortalModel(this);
   }
 }
