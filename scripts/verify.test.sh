@@ -5,8 +5,8 @@ SCRIPT="$(cd "$(dirname "$0")" && pwd)/verify.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-eval "$(grep -E '^(DRILL_QUERY|BOSS_NPC|SPAWN_TILE|WALK_[A-Z_]+|EDGE_[A-Z_]+|CYCLE_[A-Z_]+|FOCUS_[A-Z_]+|BOSS_CLICK_[A-Z_]+|RING_CLICK_[A-Z_]+|FLOOD_[A-Z_]+|NEAR_SQUARE|VOID_[A-Z_]+|ORB_[A-Z_]+|LOADOUT_[A-Z_]+|EXPLOSION_[A-Z_]+|STEP_CLICK_[A-Z_]+|DODGE_CLICK_[A-Z_]+|UNDER_BOSS_CLICK_[A-Z_]+|MARKER_SHOT_[A-Z_]+|SOUND_[A-Z_]+|SPECIAL_[A-Z_]+|PROTECT_[A-Z_]+|TELL_[A-Z_]+|TRANSITION_[A-Z_]+|LANDING_[A-Z_]+|STYLE_[A-Z_]+|SUPPLY_[A-Z_]+|KEYBIND_[A-Z_]+|RIFT_[A-Z_]+|OVERHEAD_[A-Z_]+|ICON_BOX|NORTH_EAST_RIFT_[A-Z_]+|CHAT_POLL_[A-Z_]+|RISEN_BOSS_[A-Z_]+|DEFLECT_[A-Z_]+|SOUL_SPLIT_[A-Z_]+|KILL_CHAT|WALKWAY_[A-Z_]+|CORNER_[A-Z_]+|HOLES?_[A-Z_]+|CUE_[A-Z_]+|AUTOPLAY_POLICY_JS|CREDIT_LINE)=' "$SCRIPT")"
-for fn in json process_start serve state doctor stop probe fight_tick_at_least canvas_centre click_after_tick shot_after_tick save_sound_settings record_audio_starts record_overhead_draws step_on_marks step_south_and_back_on_marks drive_lead_in drive_walk click_past_the_edge drive_edge drive_flood_shot drive_cycle keep_seed choose_focus drive_focus drive_void_floor drive_void_shot drive_lifeforce_orb drive_explosions drive_transition_attack click_at click_inventory_slot drive_loadouts right_click_inventory_slot drive_supplies bind_inventory_key drive_keybinds drive_overheads_rifts seed_run restart_run drive_seed drive_floor_holes wait_until_ticking walk_by_click drive_walkway drive_corner audio_contexts sound_toggles audio_resumed drive_cues drive release_browser stage_browser; do
+eval "$(grep -E '^(DRILL_QUERY|BOSS_NPC|SPAWN_TILE|WALK_[A-Z_]+|EDGE_[A-Z_]+|CYCLE_[A-Z_]+|FOCUS_[A-Z_]+|BOSS_CLICK_[A-Z_]+|RING_CLICK_[A-Z_]+|FLOOD_[A-Z_]+|NEAR_SQUARE|VOID_[A-Z_]+|ORB_[A-Z_]+|LOADOUT_[A-Z_]+|EXPLOSION_[A-Z_]+|STEP_CLICK_[A-Z_]+|DODGE_CLICK_[A-Z_]+|UNDER_BOSS_CLICK_[A-Z_]+|MARKER_SHOT_[A-Z_]+|SOUND_[A-Z_]+|SPECIAL_[A-Z_]+|PROTECT_[A-Z_]+|TELL_[A-Z_]+|TRANSITION_[A-Z_]+|LANDING_[A-Z_]+|STYLE_[A-Z_]+|SUPPLY_[A-Z_]+|KEYBIND_[A-Z_]+|RIFT_[A-Z_]+|OVERHEAD_[A-Z_]+|ICON_BOX|NORTH_EAST_RIFT_[A-Z_]+|CHAT_POLL_[A-Z_]+|RISEN_BOSS_[A-Z_]+|DEFLECT_[A-Z_]+|DEFENCE_FLOOR_[A-Z_]+|SOUL_SPLIT_[A-Z_]+|KILL_CHAT|WALKWAY_[A-Z_]+|CORNER_[A-Z_]+|HOLES?_[A-Z_]+|CUE_[A-Z_]+|AUTOPLAY_POLICY_JS|CREDIT_LINE)=' "$SCRIPT")"
+for fn in json process_start serve state doctor stop probe fight_tick_at_least canvas_centre click_after_tick shot_after_tick save_sound_settings record_audio_starts record_overhead_draws step_on_marks step_south_and_back_on_marks drive_lead_in drive_walk click_past_the_edge drive_edge drive_flood_shot drive_cycle keep_seed choose_focus drive_focus drive_void_floor drive_void_shot drive_lifeforce_orb drive_explosions drive_transition_attack click_at click_inventory_slot glaives_landed drive_loadouts drive_defence_floor right_click_inventory_slot drive_supplies bind_inventory_key drive_keybinds drive_overheads_rifts seed_run restart_run drive_seed drive_floor_holes wait_until_ticking walk_by_click drive_walkway drive_corner audio_contexts sound_toggles audio_resumed drive_cues drive release_browser stage_browser; do
   eval "$(sed -n "/^${fn}() {\$/,/^}\$/p" "$SCRIPT")"
 done
 
@@ -300,6 +300,9 @@ fixture_logs() {
     ].sort((a, b) => a.tick + a.phase - (b.tick + b.phase));
     fs.writeFileSync(`${dir}/rift-audio.json`, JSON.stringify({ data: { result: riftAudio } }));
     write("deflect-log.json", "rifts", deflectRows);
+    const glaive = (at, requested) => ({ kind: "player-hit-judged", at, style: "ranged", outcome: "passed", requested });
+    const floorGlaives = { 12: [glaive(12, 2), glaive(12, 17)], 18: [glaive(18, 4), glaive(18, fault === "floor-glaive-missed" ? 0 : 5)] };
+    write("defence-floor-log.json", "full-fight", Array.from({ length: 19 }, (_, t) => ({ tick: t, events: floorGlaives[t] ?? [] })));
     const spriteOf = { "deflect-melee": "440-15", "deflect-range": "440-16", "soul-split": "440-11" };
     const draws = Object.fromEntries(Array.from({ length: 80 }, (_, t) => {
       const kept = fault === "overhead-kept" && t === 38 ? "soul-split" : overheadOf(t);
@@ -549,6 +552,10 @@ loadout_snapshot() {
     3:two-drains) worn="$LOADOUT_MELEE_WORN" energy=50 defence=176 ;;
     3:three-drains) worn="$LOADOUT_MELEE_WORN" energy=50 defence=139 ;;
     3:*) worn="$LOADOUT_MELEE_WORN" energy=50 defence=213 ;;
+    5:*) worn="$LOADOUT_RANGED_WORN" energy=100 defence=250 ;;
+    6:*) worn="$LOADOUT_RANGED_WORN" energy=50 defence=176 ;;
+    7:below-floor) worn="$LOADOUT_RANGED_WORN" energy=0 defence=102 ;;
+    7:*) worn="$LOADOUT_RANGED_WORN" energy=0 defence=150 ;;
   esac
   # agent-browser returns object keys sorted, unlike the literals in verify.sh.
   worn="$(command node -e 'const v = JSON.parse(process.argv[1]); console.log(JSON.stringify(Object.fromEntries(Object.entries(v).sort())))' "$worn")"
@@ -735,15 +742,17 @@ fake_browser() {
         [[ ! -e "$T/scenery" ]] || { scenery_probe log; return; }
         [[ ! -e "$T/deflect" ]] || { cat "$T/deflect-log.json"; return; }
         [[ ! -e "$T/rifts" ]] || { cat "$T/rift-log.json"; return; }
+        [[ ! -e "$T/defence-floor" ]] || { cat "$T/defence-floor-log.json"; return; }
         [[ ! -e "$T/special-late" ]] || { cat "$T/special-late-log.json"; return; }
         [[ ! -e "$T/special" ]] || { cat "$T/special-log.json"; return; }
+        [[ ! -e "$T/void-shot" ]] || { cat "$T/void-shot-log.json"; return; }
         [[ ! -e "$T/explosion-under" ]] || { cat "$T/explosion-under-log.json"; return; }
         [[ "$(cat "$T/restarts" 2>/dev/null || echo 0)" -lt 4 ]] || { cat "$T/explosion-log.json"; return; }
         [[ ! -e "$T/orb-skip" ]] || { cat "$T/orb-skip-log.json"; return; }
         case "$(cat "$T/restarts" 2>/dev/null || echo 0)" in
           0) cat "$T/cycle-log.json" ;;
           1) if [[ -e "$T/focus-not-reloaded" ]]; then cat "$T/cycle-log.json"; else cat "$T/focus-log.json"; fi ;;
-          2) if [[ -e "$T/void-shot" ]]; then cat "$T/void-shot-log.json"; else cat "$T/void-log.json"; fi ;;
+          2) cat "$T/void-log.json" ;;
           *) cat "$T/orb-log.json" ;;
         esac
         ;;
@@ -761,6 +770,7 @@ fake_browser() {
       "open "*"${SPECIAL_QUERY}") : >"$T/special" ;;
       "open "*"${DEFLECT_QUERY}") : >"$T/deflect" ;;
       "open "*"${RIFT_QUERY}") : >"$T/rifts" ;;
+      "open "*"${DEFENCE_FLOOR_QUERY}") : >"$T/defence-floor" ;;
       "batch --bail")
         local shot
         for shot in $(command node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>JSON.parse(s).filter((c)=>c[0]==="screenshot").forEach((c)=>console.log(c[1])))'); do
@@ -1031,9 +1041,23 @@ division_extra_drains_fail() {
   for drains in three-drains two-drains; do
     setup
     fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' "$drains"
-    if drive >"$T/drive.log" 2>&1; then echo "drive passed with ${drains} from seed 1's one damaging glaive"; return 1; fi
+    if drive >"$T/drive.log" 2>&1; then echo "drive passed with ${drains} from the loadout seed's one damaging glaive"; return 1; fi
     grep -q '"divisionDrainedBossDefence": false' "$T/drive.log" || { echo "the Defence check did not name the ${drains} failure"; cat "$T/drive.log"; return 1; }
   done
+}
+
+defence_below_the_floor_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' below-floor
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although Division drained the boss to 102"; return 1; fi
+  [[ "$(failed_checks)" == divisionStopsAtDefenceFloor ]] || { echo "expected only divisionStopsAtDefenceFloor to fail, got: $(failed_checks)"; return 1; }
+}
+
+missed_glaive_fails_the_floor() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' floor-glaive-missed
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the last glaive dealt no damage"; return 1; fi
+  [[ "$(failed_checks)" == divisionStopsAtDefenceFloor ]] || { echo "expected only divisionStopsAtDefenceFloor to fail, got: $(failed_checks)"; return 1; }
 }
 
 walk_off_the_edge_fails() {
@@ -1419,6 +1443,8 @@ for t in \
   loadout_not_switched_fails \
   division_not_spent_fails \
   division_extra_drains_fail \
+  defence_below_the_floor_fails \
+  missed_glaive_fails_the_floor \
   item_names_shown_as_null_fail \
   supplies_missing_fail \
   brew_without_heal_fails \

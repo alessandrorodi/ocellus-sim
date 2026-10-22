@@ -56,12 +56,6 @@ function firstAttack(drill: Drill, at: Location, target: Target, maxedHits = Inf
 const RANGED_TARGET: Target = { magic: 300, defence: 0, size: 1 };
 const EAST_OF_SQUARE = { x: 8, y: 3 };
 
-function clickInventory(drill: Drill, cacheItemId: number): void {
-  const item = drill.player().inventory.find((slot) => slot?.cacheItemId === cacheItemId);
-  if (!item) throw new Error(`no inventory item ${cacheItemId}`);
-  item.inventoryLeftClick(drill.player());
-}
-
 describe("U1.5 loadouts", () => {
   test("each setup wears its owner-named items and carries Ralos, the other setup's pieces and the wiki's supplies", () => {
     const loadout = (setup: "ranged" | "melee") => {
@@ -94,7 +88,7 @@ describe("U1.5 loadouts", () => {
   test("the ranged setup's Masori and Zaryte bonuses set each ranged weapon's attack roll and max hit, with no void factor", () => {
     const shot = (ralos: boolean) => {
       const drill = startDrill();
-      if (ralos) clickInventory(drill, 28922);
+      if (ralos) drill.clickInventory(28922);
       const dummy = firstAttack(drill, EAST_OF_SQUARE, RANGED_TARGET);
       drill.dispose();
       return { attackRoll: dummy.attackRolls[0], hits: dummy.received };
@@ -128,7 +122,7 @@ describe("U1.5 loadouts", () => {
   test("the Twisted Bow attacks every 5 ticks on Rapid and 6 otherwise, and Ralos every 6 on Rapid and 7 otherwise", () => {
     const gap = (ralos: boolean, style: AttackStyle) => {
       const drill = startDrill();
-      if (ralos) clickInventory(drill, 28922);
+      if (ralos) drill.clickInventory(28922);
       const weapon = drill.player().equipment.weapon;
       if (!weapon) throw new Error("no weapon worn");
       AttackStylesController.controller.setWeaponAttackStyle(weapon, style);
@@ -150,7 +144,7 @@ describe("U1.5 loadouts", () => {
 
   test("Division spends half the bar, throws both glaives and drains 12.5% of Magic from Defence for each hit", () => {
     const drill = startDrill();
-    clickInventory(drill, 28922);
+    drill.clickInventory(28922);
     drill.player().useSpecialAttack = true;
     const dummy = firstAttack(drill, EAST_OF_SQUARE, { magic: 240, defence: 200, size: 1 });
     expect([dummy.received, dummy.currentStats.defence, drill.region.snapshot()?.player.specialEnergy]).toEqual([[[18, "range"], [18, "range"]], 140, 50]);
@@ -159,7 +153,7 @@ describe("U1.5 loadouts", () => {
 
   test("on an NPC the first glaive's drain lowers the Defence the second glaive rolls against", () => {
     const drill = startDrill({ seed: 1 });
-    clickInventory(drill, 28922);
+    drill.clickInventory(28922);
     drill.player().useSpecialAttack = true;
     const dummy = firstAttack(drill, EAST_OF_SQUARE, { magic: 2400, defence: 600, size: 1 }, 1);
     expect([dummy.received.map(([damage]) => damage > 0), dummy.currentStats.defence]).toEqual([[true, true], 0]);
@@ -168,10 +162,10 @@ describe("U1.5 loadouts", () => {
 
   test("Division drains Ocellus's Defence only for glaives that land damage, so a spec into the invulnerable lead-in drains nothing", () => {
     const spec = (throwAt: number, landedBy: number) => {
-      const drill = startDrill({ seed: 1 });
+      const drill = startDrill({ seed: 4 });
       drill.walkTo({ x: 5, y: 2 });
       drill.tickTo(throwAt);
-      clickInventory(drill, 28922);
+      drill.clickInventory(28922);
       drill.player().useSpecialAttack = true;
       drill.player().setAggro(drill.boss());
       drill.tickTo(landedBy);
@@ -182,7 +176,7 @@ describe("U1.5 loadouts", () => {
     };
     expect([spec(4, 7), spec(9, 12)]).toEqual([
       [["invulnerable", "invulnerable"], 1355, 250, 50],
-      [["passed", "passed"], 1329, 176, 50],
+      [["passed", "passed"], 1340, 176, 50],
     ]);
   });
 });

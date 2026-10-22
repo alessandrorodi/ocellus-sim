@@ -1,5 +1,5 @@
 import { CacheRenderModel, CacheRenderReferences, Mob, Projectile } from "osrs-sdk";
-import type { Model, Region, UnitBonuses } from "osrs-sdk";
+import type { Model, Region, UnitBonuses, UnitStats } from "osrs-sdk";
 import type { DrillConfig } from "../OcellusTimings";
 import { OCELLUS_P4 } from "../OcellusTimings";
 import type { OcellusPlayer } from "../OcellusPlayer";
@@ -57,6 +57,28 @@ type Rift = Readonly<{ id: RiftId; tile: Tile; forCycle: Cycle; mob: VoidRift; h
 
 /** The SDK keeps a delay-1 hitsplat drawn for the tick it lands and the next. */
 const HEAL_SPLAT_TICKS = span(1);
+
+function sdkRangedDefence(): number {
+  const ranged = OCELLUS_P4.boss.rangedDefence.value;
+  const [first, ...rest] = Object.values(OCELLUS_P4.gear.ammunition.value).map((ammunition) => ranged[ammunition]);
+  if (rest.some((value) => value !== first)) throw new Error("the trainer's ammunition classes roll against different ranged defences, and the SDK holds one");
+  return first;
+}
+
+const DEFENCE_BONUSES = { ...OCELLUS_P4.boss.defenceBonuses.value, range: sdkRangedDefence() };
+
+function withDefenceFloor(stats: UnitStats, lowest: number): UnitStats {
+  let defence = stats.defence;
+  return {
+    ...stats,
+    get defence() {
+      return defence;
+    },
+    set defence(value: number) {
+      defence = Math.max(lowest, value);
+    },
+  };
+}
 
 function incomingStyle(attackStyle: string): IncomingStyle {
   switch (attackStyle) {
@@ -138,7 +160,8 @@ export class Ocellus extends Mob {
   enterP4(): void {
     const maxHp = this.config.choices.bossMaxHp.option.value;
     this.stats = { ...OCELLUS_P4.boss.stats.value, hitpoint: maxHp };
-    this.currentStats = { ...this.stats, hitpoint: Math.floor(maxHp * this.config.choices.entryHpFraction.option.value) };
+    const lowestDefence = Math.ceil((this.stats.defence * OCELLUS_P4.boss.lowestDefencePercent.value) / 100);
+    this.currentStats = withDefenceFloor({ ...this.stats, hitpoint: Math.floor(maxHp * this.config.choices.entryHpFraction.option.value) }, lowestDefence);
   }
 
   override mobName(): string {
@@ -156,7 +179,7 @@ export class Ocellus extends Mob {
   override get bonuses(): UnitBonuses {
     return {
       attack: { stab: 0, slash: 0, crush: 0, magic: 0, range: 0 },
-      defence: OCELLUS_P4.boss.defenceBonuses.value,
+      defence: DEFENCE_BONUSES,
       other: { meleeStrength: 0, rangedStrength: 0, magicDamage: 0, prayer: 0 },
     };
   }

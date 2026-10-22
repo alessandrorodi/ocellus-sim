@@ -48,15 +48,21 @@ const DEFLECT_MELEE_SEEN = [vod("V1", "G53, G55 to G57, G109, G115 to G117, G153
 const DEFLECT_RANGE_SEEN = [vod("V1", "G64 to G85 but G74, G124 to G145 but G133, G184 to G186, G189 to G193"), vod("V2", "k79 to k93, k143 to k153, k199, k200, k214 to k217, k259 to k273 but k266")] as const;
 const SOUL_SPLIT_SEEN = [vod("V1", "G58 to G62, G86 to G91, G118 to G122, G146 to G151, G178 to G182"), vod("V2", "k73 to k77, k133 to k136, k161 to k166, k253 to k257")] as const;
 const STRATEGIES = wiki("https://oldschool.runescape.wiki/w/The_Fractured_Archive/Strategies", 15378365);
-const BOSS_PAGE = wiki("https://oldschool.runescape.wiki/w/Ocellus", 15378404);
+const BOSS_PAGE = wiki("https://oldschool.runescape.wiki/w/Ocellus", 15379038);
+const DEFENCE_REDUCTION_TABLE = wiki("https://oldschool.runescape.wiki/w/The_Fractured_Archive/Strategies", 15379033);
+const HOTFIX_NEWS = wiki("https://secure.runescape.com/m=news/the-fractured-archive---out-today?oldschool=1", null);
 const SOLO_SCALE = wiki("https://secure.runescape.com/m=news/the-fractured-archive---everything-you-need-to-know?oldschool=1", null);
+
+type AmmunitionClass = "light" | "standard" | "heavy";
 
 type BossRecipe = Readonly<{
   npcId: Selected<number>;
   size: Selected<number>;
   combatLevel: Selected<number>;
   stats: Selected<Readonly<{ attack: number; strength: number; defence: number; range: number; magic: number }>>;
-  defenceBonuses: Selected<Readonly<{ stab: number; slash: number; crush: number; magic: number; range: number }>>;
+  defenceBonuses: Selected<Readonly<{ stab: number; slash: number; crush: number; magic: number }>>;
+  rangedDefence: Selected<Readonly<Record<AmmunitionClass, number>>>;
+  lowestDefencePercent: Selected<number>;
 }>;
 
 type LeadInRecipe = Readonly<{
@@ -228,6 +234,7 @@ type GearRecipe = Readonly<{
   twistedBow: Selected<StanceSpeeds<TwistedBow["attackSpeed"]>>;
   ralos: Selected<StanceSpeeds & Readonly<{ range: number; longrangeRange: number; hits: number; hitMaxFraction: number }>>;
   division: Selected<Readonly<{ energy: number; accuracyFactor: number; defenceDrainOfMagic: number }>>;
+  ammunition: Selected<Readonly<{ twistedBow: AmmunitionClass; tonalzticsOfRalos: AmmunitionClass }>>;
   inquisitorCrushPerMille: Selected<Readonly<Record<InquisitorPiece, number>>>;
   scytheStance: Selected<"jab">;
   scytheMaxHitsOnOneTarget: Selected<number>;
@@ -238,8 +245,10 @@ const BOSS: BossRecipe = {
   npcId: selected(16677, "inferred", "unscaled", "tfa_ocellus_p3, the only combat form after phase 2; live level 1601 differs from cache 1197 (C7)", cache("npc 16677"), BOSS_PAGE),
   size: selected(3, "spec-confirmed", "unscaled", "3x3 marker in both clips", cache("npc 16677 size"), vod("V1", "G29"), vod("V2", "k44")),
   combatLevel: selected(1601, "footage-repeated", "unscaled", "hover text Attack Ocellus (level-1601)", vod("V1", "frame 3317"), vod("V2", "k44")),
-  stats: selected({ attack: 325, strength: 250, defence: 250, range: 300, magic: 300 }, "spec-confirmed", "unscaled", "may predate the 11:00 UTC hotfix (C7)", cache("npc 16677 stats [325, 250, 250, 5250, 300, 300]")),
-  defenceBonuses: selected({ stab: 150, slash: 100, crush: 30, magic: 200, range: 0 }, "spec-confirmed", "unscaled", "params 5 to 8; the decode has no ranged defence param, taken as 0 (inferred)", cache("npc 16677 params 5, 6, 7, 8")),
+  stats: selected({ attack: 325, strength: 250, defence: 250, range: 300, magic: 300 }, "spec-confirmed", "unscaled", "the wiki's phase 3 infobox, edited after the 21 October hotfix, lists the cache's levels", cache("npc 16677 stats [325, 250, 250, 5250, 300, 300]"), BOSS_PAGE),
+  defenceBonuses: selected({ stab: 150, slash: 100, crush: 30, magic: 200 }, "spec-confirmed", "unscaled", "cache params 5 to 8 match the wiki's phase 3 infobox", cache("npc 16677 params 5, 6, 7, 8"), BOSS_PAGE),
+  rangedDefence: selected({ light: 250, standard: 250, heavy: 250 }, "spec-single", "unscaled", "the wiki's phase 3 infobox; the cache decode has no ranged defence param", BOSS_PAGE),
+  lowestDefencePercent: selected(60, "spec-single", "unscaled", "the 21 October hotfix caps Defence reduction at 60% of the level: phase 3 Defence stops at 150 of 250; how a fractional floor rounds is not stated, rounded up (inferred)", HOTFIX_NEWS, BOSS_PAGE, DEFENCE_REDUCTION_TABLE),
 };
 
 const LEAD_IN: LeadInRecipe = {
@@ -609,6 +618,7 @@ const MASORI_CHAPS_PAGE = wiki(`${OSRS_WIKI}Masori_chaps_(f)`, 15190977);
 const ZARYTE_VAMBRACES_PAGE = wiki(`${OSRS_WIKI}Zaryte_vambraces`, 15190607);
 const RAID_INVENTORY = wiki(`${OSRS_WIKI}The_Fractured_Archive/Strategies`, 15378756);
 const RANGED_SWITCH = wiki(`${OSRS_WIKI}The_Fractured_Archive/Strategies`, 15379033);
+const RANGED_PAGE = wiki(`${OSRS_WIKI}Ranged`, 15373088);
 
 type Five = readonly [stab: number, slash: number, crush: number, magic: number, range: number];
 const stats = (attack: Five, defence: Five, other: readonly [meleeStrength: number, rangedStrength: number, magicDamage: number, prayer: number]): ItemStats => ({
@@ -653,6 +663,7 @@ const GEAR: GearRecipe = {
   twistedBow: selected({ rapidSpeed: 5, otherSpeed: 6 }, "spec-single", "unscaled", "attack speed by stance: 5 ticks on Rapid, 6 on Accurate and Longrange", TWISTED_BOW_PAGE),
   ralos: selected({ rapidSpeed: span(6), otherSpeed: span(7), range: 7, longrangeRange: 9, hits: 2, hitMaxFraction: 0.75 }, "spec-single", "unscaled", "charged, one-handed thrown: two independent hits, each 0 to 75% of the max ranged hit", RALOS_PAGE),
   division: selected({ energy: 50, accuracyFactor: 1.5, defenceDrainOfMagic: 0.125 }, "spec-single", "unscaled", "+50% accuracy; each hit that deals damage lowers Defence by 12.5% of Magic (10% before 2026-07-22) and, on NPCs, before the second roll; the drain applies as each glaive lands, so a hit the target rejects drains nothing (inferred); rounding not stated, floored (inferred)", RALOS_PAGE),
+  ammunition: selected({ twistedBow: "standard", tonalzticsOfRalos: "light" }, "spec-single", "unscaled", "the Twisted Bow fires dragon arrows, and arrows roll against standard ranged defence; Ralos rolls against light", RANGED_PAGE, RALOS_PAGE),
   inquisitorCrushPerMille: selected({ inquisitorsGreatHelm: 5, inquisitorsHauberk: 10, inquisitorsPlateskirt: 10 }, "spec-single", "unscaled", "crush accuracy and damage per piece; the 2026-07-22 update moved the 1% set bonus onto the hauberk and plateskirt", wiki(`${OSRS_WIKI}Inquisitor%27s_hauberk`, 15352823), wiki(`${OSRS_WIKI}Inquisitor%27s_plateskirt`, 15352824), INQUISITOR_SET),
   scytheStance: selected("jab", "spec-single", "unscaled", "Jab is the scythe's crush style; the owner wants the Scythe setup on crush", SCYTHE_PAGE, owner("melee setup")),
   scytheMaxHitsOnOneTarget: selected(3, "spec-single", "unscaled", "one hit per tile of the target's width, up to three: a 1x1 target once, 2x2 twice, 3x3 or larger three times; other 1x1 targets in the 1x3 arc take their own hit", SCYTHE_PAGE),

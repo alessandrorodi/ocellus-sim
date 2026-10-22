@@ -30,7 +30,7 @@ CYCLE_SPECIAL_HITS='[[37,"vortex"],[65,"spike-disk"]]'
 FOCUS_DRILL="transition-attacks"
 FOCUS_LAST_TICK=40
 FOCUS_BEATS='["boss-landing-starts","boss-shouts","soul-split-heal","special-hit","special-sound","special-tell"]'
-LOADOUT_QUERY="?seed=1&setup=ranged"
+LOADOUT_QUERY="?seed=6&setup=ranged"
 LOADOUT_RANGED_WORN='{"weapon":20997,"offhand":null,"helmet":27235,"chest":27238,"legs":27241,"gloves":26235,"cape":28951,"necklace":33639,"feet":31097,"ring":28310,"ammo":11212}'
 LOADOUT_MELEE_WORN='{"weapon":22325,"offhand":null,"helmet":24419,"chest":24420,"legs":24421,"gloves":22981,"cape":21295,"necklace":29801,"feet":31097,"ring":25485,"ammo":11212}'
 LOADOUT_INVENTORY_TAB_X=1164
@@ -49,6 +49,8 @@ LOADOUT_DIVISION_DRAIN=37
 LOADOUT_EQUIPMENT_TAB_X=1197
 LOADOUT_EQUIPMENT_TAB_Y=745
 LOADOUT_TRAINER_ICONS='{"24419":"27x30","24420":"32x24","24421":"16x31","26235":"30x22","27235":"19x27","27238":"30x23","27241":"13x26","28922":"31x28"}'
+DEFENCE_FLOOR_QUERY="?seed=20&setup=ranged"
+DEFENCE_FLOOR_STEPS="[250,176,150]"
 SUPPLY_QUERY="?seed=1&setup=ranged"
 SUPPLY_INVENTORY='[28922,22325,24419,24420,24421,22981,21295,29801,25485,12695,22461,6685,3024,12695,22461,6685,3024,6685,6685,6685,3024,6685,6685,6685,3024,6685,6685,3024]'
 SUPPLY_NAMED_SLOT=0
@@ -559,7 +561,7 @@ drive_focus() {
 
 drive_void_shot() {
   local box
-  ab open "${URL}?seed=1&deflect=none&focus=${VOID_DRILL}" >/dev/null || return 1
+  ab open "${URL}?seed=4&deflect=none&focus=${VOID_DRILL}" >/dev/null || return 1
   ab wait --fn "window.__archiveOcellusProbe?.snapshot().ticking === true && window.__archiveOcellusProbe.snapshot().tick >= 8" \
     --timeout 90000 >/dev/null || { log "the reloaded ${VOID_DRILL} drill never started ticking"; return 1; }
   box="$(ab --json get box "#world")"
@@ -582,6 +584,11 @@ click_at() {
 
 click_inventory_slot() {
   click_at $((LOADOUT_SLOT_X + $1 % 4 * LOADOUT_SLOT_DX)) $((LOADOUT_SLOT_Y + $1 / 4 * LOADOUT_SLOT_DY))
+}
+
+glaives_landed() {
+  ab wait --fn "window.__archiveOcellusProbe.log().rows.flatMap((row) => row.events).filter((event) => event.kind === 'player-hit-judged').length >= $1" \
+    --timeout 15000 >/dev/null
 }
 
 drive_loadouts() {
@@ -614,8 +621,7 @@ drive_loadouts() {
   click_at $(( $(json data.x <<<"$box") + $(json data.width <<<"$box") / 2 + RISEN_BOSS_CLICK_RIGHT_PX )) \
     $(( $(json data.y <<<"$box") + $(json data.height <<<"$box") / 2 + RISEN_BOSS_CLICK_DOWN_PX )) || return 1
   ab wait --fn "window.__archiveOcellusProbe.snapshot().fight.player.specialEnergy < 100" --timeout 15000 >/dev/null || log "the special attack was not spent"
-  ab wait --fn "window.__archiveOcellusProbe.log().rows.flatMap((row) => row.events).filter((event) => event.kind === 'player-hit-judged').length >= 2" \
-    --timeout 15000 >/dev/null || log "the glaives never landed"
+  glaives_landed 2 || log "the glaives never landed"
   probe "snapshot().fight" >"$VERIFY_DIR/loadout-spec.json"
   ab wait 1200 >/dev/null
   ab screenshot "$VERIFY_DIR/loadout-spec.png" >/dev/null || { log "special attack screenshot failed"; return 1; }
@@ -630,6 +636,31 @@ drive_loadouts() {
   fight_tick_at_least 1 120000 || { log "the reloaded melee drill never stepped to P4 tick 1"; return 1; }
   probe "snapshot().fight" >"$VERIFY_DIR/loadout-selector.json"
   ab --json errors | json data.errors >"$VERIFY_DIR/loadout-selector-page-errors.json" || { log "page error capture failed"; return 1; }
+}
+
+drive_defence_floor() {
+  local box
+  ab open "${URL}${DEFENCE_FLOOR_QUERY}" >/dev/null || return 1
+  fight_tick_at_least 9 120000 || { log "the defence floor drill never stepped to P4 tick 9"; return 1; }
+  probe "snapshot().fight" >"$VERIFY_DIR/defence-floor-start.json"
+  click_at "$LOADOUT_INVENTORY_TAB_X" "$LOADOUT_INVENTORY_TAB_Y" || return 1
+  ab wait 600 >/dev/null
+  click_inventory_slot "$LOADOUT_SPECIAL_SLOT" || return 1
+  ab wait 700 >/dev/null
+  click_at "$LOADOUT_SPECIAL_ORB_X" "$LOADOUT_SPECIAL_ORB_Y" || return 1
+  box="$(ab --json get box "#world")"
+  click_at $(( $(json data.x <<<"$box") + $(json data.width <<<"$box") / 2 + RISEN_BOSS_CLICK_RIGHT_PX )) \
+    $(( $(json data.y <<<"$box") + $(json data.height <<<"$box") / 2 + RISEN_BOSS_CLICK_DOWN_PX )) || return 1
+  ab wait --fn "window.__archiveOcellusProbe.snapshot().fight.player.specialEnergy === 50" --timeout 15000 >/dev/null || log "the first Division was not spent"
+  click_at "$LOADOUT_SPECIAL_ORB_X" "$LOADOUT_SPECIAL_ORB_Y" || return 1
+  glaives_landed 2 || log "the first Division's glaives never landed"
+  probe "snapshot().fight" >"$VERIFY_DIR/defence-floor-first.json"
+  glaives_landed 4 || log "the second Division's glaives never landed"
+  probe "snapshot().fight" >"$VERIFY_DIR/defence-floor.json"
+  probe "log()" >"$VERIFY_DIR/defence-floor-log.json"
+  ab screenshot "$VERIFY_DIR/defence-floor.png" >/dev/null || { log "defence floor screenshot failed"; return 1; }
+  ab console >"$VERIFY_DIR/defence-floor-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/defence-floor-page-errors.json" || { log "page error capture failed"; return 1; }
 }
 
 right_click_inventory_slot() {
@@ -990,7 +1021,7 @@ drive() {
   drive_lead_in || return 1
   ab wait --fn "window.__archiveOcellusProbe?.snapshot().ticking === true && window.__archiveOcellusProbe.snapshot().tick >= 8" \
     --timeout 90000 >/dev/null || { log "trainer never started ticking"; return 1; }
-  drive_walk && drive_edge && drive_cycle && drive_focus && drive_void_floor && drive_void_shot && drive_lifeforce_orb && drive_explosions && drive_transition_attack && drive_loadouts && drive_supplies && drive_keybinds && drive_overheads_rifts && drive_seed && drive_floor_holes && drive_walkway && drive_corner && drive_cues || return 1
+  drive_walk && drive_edge && drive_cycle && drive_focus && drive_void_floor && drive_lifeforce_orb && drive_explosions && drive_void_shot && drive_transition_attack && drive_loadouts && drive_defence_floor && drive_supplies && drive_keybinds && drive_overheads_rifts && drive_seed && drive_floor_holes && drive_walkway && drive_corner && drive_cues || return 1
 
   local capture
   for capture in hidden.json hidden.png before.json before.png after.json after.png edge-click.json edge-arrived.json edge.json edge.png boss.png cycle-ring-click.json cycle-snapshot.json cycle.json console.log page-errors.json focus.json focus.png focus-console.log focus-page-errors.json \
@@ -1001,6 +1032,7 @@ drive() {
     special-before.png special-vortex.png special-spike-disk.png special-semicircle.png special-black-disk.png special.json special-console.log special-page-errors.json special-late.json special-audio.json special-late-console.log special-late-page-errors.json \
     loadout-before.json loadout-ranged.png icons.json equipment-ranged.png loadout-after.json loadout-melee.png loadout-spec.json loadout-spec.png equipment-melee.png \
     loadout-console.log loadout-page-errors.json loadout-selector.json loadout-selector-page-errors.json \
+    defence-floor-start.json defence-floor-first.json defence-floor.json defence-floor-log.json defence-floor.png defence-floor-console.log defence-floor-page-errors.json \
     supplies-inventory.json item-menu.json item-menu.png item-menu-closed.json brew-click.json brew-hp.json brew-heal.png supplies-console.log supplies-page-errors.json \
     keybinds-open.json keybinds.png keybinds-bound.json keybinds-saved.json keybinds-old-key.json keybinds-reloaded.json keybinds-reloaded.png keybinds-restored.json keybinds-console.log keybinds-page-errors.json special-heal.png \
     $(printf 'overhead-%s.png ' $OVERHEAD_SHOT_TICKS) overhead-draws.json rift-spawned.png rift-destroyed.png rift-chat.json rift-burst.png rifts.json rift-audio.json rift-console.log rift-page-errors.json \
@@ -1022,7 +1054,7 @@ drive() {
       riftSoundSamples, riftSpawnSounds, riftKillSound, riftBurstSounds, riftSoundWindow, gapDraws, hoverTile, hoverTicks, firstMeleeTick,
       walkwayOrder, walkwayStop, walkwayPixel, walkwayMinShare, cornerHole, cornerNub,
       holeLayout, holePixels, holeFreePixels, holeBoxHalf, holeMinDark, holeMaxDark, holeTile, holeHits, holeDamage,
-      cueSoundSamples, cueSounds, cueSoundWindow, cueChat] = process.argv.slice(1);
+      cueSoundSamples, cueSounds, cueSoundWindow, cueChat, floorSteps] = process.argv.slice(1);
     const fs = require("fs");
     const read = (file) => JSON.parse(fs.readFileSync(`${dir}/${file}`, "utf8"));
     const [hidden, before, after, edgeArrived, edge, errors, cycle, snapshot, focus, focusErrors, voidLog, voidErrors, shot, shotErrors] =
@@ -1039,6 +1071,8 @@ drive() {
       ["walkway-arrived.json", "walkway.json", "walkway-log.json", "corner-hole.json", "corner-hole-log.json", "corner-nub.json", "corner-nub-log.json"].map(read);
     const [seedErrors, walkwayErrors, cornerErrors, cornerViewErrors] = ["seed-page-errors.json", "walkway-page-errors.json", "corner-page-errors.json", "corner-view-page-errors.json"].map(read);
     const [holesLog, holesErrors] = ["holes.json", "holes-page-errors.json"].map(read);
+    const [floorStart, floorFirst, floorLast, floorLog, floorErrors] = ["defence-floor-start.json", "defence-floor-first.json", "defence-floor.json", "defence-floor-log.json", "defence-floor-page-errors.json"].map(read);
+    const floorGlaives = floorLog.rows.flatMap((row) => row.events.filter((event) => event.kind === "player-hit-judged")).slice(0, 4);
     const [keysOpen, keysBound, keysSaved, keysOldKey, keysReloaded, keysRestored, keybindsErrors] = ["keybinds-open.json", "keybinds-bound.json", "keybinds-saved.json", "keybinds-old-key.json", "keybinds-reloaded.json", "keybinds-restored.json", "keybinds-page-errors.json"].map(read);
     const [riftLog, riftChat, riftAudio, riftErrors, deflectLog, deflectErrors, overheadDraws] = ["rifts.json", "rift-chat.json", "rift-audio.json", "rift-page-errors.json", "deflect.json", "deflect-page-errors.json", "overhead-draws.json"].map(read);
     const [cueLog, cueToggleAudio, cueAudio, cueToggleErrors, cueErrors, cueSaved, cueChatBefore, cueChatAfter] =
@@ -1215,6 +1249,10 @@ drive() {
         specialEnergy: [switched.player.specialEnergy, spec.player.specialEnergy],
         bossDefence: [switched.boss.defence, spec.boss.defence],
       },
+      defenceFloor: {
+        bossDefence: [floorStart.boss.defence, floorFirst.boss.defence, floorLast.boss.defence],
+        glaives: floorGlaives.map((event) => [event.at, event.outcome, event.requested]),
+      },
       orb: {
         told: kindOf(orbLog.rows, "lifeforce-told").map((e) => [e.at, e.void]),
         drained: kindOf(orbLog.rows, "lifeforce-drained").map((e) => [e.at, e.receipt.applied, e.receipt.afterHp]),
@@ -1373,6 +1411,7 @@ drive() {
       divisionSpentHalfTheBar: switched.player.specialEnergy === 100 && spec.player.specialEnergy === 50,
       divisionDrainedBossDefence: switched.boss.defence - spec.boss.defence === Number(drain),
       setupSelectorApplied: sameJson(selector.player.equipped, meleeWorn),
+      divisionStopsAtDefenceFloor: sameJson(observed.defenceFloor.bossDefence, floorSteps) && floorGlaives.length === 4 && floorGlaives.every((event) => event.outcome === "passed" && event.requested > 0),
       orbToldAndDrained: sameJson(orb.told, JSON.stringify(expectedOrb.told)) && sameJson(orb.drained, JSON.stringify(expectedOrb.drained)),
       orbSpawnedDormant: sameJson(orb.spawned, JSON.stringify(expectedOrb.spawned)),
       orbClickTargetedOrb: same(orb.clicked, orbTile),
@@ -1444,7 +1483,7 @@ drive() {
       audioResumesOnFirstPointerdown: allIn(cues.contexts.loaded, "suspended") && allIn(cues.contexts.toggled, "running") && allIn(cues.contexts.reloaded, "suspended") && allIn(cues.contexts.clicked, "running"),
       cueSoundsOnSchedule: onSchedule(timedOnly(cues.heard), cueExpected) && cues.heard.every(([, , state]) => state === "running"),
       lifeforceChatOnTell: cues.chat[0] === "" && cues.chat[1] === cueChat && sameJson(cues.told, "[11,42]"),
-      noPageErrors: [errors, focusErrors, voidErrors, shotErrors, orbErrors, orbSkipErrors, explosionErrors, underErrors, specialErrors, lateErrors, loadoutErrors, selectorErrors, suppliesErrors, keybindsErrors, riftErrors, deflectErrors, seedErrors, holesErrors, walkwayErrors, cornerErrors, cornerViewErrors, cueToggleErrors, cueErrors].every((list) => list.length === 0),
+      noPageErrors: [errors, focusErrors, voidErrors, shotErrors, orbErrors, orbSkipErrors, explosionErrors, underErrors, specialErrors, lateErrors, loadoutErrors, selectorErrors, floorErrors, suppliesErrors, keybindsErrors, riftErrors, deflectErrors, seedErrors, holesErrors, walkwayErrors, cornerErrors, cornerViewErrors, cueToggleErrors, cueErrors].every((list) => list.length === 0),
     };
     if (!checks.clickTargetedExpectedTile) {
       console.error(`verify: the click resolved to ${JSON.stringify(after.destination)}, not ${JSON.stringify(targetTile)}; the click-to-tile mapping for this viewport and camera changed`);
@@ -1463,7 +1502,7 @@ drive() {
     "$DEFLECT_HOVER_TILE" "$DEFLECT_HOVER_TICKS" "$DEFLECT_FIRST_MELEE_TICK" \
     "$WALKWAY_ORDER_TILE" "$WALKWAY_STOP_TILE" "$WALKWAY_PIXEL" "$WALKWAY_MIN_SHARE" "$CORNER_HOLE_TILE" "$CORNER_NUB_TILE" \
     "$HOLE_LAYOUT" "$HOLE_PIXELS" "$HOLE_FREE_PIXELS" "$HOLE_BOX_HALF_PX" "$HOLE_MIN_DARK_SHARE" "$HOLE_MAX_DARK_SHARE" "$HOLE_TILE" "$HOLE_HITS" "$HOLE_DAMAGE" \
-    "$CUE_SOUND_SAMPLES" "$CUE_SOUNDS" "$CUE_SOUND_WINDOW" "$CUE_CHAT" >"$VERIFY_DIR/observed.json"
+    "$CUE_SOUND_SAMPLES" "$CUE_SOUNDS" "$CUE_SOUND_WINDOW" "$CUE_CHAT" "$DEFENCE_FLOOR_STEPS" >"$VERIFY_DIR/observed.json"
   local verdict=$?
   cat "$VERIFY_DIR/observed.json"
   return $verdict

@@ -110,6 +110,11 @@ export function startDrill(options: DrillOptions = {}) {
     },
     walkTo,
     pray,
+    clickInventory(cacheItemId: number) {
+      const item = player().inventory.find((slot) => slot?.cacheItemId === cacheItemId);
+      if (!item) throw new Error(`no inventory item ${cacheItemId}`);
+      item.inventoryLeftClick(player());
+    },
     hit(from: Unit, to: Unit, damage: number, style: "typeless" | "slash" | "range" = "typeless", delay = 1) {
       to.addProjectile(new Projectile(null, damage, from, to, style, { setDelay: delay }));
     },
