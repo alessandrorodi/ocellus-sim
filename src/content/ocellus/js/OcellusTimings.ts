@@ -95,7 +95,7 @@ type OverheadRecipe = Readonly<{
   offBeforeVoid: Selected<TickSpan>;
 }>;
 
-type LifeforceRecipe = Readonly<{ tellAfterOnset: Selected<TickSpan>; hitAfterOnset: Selected<TickSpan> }>;
+type LifeforceRecipe = Readonly<{ tellAfterOnset: Selected<TickSpan>; hitAfterOnset: Selected<TickSpan>; tellChat: Selected<string> }>;
 type OrbRecipe = Readonly<{ lastHealAfterHit: Selected<TickSpan> }>;
 type ExplosionRecipe = Readonly<{
   firstMarkAfterHit: TickSpan;
@@ -172,7 +172,7 @@ type BossPose =
 
 export type TransitionSound = "meleeTell" | "meleeHit" | "rangedBeforeHit" | "rangedHit" | "magicWindUp";
 export type TransitionCue = Readonly<{ sound: TransitionSound; afterTell: TickSpan; delayMs: number }>;
-type CueSound = "explosionSeriesStart" | "explosionMark" | TransitionSound;
+type CueSound = "endShout" | "flood" | "explosionSeriesStart" | "explosionMark" | TransitionSound;
 type SoundPlayback = Readonly<{ volume: number; range: number; retain: number }>;
 
 export type SpriteFrame = Readonly<{ archive: number; frame: number }>;
@@ -296,6 +296,7 @@ const DEFLECTS: Readonly<Record<BossOverhead, Selected<Style | null>>> = {
 const LIFEFORCE: LifeforceRecipe = {
   tellAfterOnset: selected(span(3), "footage-repeated", "team-4-and-5", "teal swirl and chat line", vod("V1", "G36, G127"), vod("V2", "k51")),
   hitAfterOnset: selected(span(4), "footage-repeated", "team-4-and-5", "hit 4 ticks after each void forms", vod("V1", "G37, G68, G97, G128, G157, G188"), vod("V2", "k52, k83, k112, k143, k172, k203")),
+  tellChat: selected("Ocellus manipulates your lifeforce!", "footage-repeated", "team-4-and-5", "game chat line on the tell tick, first in the frame that shows the teal swirl", vod("V1", "3:54:02.78, G36"), vod("V2", "5:20:25.87, k51")),
 };
 
 const ORB: OrbRecipe = {
@@ -493,8 +494,25 @@ const LIFEFORCE_ORB: LifeforceOrbRecipe = {
   innerOrbFloor: selected("safe-floor", "footage-repeated", "team-4-and-5", "inner orbs appear off the void", vod("V1", "G39"), vod("V2", "k53")),
   returnAfterStep: selected(span(1), "footage-repeated", "team-4-and-5", "returns exactly the HP that hit took, the tick after the player steps on the orb, and can pass max HP (58 to 114)", vod("V2", "k67 then k68, k95 then k96"), vod("V1", "G51, G79")),
   look: {
-    innerSpawn: spotAnim(4311, "vfx_ocellus_soul_fragment_spawn_12_ticks", "inferred", "inner orb from spawn to glow; 364 client cycles, about 12 ticks"),
-    outerSpawn: spotAnim(4309, "vfx_ocellus_soul_fragment_spawn_6_ticks", "inferred", "outer orb from spawn to glow; 182 client cycles, about 6 ticks"),
+    innerSpawn: selected(
+      4311,
+      "footage-repeated",
+      "unscaled",
+      "inner orb from the lifeforce hit to its glow, 364 client cycles, about 12 ticks; it starts on the hit tick, because its chimes 12621, 12622 and 12623 sit 3.87, 7.8 and 10.8 ticks in and the clips hear them at hit + 3.9, 7.8 and 10.8; the dark orb is first seen 1 to 2 ticks after the hit",
+      cache("spotanim 4311 vfx_ocellus_soul_fragment_spawn_12_ticks, seq 14915 frames 3, 40, 84 and 117"),
+      vod("V1", "3:54:05.93, t15.9"),
+      vod("V2", "5:20:29.03, t15.9; 5:21:09.20, t82.8"),
+      vod("V2", "k53"),
+      vod("V1", "G39"),
+    ),
+    outerSpawn: selected(
+      4309,
+      "footage-repeated",
+      "unscaled",
+      "outer orb from the lifeforce hit to its glow, 182 client cycles, about 6 ticks; it starts on the hit tick, because its chimes 12624, 12621, 12622 and 12623 sit 0.1, 1.7, 3.8 and 5.3 ticks in and the clips hear them at hit + 0.1, 1.7, 3.8 and 5.3, so the last chime plays before the glow",
+      cache("spotanim 4309 vfx_ocellus_soul_fragment_spawn_6_ticks, seq 14913 frames 1, 18, 41 and 57"),
+      vod("V1", "3:54:58.25, t103.1"),
+    ),
     idle: spotAnim(4310, "soul_fragment_idle", "inferred", "the glowing orb, looped"),
     despawn: spotAnim(4312, "soul_fragment_despawn", "inferred", "the orb leaving its tile"),
     tell: spotAnim(4313, "soul_fragment_player_idle", "assumption", "played on the player at the lifeforce tell, where the footage shows a teal swirl; the spec pairs it with the pickup"),
@@ -542,6 +560,8 @@ const PRESENTATION: PresentationRecipe = {
     unleashOut: pose(14861, "phase3_unleash_out", "inferred", "transition attack candidate, 4 ticks"),
   },
   sounds: {
+    endShout: sound(12490, "the \"End...\" shout at t5, three ticks before the first inner void, in both clips; no sequence references it, so the server sends it", vod("V1", "3:53:59.39, t5.0"), vod("V2", "5:20:22.50, t5.0")),
+    flood: sound(12497, "the outer flood at S + 31, five ticks before the floor hurts; heard in 1 V1 and 2 V2 floods, and 4 of 7 floods beat the null; the server sends it", vod("V1", "3:54:55.81, t99.0"), vod("V2", "5:20:42.89, t39.0")),
     explosionSeriesStart: sound(12638, "starts each explosion series, in 5 V1 and 5 V2 voids; no sequence references it, so the server sends it", vod("V1", "3:54:04.77, t14"), vod("V2", "5:20:27.89, t14")),
     explosionMark: sound(12537, "one per explosion mark, six per void every 2 ticks from hit + 5, in 3 V1 and 3 V2 cycles", vod("V1", "3:54:06.58, t17"), vod("V2", "5:20:29.70, t17")),
     meleeTell: sound(12572, "the melee transition tell, in all 5 melee attacks and none of the other 7; no sequence references it, so the server sends it", vod("V1", "3:54:32.45, t60.1")),
@@ -695,10 +715,6 @@ export const OCELLUS_P4 = {
       "replay-v1": selected<SpecialSelection>({ kind: "replay", order: ["black-disk", "black-disk", "spike-disk", "black-disk", "spike-disk"] }, "footage-once", "team-4", "melee, melee, ranged; the last two only look like melee and ranged (Q1)", vod("V1", "G62, G90, G122, G150, G182")),
       "replay-v2": selected<SpecialSelection>({ kind: "replay", order: ["vortex", "spike-disk", "black-disk", "vortex", "spike-disk", "black-disk", "vortex"] }, "footage-once", "team-5", "as V2 ran it", vod("V2", "k77, k105, k137, k165, k197, k225, k257")),
     }),
-    orbSpawnAfterHit: choice("next-tick", {
-      "next-tick": selected(span(1), "footage-once", "team-5", "dark orb on the tick after the hit, per-tick frames", vod("V2", "k53")),
-      "two-ticks": selected(span(2), "footage-once", "team-4", "orb first seen 2 ticks after the hit", vod("V1", "G39")),
-    }),
     unclaimedOuterOrb: choice("heals-boss", {
       "heals-boss": selected<UnclaimedOrbRule>({ kind: "heals-boss", afterHit: span(19) }, "inferred", "team-4-and-5", "three heals 19 ticks after an outer hit; +51 equals a teammate's 51 (C17)", vod("V1", "G147"), vod("V2", "k102, k222")),
       off: selected<UnclaimedOrbRule>({ kind: "off" }, "assumption", "unscaled", "the mechanism is inferred only", vod("V1", "G147")),
@@ -793,7 +809,6 @@ function resolveChoices(lookup: (name: ChoiceName) => string | undefined, reject
     entryHpFraction: pick("entryHpFraction"),
     explosions: pick("explosions"),
     specialSelection: pick("specialSelection"),
-    orbSpawnAfterHit: pick("orbSpawnAfterHit"),
     unclaimedOuterOrb: pick("unclaimedOuterOrb"),
     riftFirstCycle: pick("riftFirstCycle"),
     innerVoidFloor: pick("innerVoidFloor"),

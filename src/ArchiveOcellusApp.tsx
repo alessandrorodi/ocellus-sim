@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { CacheRender, ControlPanelController, Settings, TrainerInstance, TrainerLoadingState, Viewport } from "osrs-sdk";
+import { CacheRender, ControlPanelController, Settings, SoundCache, TrainerInstance, TrainerLoadingState, Viewport } from "osrs-sdk";
 import type { Item } from "osrs-sdk";
-import { GameOverlay, TrainerApp, TrainerLoadingSplash } from "osrs-sdk-react";
+import { GameOverlay, TrainerApp, TrainerLoadingSplash, useSettingsSnapshot } from "osrs-sdk-react";
 import { OcellusRegion } from "./content/ocellus/js/OcellusRegion";
 import type { DrillConfig } from "./content/ocellus/js/OcellusTimings";
 import { OCELLUS_P4, parseDrillRequest } from "./content/ocellus/js/OcellusTimings";
@@ -9,6 +9,8 @@ import type { FightLog, FightSnapshot } from "./content/ocellus/js/P4Types";
 import { keepHoverTextOnCanvas } from "./hoverText";
 
 keepHoverTextOnCanvas();
+// Desktop browsers start the SDK's AudioContext suspended until a user gesture, and the SDK never resumes it.
+window.addEventListener("pointerdown", () => void SoundCache.context?.resume(), { capture: true });
 
 export const CREDIT_LINE =
   "Created using intellectual property belonging to Jagex Limited under the terms of Jagex's Fan Content Policy. This content is not endorsed by or affiliated with Jagex.";
@@ -82,6 +84,7 @@ const label = (key: string) => key.charAt(0).toUpperCase() + key.slice(1).replac
 function DrillControls({ config }: Readonly<{ config: DrillConfig }>) {
   const [setup, setSetup] = useState<string>(config.choices.setup.key);
   const [typedSeed, setTypedSeed] = useState<string | null>(null);
+  const { playsAudio, playsAreaAudio } = useSettingsSnapshot();
   const restart = (focus: string) => {
     const url = new URL(window.location.href);
     url.searchParams.set("setup", setup);
@@ -110,6 +113,12 @@ function DrillControls({ config }: Readonly<{ config: DrillConfig }>) {
       </label>
       <button id="restart" type="submit">Restart</button>
       <button id="keybinds" type="button" onClick={() => ControlPanelController.controller.setActiveControl("SETTINGS")}>Keybinds</button>
+      <label>
+        Sound effects <input id="sound" type="checkbox" checked={playsAudio} onChange={(event) => Settings.set({ playsAudio: event.target.checked })} />
+      </label>
+      <label>
+        Area sounds <input id="area_sound" type="checkbox" checked={playsAreaAudio} onChange={(event) => Settings.set({ playsAreaAudio: event.target.checked })} />
+      </label>
     </form>
   );
 }

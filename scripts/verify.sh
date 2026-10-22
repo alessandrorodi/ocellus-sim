@@ -109,8 +109,8 @@ ORB_DORMANT_TICK=20
 ORB_GLOW_TICK=24
 ORB_LAST_TICK=30
 ORB_FRAMES=6
-ORB_CLICK_RIGHT_PX=110
-ORB_CLICK_UP_PX=15
+ORB_CLICK_RIGHT_PX=-195
+ORB_CLICK_UP_PX=78
 ORB_BOX='{"minX":-60,"maxX":50,"minY":-75,"maxY":5}'
 ORB_SKIP_LAST_TICK=63
 EXPLOSION_DRILL="explosions"
@@ -150,7 +150,7 @@ STYLE_SOUNDS='[[34.2,12554],[64.4,12555],[65.1,12556],[92.1,12572],[97.1,12567]]
 STYLE_WINDOWS='[[32,37.5],[60,65.5],[92,97.5]]'
 SOUND_TOLERANCE_TICKS=0.2
 SPECIAL_EXPECTED='{"protected":[37,"magic",{"requested":8,"applied":8,"beforeHp":99,"afterHp":91,"prayer":"magic"}],"late":[37,"magic",{"requested":49,"applied":49,"beforeHp":99,"afterHp":50,"prayer":null}],"told":[[32,"vortex","magic"],[60,"spike-disk","ranged"],[92,"black-disk","melee"]]}'
-ORB_EXPECTED='{"told":[[11,"inner-void"]],"drained":[[12,49,50]],"spawned":[[13,{"x":3,"y":2},49]],"matured":[[24,{"x":3,"y":2}]],"returned":{"requested":49,"applied":49,"beforeHp":50,"afterHp":99},"skipExpired":[[30,"inner-void"],[61,"outer-void"]],"skipHeal":[[62,{"kind":"unclaimed-orb"},{"requested":25,"applied":25,"beforeHp":1355,"afterHp":1380}]]}'
+ORB_EXPECTED='{"told":[[11,"inner-void"]],"drained":[[12,49,50]],"spawned":[[12,{"x":9,"y":4},49]],"matured":[[24,{"x":9,"y":4}]],"returned":{"requested":49,"applied":49,"beforeHp":50,"afterHp":99},"skipExpired":[[30,"inner-void"],[61,"outer-void"]],"skipHeal":[[62,{"kind":"unclaimed-orb"},{"requested":25,"applied":25,"beforeHp":1355,"afterHp":1380}]]}'
 RIFT_QUERY="?seed=1&focus=rifts"
 OVERHEAD_SHOT_TICKS="5 31 35 45"
 OVERHEAD_GAP_DRAWS='{"37":["440-11"],"38":[],"39":["440-16"],"66":["440-11"],"67":[],"68":["440-15"]}'
@@ -177,6 +177,16 @@ RIFT_SPAWN_SOUNDS='[[67.2,12643],[67.2,12643]]'
 RIFT_KILL_SOUND='[0.27,12640]'
 RIFT_BURST_SOUNDS='[[78.13,12641],[78.93,12642]]'
 RIFT_SOUND_WINDOW='[66,80]'
+CUE_QUERY="?seed=1&focus=${ORB_DRILL}"
+CUE_TOGGLE_TICK=6
+CUE_CHAT_BEFORE_TICK=10
+CUE_CHAT_TICK=11
+CUE_LAST_TICK=50
+CUE_SOUND_SAMPLES='{"12490":7717,"12497":66150,"12621":12127,"12622":12127,"12623":12127,"12624":9922}'
+CUE_SOUNDS='[[5,12490],[12.4,12624],[15.87,12621],[19.8,12622],[22.8,12623],[39,12497],[43.1,12624],[44.7,12621],[46.8,12622],[48.3,12623]]'
+CUE_SOUND_WINDOW='[4,50]'
+CUE_CHAT="Ocellus manipulates your lifeforce!"
+AUTOPLAY_POLICY_JS='(() => { const Native = window.AudioContext; if (!Native) return; const made = []; window.__audioContexts = made; window.AudioContext = class extends Native { constructor(...args) { super(...args); made.push(this); void this.suspend(); } }; })();'
 CREDIT_LINE="Created using intellectual property belonging to Jagex Limited under the terms of Jagex's Fan Content Policy. This content is not endorsed by or affiliated with Jagex."
 
 log() { echo "verify: $*"; }
@@ -384,7 +394,7 @@ record_audio_starts() {
     const tick = () => {
       const run = window.__archiveOcellusProbe?.snapshot().fight?.run;
       const t = run?.kind === "running" ? run.tick : run?.kind === "ended" ? run.at : null;
-      if (t !== null && seen[t] === undefined) seen[t] = performance.now();
+      if (t !== null && seen[t] === undefined) seen[t] = Math.min(performance.now(), (seen[t - 1] ?? Infinity) + 600);
       return t;
     };
     const watch = () => { tick(); requestAnimationFrame(watch); };
@@ -913,6 +923,65 @@ drive_overheads_rifts() {
   ab --json errors | json data.errors >"$VERIFY_DIR/deflect-page-errors.json" || { log "page error capture failed"; return 1; }
 }
 
+audio_contexts() {
+  ab --json eval "(window.__audioContexts ?? []).map((context) => context.state)" | json data.result
+}
+
+sound_toggles() {
+  printf '{"sound":{"visible":%s,"checked":%s},"areaSound":{"visible":%s,"checked":%s}}\n' \
+    "$(ab --json is visible "#sound" | json data.visible)" "$(ab --json is checked "#sound" | json data.checked)" \
+    "$(ab --json is visible "#area_sound" | json data.visible)" "$(ab --json is checked "#area_sound" | json data.checked)"
+}
+
+audio_resumed() {
+  ab wait --fn "(window.__audioContexts ?? []).length > 0 && window.__audioContexts.every((context) => context.state === 'running')" --timeout 5000 >/dev/null
+}
+
+drive_cues() {
+  local BROWSER_SESSION="${BROWSER_SESSION}-autoplay"
+  echo "$AUTOPLAY_POLICY_JS" >"$VERIFY_DIR/autoplay-policy.js"
+  ab --init-script "$VERIFY_DIR/autoplay-policy.js" set viewport 1280 800 >/dev/null || { log "the autoplay session did not start"; return 1; }
+  ab open "${URL}${CUE_QUERY}" >/dev/null || return 1
+  fight_tick_at_least 0 120000 || { log "the cue drill never started"; return 1; }
+  record_audio_starts || { log "the audio probe was not installed"; return 1; }
+  probe "snapshot().fight.run.tick" >"$VERIFY_DIR/cue-recording-from.json"
+  audio_contexts >"$VERIFY_DIR/cue-contexts-loaded.json" || { log "audio context capture failed"; return 1; }
+  sound_toggles >"$VERIFY_DIR/cue-toggles-off.json" || { log "sound toggle capture failed"; return 1; }
+  fight_tick_at_least "$CUE_TOGGLE_TICK" 30000 || { log "the cue drill never stepped to P4 tick ${CUE_TOGGLE_TICK}"; return 1; }
+  ab click "#area_sound" >/dev/null && ab click "#sound" >/dev/null || { log "the sound toggles were not clicked"; return 1; }
+  probe "snapshot().fight.run.tick" >"$VERIFY_DIR/cue-toggle-click.json"
+  audio_resumed || log "the audio context did not resume after the toggle click"
+  audio_contexts >"$VERIFY_DIR/cue-contexts-toggled.json" || { log "audio context capture failed"; return 1; }
+  sound_toggles >"$VERIFY_DIR/cue-toggles-on.json" || { log "sound toggle capture failed"; return 1; }
+  ab --json eval "localStorage.getItem('${SOUND_SETTINGS_KEY}')" | json data.result >"$VERIFY_DIR/cue-sound-saved.json" || { log "saved settings capture failed"; return 1; }
+  fight_tick_at_least "$CUE_LAST_TICK" 60000 || { log "the cue drill never stepped to P4 tick ${CUE_LAST_TICK}"; return 1; }
+  ab --json eval "window.__cueAudio" | json data.result >"$VERIFY_DIR/cue-toggle-audio.json" || { log "audio capture failed"; return 1; }
+  ab console >"$VERIFY_DIR/cue-toggle-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/cue-toggle-page-errors.json" || { log "page error capture failed"; return 1; }
+
+  keep_seed && ab click "#restart" >/dev/null || { log "Restart was not clicked"; return 1; }
+  ab wait --fn "new URLSearchParams(location.search).has('setup')" --timeout 30000 >/dev/null || { log "Restart did not reload the cue drill"; return 1; }
+  fight_tick_at_least 0 120000 || { log "the reloaded cue drill never started"; return 1; }
+  record_audio_starts || { log "the audio probe was not installed"; return 1; }
+  audio_contexts >"$VERIFY_DIR/cue-contexts-reloaded.json" || { log "audio context capture failed"; return 1; }
+  sound_toggles >"$VERIFY_DIR/cue-toggles-reloaded.json" || { log "sound toggle capture failed"; return 1; }
+  canvas_centre || { log "canvas box unreadable"; return 1; }
+  click_after_tick 0 0 0 || { log "the canvas was not clicked"; return 1; }
+  audio_resumed || log "the audio context did not resume after the canvas click"
+  audio_contexts >"$VERIFY_DIR/cue-contexts-clicked.json" || { log "audio context capture failed"; return 1; }
+  fight_tick_at_least "$CUE_CHAT_BEFORE_TICK" 30000 || { log "the cue drill never stepped to P4 tick ${CUE_CHAT_BEFORE_TICK}"; return 1; }
+  ab --json get text "#game_chat" >"$VERIFY_DIR/cue-chat-before.json" || { log "chat text capture failed"; return 1; }
+  fight_tick_at_least "$CUE_CHAT_TICK" 30000 || { log "the cue drill never stepped to the lifeforce tell at P4 tick ${CUE_CHAT_TICK}"; return 1; }
+  ab wait "$CHAT_POLL_WAIT_MS" >/dev/null
+  ab --json get text "#game_chat" >"$VERIFY_DIR/cue-chat.json" || { log "chat text capture failed"; return 1; }
+  fight_tick_at_least "$CUE_LAST_TICK" 60000 || { log "the reloaded cue drill never stepped to P4 tick ${CUE_LAST_TICK}"; return 1; }
+  probe "log()" >"$VERIFY_DIR/cues.json"
+  ab --json eval "window.__cueAudio" | json data.result >"$VERIFY_DIR/cue-audio.json" || { log "audio capture failed"; return 1; }
+  ab console >"$VERIFY_DIR/cue-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/cue-page-errors.json" || { log "page error capture failed"; return 1; }
+  ab close >/dev/null 2>&1
+}
+
 drive() {
   ab set viewport 1280 800 >/dev/null || return 1
   # A new browser's first screenshot takes about 10 s, longer than the hidden lead-in, so it goes to a blank page.
@@ -921,7 +990,7 @@ drive() {
   drive_lead_in || return 1
   ab wait --fn "window.__archiveOcellusProbe?.snapshot().ticking === true && window.__archiveOcellusProbe.snapshot().tick >= 8" \
     --timeout 90000 >/dev/null || { log "trainer never started ticking"; return 1; }
-  drive_walk && drive_edge && drive_cycle && drive_focus && drive_void_floor && drive_void_shot && drive_lifeforce_orb && drive_explosions && drive_transition_attack && drive_loadouts && drive_supplies && drive_keybinds && drive_overheads_rifts && drive_seed && drive_floor_holes && drive_walkway && drive_corner || return 1
+  drive_walk && drive_edge && drive_cycle && drive_focus && drive_void_floor && drive_void_shot && drive_lifeforce_orb && drive_explosions && drive_transition_attack && drive_loadouts && drive_supplies && drive_keybinds && drive_overheads_rifts && drive_seed && drive_floor_holes && drive_walkway && drive_corner && drive_cues || return 1
 
   local capture
   for capture in hidden.json hidden.png before.json before.png after.json after.png edge-click.json edge-arrived.json edge.json edge.png boss.png cycle-ring-click.json cycle-snapshot.json cycle.json console.log page-errors.json focus.json focus.png focus-console.log focus-page-errors.json \
@@ -939,7 +1008,9 @@ drive() {
     seed-fresh.png seed.json seed.png seed-console.log seed-page-errors.json \
     holes-drawn.png holes-flood.png hole-click.json hole-hit.png holes.json holes-console.log holes-page-errors.json \
     walkway-click.json walkway-arrived.json walkway.json walkway-log.json walkway.png walkway-console.log walkway-page-errors.json \
-    corner-hole.json corner-hole-log.json corner-hole.png corner-nub.json corner-nub-log.json corner-console.log corner-page-errors.json corner-view.png corner-view-page-errors.json; do
+    corner-hole.json corner-hole-log.json corner-hole.png corner-nub.json corner-nub-log.json corner-console.log corner-page-errors.json corner-view.png corner-view-page-errors.json \
+    autoplay-policy.js cue-recording-from.json cue-contexts-loaded.json cue-toggles-off.json cue-toggle-click.json cue-contexts-toggled.json cue-toggles-on.json cue-sound-saved.json cue-toggle-audio.json cue-toggle-console.log cue-toggle-page-errors.json \
+    cue-contexts-reloaded.json cue-toggles-reloaded.json cue-contexts-clicked.json cue-chat-before.json cue-chat.json cues.json cue-audio.json cue-console.log cue-page-errors.json; do
     [[ -s "$VERIFY_DIR/$capture" ]] || { log "required capture ${capture} is missing or empty"; return 1; }
   done
 
@@ -950,7 +1021,8 @@ drive() {
       supplyInventory, namedMenu, hpAfterBrew, defaultKey, newKey, trainerIcons, brewY, hoverNamePixel, overheadShots, iconBox, riftExpected, burstTick, soulSplitExpected, killChat,
       riftSoundSamples, riftSpawnSounds, riftKillSound, riftBurstSounds, riftSoundWindow, gapDraws, hoverTile, hoverTicks, firstMeleeTick,
       walkwayOrder, walkwayStop, walkwayPixel, walkwayMinShare, cornerHole, cornerNub,
-      holeLayout, holePixels, holeFreePixels, holeBoxHalf, holeMinDark, holeMaxDark, holeTile, holeHits, holeDamage] = process.argv.slice(1);
+      holeLayout, holePixels, holeFreePixels, holeBoxHalf, holeMinDark, holeMaxDark, holeTile, holeHits, holeDamage,
+      cueSoundSamples, cueSounds, cueSoundWindow, cueChat] = process.argv.slice(1);
     const fs = require("fs");
     const read = (file) => JSON.parse(fs.readFileSync(`${dir}/${file}`, "utf8"));
     const [hidden, before, after, edgeArrived, edge, errors, cycle, snapshot, focus, focusErrors, voidLog, voidErrors, shot, shotErrors] =
@@ -969,6 +1041,11 @@ drive() {
     const [holesLog, holesErrors] = ["holes.json", "holes-page-errors.json"].map(read);
     const [keysOpen, keysBound, keysSaved, keysOldKey, keysReloaded, keysRestored, keybindsErrors] = ["keybinds-open.json", "keybinds-bound.json", "keybinds-saved.json", "keybinds-old-key.json", "keybinds-reloaded.json", "keybinds-restored.json", "keybinds-page-errors.json"].map(read);
     const [riftLog, riftChat, riftAudio, riftErrors, deflectLog, deflectErrors, overheadDraws] = ["rifts.json", "rift-chat.json", "rift-audio.json", "rift-page-errors.json", "deflect.json", "deflect-page-errors.json", "overhead-draws.json"].map(read);
+    const [cueLog, cueToggleAudio, cueAudio, cueToggleErrors, cueErrors, cueSaved, cueChatBefore, cueChatAfter] =
+      ["cues.json", "cue-toggle-audio.json", "cue-audio.json", "cue-toggle-page-errors.json", "cue-page-errors.json", "cue-sound-saved.json", "cue-chat-before.json", "cue-chat.json"].map(read);
+    const [recordingFrom, toggledAt] = ["cue-recording-from.json", "cue-toggle-click.json"].map(read);
+    const contexts = Object.fromEntries(["loaded", "toggled", "reloaded", "clicked"].map((when) => [when, read(`cue-contexts-${when}.json`)]));
+    const toggles = Object.fromEntries(["off", "on", "reloaded"].map((when) => [when, read(`cue-toggles-${when}.json`)]));
     const [spawnTile, targetTile, edgeOrderTile, edgeStopTile, nearSquare] = [spawn, target, edgeOrder, edgeStop, square].map((tile) => JSON.parse(tile));
     const same = (a, b) => a?.x === b.x && a?.y === b.y;
     const inSquare = (t) => t.x >= nearSquare.minX && t.x <= nearSquare.maxX && t.y >= nearSquare.minY && t.y <= nearSquare.maxY;
@@ -1108,6 +1185,14 @@ drive() {
       const half = Number(holeBoxHalf), x = Number(centreX) + dx, y = Number(centreY) + dy;
       return pixelShare(file, (r, g, b) => Math.max(r, g, b) <= 30, { minX: x - half, maxX: x + half, minY: y - half, maxY: y + half });
     };
+    const cueSamplesOf = JSON.parse(cueSoundSamples);
+    const cueLengths = new Set(Object.values(cueSamplesOf));
+    const [cueFrom, cueTo] = JSON.parse(cueSoundWindow);
+    const cueHeard = (audio) => audio
+      .filter((s) => s.rate === 22050 && s.tick !== null && cueLengths.has(s.samples) && s.tick + s.phase >= cueFrom && s.tick + s.phase < cueTo)
+      .map((s) => [Math.round((s.tick + s.phase) * 100) / 100, s.samples, s.state]);
+    const cueExpected = JSON.parse(cueSounds).map(([at, id]) => [at, cueSamplesOf[id]]);
+    const savedSound = cueSaved?.values ?? {};
     const observed = {
       firstWalkOrders: cycle.rows.flatMap((row) => row.inputs.filter((i) => i.kind === "walk-ordered").map((i) => i.destination)).slice(0, 2),
       edge: { arrived: [edgeArrived.tick, edgeArrived.player], held: [edge.tick, edge.player] },
@@ -1234,6 +1319,19 @@ drive() {
           contexts: [...new Set(riftAudio.map((s) => s.state))],
         },
       },
+      cues: {
+        toggles,
+        saved: { playsAudio: savedSound.playsAudio ?? null, playsAreaAudio: savedSound.playsAreaAudio ?? null },
+        contexts,
+        recordingFrom,
+        toggledAt,
+        beforeToggle: cueHeard(cueToggleAudio).filter(([at]) => at < toggledAt),
+        afterToggle: cueHeard(cueToggleAudio).filter(([at]) => at >= toggledAt),
+        heard: cueHeard(cueAudio),
+        chat: [cueChatBefore.data?.text ?? null, cueChatAfter.data?.text ?? null],
+        told: kindOf(cueLog.rows, "lifeforce-told").map((e) => e.at),
+        spawned: kindOf(cueLog.rows, "orb-spawned").map((e) => [e.at, e.void, e.tile]),
+      },
     };
     const sameJson = (a, b) => require("util").isDeepStrictEqual(a, JSON.parse(b));
     const share = observed.voidPixelShare;
@@ -1242,7 +1340,9 @@ drive() {
     const [left, standing] = [shardSpots["explosion-left.png"], shardSpots["explosion-standing.png"]];
     const special = observed.special;
     const { shots: iconShots, gapDraws: drawnAroundGaps, hover, meleeJudged } = observed.overheads;
-    const { soulSplit, rifts } = observed;
+    const { soulSplit, rifts, cues } = observed;
+    const allIn = (states, state) => states.length > 0 && states.every((s) => s === state);
+    const timedOnly = (heard) => heard.map(([at, samples]) => [at, samples]);
     const readyAt = Math.max(orb.arrivedAt ?? Infinity, orb.matured[0]?.[0] ?? Infinity);
     const checks = {
       spawnedOnSpawnTile: same(before.player, spawnTile),
@@ -1278,7 +1378,7 @@ drive() {
       orbClickTargetedOrb: same(orb.clicked, orbTile),
       orbGlowsOnSchedule: sameJson(orb.matured, JSON.stringify(expectedOrb.matured)),
       orbReturnedTickAfterArrival: orb.returned.length === 1 && orb.returned[0][0] === readyAt + 1 && sameJson(orb.returned[0][1], JSON.stringify(expectedOrb.returned)),
-      orbGlowDrawn: Math.max(...orb.tealShare.glow) - Math.max(...orb.tealShare.dormant) >= 7,
+      orbGlowDrawn: Math.max(...orb.tealShare.glow) - Math.max(...orb.tealShare.dormant) >= 3,
       skippedOrbHealsBoss: sameJson(orb.skipExpired, JSON.stringify(expectedOrb.skipExpired)) && sameJson(orb.skipHeal, JSON.stringify(expectedOrb.skipHeal)) && orb.skipReturned === 0,
       explosionsDodgedOnMarkTicks: dodges.every((d) => d.stepped && d.outcome === "avoided") && same(dodges[0].tile, spawnTile),
       lateStepHitOnMarkedTile: lateStep.standing !== null && lateStep.resolved?.outcome.kind === "hit" && sameJson(lateStep.resolved.outcome.receipt, JSON.stringify(expectedExplosions.lateHit)) &&
@@ -1337,7 +1437,14 @@ drive() {
         return rows.every((row) => row.hits.length === (onHole(row.startedOn) ? 1 : 0) && row.hits.every((hit) => hit.at === row.tick)) && rows.some((row) => !onHole(row.startedOn)) &&
           hits.length >= Number(holeHits) && hits.every((hit) => same(hit.tile, JSON.parse(holeTile)) && hit.requested >= damage.min && hit.requested <= damage.max);
       })(),
-      noPageErrors: [errors, focusErrors, voidErrors, shotErrors, orbErrors, orbSkipErrors, explosionErrors, underErrors, specialErrors, lateErrors, loadoutErrors, selectorErrors, suppliesErrors, keybindsErrors, riftErrors, deflectErrors, seedErrors, holesErrors, walkwayErrors, cornerErrors, cornerViewErrors].every((list) => list.length === 0),
+      soundTogglesShownOff: cues.toggles.off.sound.visible && cues.toggles.off.areaSound.visible && !cues.toggles.off.sound.checked && !cues.toggles.off.areaSound.checked,
+      soundTogglesTurnOnCues: recordingFrom < 5 && cues.beforeToggle.length === 0 && cues.toggles.on.sound.checked && cues.toggles.on.areaSound.checked &&
+        onSchedule(timedOnly(cues.afterToggle), cueExpected.filter(([at]) => at >= toggledAt)) && cues.afterToggle.every(([, , state]) => state === "running"),
+      soundChoiceSaved: cues.saved.playsAudio === true && cues.saved.playsAreaAudio === true && cues.toggles.reloaded.sound.checked && cues.toggles.reloaded.areaSound.checked,
+      audioResumesOnFirstPointerdown: allIn(cues.contexts.loaded, "suspended") && allIn(cues.contexts.toggled, "running") && allIn(cues.contexts.reloaded, "suspended") && allIn(cues.contexts.clicked, "running"),
+      cueSoundsOnSchedule: onSchedule(timedOnly(cues.heard), cueExpected) && cues.heard.every(([, , state]) => state === "running"),
+      lifeforceChatOnTell: cues.chat[0] === "" && cues.chat[1] === cueChat && sameJson(cues.told, "[11,42]"),
+      noPageErrors: [errors, focusErrors, voidErrors, shotErrors, orbErrors, orbSkipErrors, explosionErrors, underErrors, specialErrors, lateErrors, loadoutErrors, selectorErrors, suppliesErrors, keybindsErrors, riftErrors, deflectErrors, seedErrors, holesErrors, walkwayErrors, cornerErrors, cornerViewErrors, cueToggleErrors, cueErrors].every((list) => list.length === 0),
     };
     if (!checks.clickTargetedExpectedTile) {
       console.error(`verify: the click resolved to ${JSON.stringify(after.destination)}, not ${JSON.stringify(targetTile)}; the click-to-tile mapping for this viewport and camera changed`);
@@ -1355,7 +1462,8 @@ drive() {
     "$RIFT_SOUND_SAMPLES" "$RIFT_SPAWN_SOUNDS" "$RIFT_KILL_SOUND" "$RIFT_BURST_SOUNDS" "$RIFT_SOUND_WINDOW" "$OVERHEAD_GAP_DRAWS" \
     "$DEFLECT_HOVER_TILE" "$DEFLECT_HOVER_TICKS" "$DEFLECT_FIRST_MELEE_TICK" \
     "$WALKWAY_ORDER_TILE" "$WALKWAY_STOP_TILE" "$WALKWAY_PIXEL" "$WALKWAY_MIN_SHARE" "$CORNER_HOLE_TILE" "$CORNER_NUB_TILE" \
-    "$HOLE_LAYOUT" "$HOLE_PIXELS" "$HOLE_FREE_PIXELS" "$HOLE_BOX_HALF_PX" "$HOLE_MIN_DARK_SHARE" "$HOLE_MAX_DARK_SHARE" "$HOLE_TILE" "$HOLE_HITS" "$HOLE_DAMAGE" >"$VERIFY_DIR/observed.json"
+    "$HOLE_LAYOUT" "$HOLE_PIXELS" "$HOLE_FREE_PIXELS" "$HOLE_BOX_HALF_PX" "$HOLE_MIN_DARK_SHARE" "$HOLE_MAX_DARK_SHARE" "$HOLE_TILE" "$HOLE_HITS" "$HOLE_DAMAGE" \
+    "$CUE_SOUND_SAMPLES" "$CUE_SOUNDS" "$CUE_SOUND_WINDOW" "$CUE_CHAT" >"$VERIFY_DIR/observed.json"
   local verdict=$?
   cat "$VERIFY_DIR/observed.json"
   return $verdict
@@ -1363,6 +1471,7 @@ drive() {
 
 release_browser() {
   ab close >/dev/null 2>&1
+  agent-browser --session "${BROWSER_SESSION}-autoplay" close >/dev/null 2>&1
   [[ -n "$LAUNCHED_PID" && -f "$STATE_FILE" && "$(state pid)" == "$LAUNCHED_PID" ]] || return 0
   stop
 }

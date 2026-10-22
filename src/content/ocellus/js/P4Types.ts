@@ -86,7 +86,6 @@ export type Beat =
   | Readonly<{ kind: "boss-landing-starts" }>
   | Readonly<{ kind: "lifeforce-tell"; void: VoidKind }>
   | Readonly<{ kind: "lifeforce-hit"; void: VoidKind }>
-  | Readonly<{ kind: "orb-spawns"; void: VoidKind }>
   | Readonly<{ kind: "orb-matures"; void: VoidKind }>
   | Readonly<{ kind: "orb-expires"; void: VoidKind }>
   | Readonly<{ kind: "unclaimed-orb-heals" }>

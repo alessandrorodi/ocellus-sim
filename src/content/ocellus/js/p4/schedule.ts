@@ -35,7 +35,6 @@ function mechanicOf(beat: Beat): Mechanic | null {
       return null;
     case "lifeforce-tell":
     case "lifeforce-hit":
-    case "orb-spawns":
     case "orb-matures":
     case "orb-expires":
     case "unclaimed-orb-heals":
@@ -102,7 +101,6 @@ export class Schedule {
       const hit = start + lifeforce.hitAfterOnset.value;
       put(start + lifeforce.tellAfterOnset.value, `${kind} lifeforce tell`, () => ({ kind: "lifeforce-tell", void: kind }));
       put(hit, `${kind} lifeforce hit`, () => ({ kind: "lifeforce-hit", void: kind }));
-      put(hit + choices.orbSpawnAfterHit.option.value, `${kind} orb spawn`, () => ({ kind: "orb-spawns", void: kind }));
       put(hit + recipe.orbMaturesAfterHit.value, `${kind} orb maturity`, () => ({ kind: "orb-matures", void: kind }));
       put(hit + orb.lastHealAfterHit.value, `${kind} orb expiry`, () => ({ kind: "orb-expires", void: kind }));
       if (kind === "outer-void" && unclaimed.kind === "heals-boss") {

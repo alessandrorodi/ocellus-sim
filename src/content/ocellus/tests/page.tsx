@@ -32,6 +32,7 @@ export function loadPage(url: string) {
         input(id).dispatchEvent(new Event("input", { bubbles: true }));
       }),
     value: (id: string) => input(id).value,
+    checked: (id: string) => input(id).checked,
     element,
     close: () => {
       act(() => root.unmount());

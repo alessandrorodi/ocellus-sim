@@ -44,6 +44,7 @@ function present(event: FightEvent, views: Views, player: Tile): void {
   switch (event.kind) {
     case "lifeforce-told":
       views.fragment.tell(player);
+      views.chat.push(OCELLUS_P4.lifeforce.tellChat.value);
       return;
     case "orb-spawned":
       views.orbs[event.void].spawn(event.void, event.tile);
@@ -70,12 +71,16 @@ function present(event: FightEvent, views: Views, player: Tile): void {
       return;
     case "stage-entered":
       views.boss.enter(event.stage);
+      if (event.stage === "outer-void") playCue(sounds.flood.value, player);
       return;
     case "special-told":
       views.boss.tell(event.variant);
       return;
     case "special-sounded":
       playCue(sounds[event.cue.sound].value, player, event.cue.delayMs);
+      return;
+    case "boss-shouted":
+      playCue(sounds.endShout.value, player);
       return;
     case "boss-landing-started":
       views.boss.land();
@@ -88,7 +93,6 @@ function present(event: FightEvent, views: Views, player: Tile): void {
       return;
     case "overhead-switched":
     case "boss-state-changed":
-    case "boss-shouted":
     case "player-hit-judged":
     case "floor-hit":
     case "hole-hit":

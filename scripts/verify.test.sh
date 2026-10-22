@@ -5,8 +5,8 @@ SCRIPT="$(cd "$(dirname "$0")" && pwd)/verify.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-eval "$(grep -E '^(DRILL_QUERY|BOSS_NPC|SPAWN_TILE|WALK_[A-Z_]+|EDGE_[A-Z_]+|CYCLE_[A-Z_]+|FOCUS_[A-Z_]+|BOSS_CLICK_[A-Z_]+|RING_CLICK_[A-Z_]+|FLOOD_[A-Z_]+|NEAR_SQUARE|VOID_[A-Z_]+|ORB_[A-Z_]+|LOADOUT_[A-Z_]+|EXPLOSION_[A-Z_]+|STEP_CLICK_[A-Z_]+|DODGE_CLICK_[A-Z_]+|UNDER_BOSS_CLICK_[A-Z_]+|MARKER_SHOT_[A-Z_]+|SOUND_[A-Z_]+|SPECIAL_[A-Z_]+|PROTECT_[A-Z_]+|TELL_[A-Z_]+|TRANSITION_[A-Z_]+|LANDING_[A-Z_]+|STYLE_[A-Z_]+|SUPPLY_[A-Z_]+|KEYBIND_[A-Z_]+|RIFT_[A-Z_]+|OVERHEAD_[A-Z_]+|ICON_BOX|NORTH_EAST_RIFT_[A-Z_]+|CHAT_POLL_[A-Z_]+|RISEN_BOSS_[A-Z_]+|DEFLECT_[A-Z_]+|SOUL_SPLIT_[A-Z_]+|KILL_CHAT|WALKWAY_[A-Z_]+|CORNER_[A-Z_]+|HOLES?_[A-Z_]+|CREDIT_LINE)=' "$SCRIPT")"
-for fn in json process_start serve state doctor stop probe fight_tick_at_least canvas_centre click_after_tick shot_after_tick save_sound_settings record_audio_starts record_overhead_draws step_on_marks step_south_and_back_on_marks drive_lead_in drive_walk click_past_the_edge drive_edge drive_flood_shot drive_cycle keep_seed choose_focus drive_focus drive_void_floor drive_void_shot drive_lifeforce_orb drive_explosions drive_transition_attack click_at click_inventory_slot drive_loadouts right_click_inventory_slot drive_supplies bind_inventory_key drive_keybinds drive_overheads_rifts seed_run restart_run drive_seed drive_floor_holes wait_until_ticking walk_by_click drive_walkway drive_corner drive release_browser stage_browser; do
+eval "$(grep -E '^(DRILL_QUERY|BOSS_NPC|SPAWN_TILE|WALK_[A-Z_]+|EDGE_[A-Z_]+|CYCLE_[A-Z_]+|FOCUS_[A-Z_]+|BOSS_CLICK_[A-Z_]+|RING_CLICK_[A-Z_]+|FLOOD_[A-Z_]+|NEAR_SQUARE|VOID_[A-Z_]+|ORB_[A-Z_]+|LOADOUT_[A-Z_]+|EXPLOSION_[A-Z_]+|STEP_CLICK_[A-Z_]+|DODGE_CLICK_[A-Z_]+|UNDER_BOSS_CLICK_[A-Z_]+|MARKER_SHOT_[A-Z_]+|SOUND_[A-Z_]+|SPECIAL_[A-Z_]+|PROTECT_[A-Z_]+|TELL_[A-Z_]+|TRANSITION_[A-Z_]+|LANDING_[A-Z_]+|STYLE_[A-Z_]+|SUPPLY_[A-Z_]+|KEYBIND_[A-Z_]+|RIFT_[A-Z_]+|OVERHEAD_[A-Z_]+|ICON_BOX|NORTH_EAST_RIFT_[A-Z_]+|CHAT_POLL_[A-Z_]+|RISEN_BOSS_[A-Z_]+|DEFLECT_[A-Z_]+|SOUL_SPLIT_[A-Z_]+|KILL_CHAT|WALKWAY_[A-Z_]+|CORNER_[A-Z_]+|HOLES?_[A-Z_]+|CUE_[A-Z_]+|AUTOPLAY_POLICY_JS|CREDIT_LINE)=' "$SCRIPT")"
+for fn in json process_start serve state doctor stop probe fight_tick_at_least canvas_centre click_after_tick shot_after_tick save_sound_settings record_audio_starts record_overhead_draws step_on_marks step_south_and_back_on_marks drive_lead_in drive_walk click_past_the_edge drive_edge drive_flood_shot drive_cycle keep_seed choose_focus drive_focus drive_void_floor drive_void_shot drive_lifeforce_orb drive_explosions drive_transition_attack click_at click_inventory_slot drive_loadouts right_click_inventory_slot drive_supplies bind_inventory_key drive_keybinds drive_overheads_rifts seed_run restart_run drive_seed drive_floor_holes wait_until_ticking walk_by_click drive_walkway drive_corner audio_contexts sound_toggles audio_resumed drive_cues drive release_browser stage_browser; do
   eval "$(sed -n "/^${fn}() {\$/,/^}\$/p" "$SCRIPT")"
 done
 
@@ -15,6 +15,7 @@ setup() {
   VERIFY_DIR="$T/evidence"
   mkdir -p "$VERIFY_DIR"
   STATE_FILE="$T/current-server"
+  BROWSER_SESSION="archive-ocellus-verify-test"
   VERIFY_PORT=8002
   URL="http://127.0.0.1:${VERIFY_PORT}/"
   log() { printf '%s\n' "$*"; }
@@ -110,7 +111,7 @@ failed_transfer_fails_doctor() {
 fixture_logs() {
   local inner_void_tick="$1" focus="$2" fault="$3"
   command node -e '
-    const [dir, innerVoid, focus, fault] = process.argv.slice(1);
+    const [dir, innerVoid, focus, fault, cueSoundSamples] = process.argv.slice(1);
     const stages = { 0: "lead-in", [innerVoid]: "inner-void", 30: "after-inner", 39: "outer-void", 59: "after-outer", 68: "inner-void" };
     const overheads = { 8: "deflect-melee", 33: "soul-split", ...(fault === "no-overhead-gaps" ? {} : { 38: null, 67: null }), 39: "deflect-range", 61: "soul-split", 68: "deflect-melee" };
     const specials = { 37: "vortex", 65: "spike-disk" };
@@ -168,12 +169,11 @@ fixture_logs() {
     const orbAt = (x, y, hp) => ({ tile: { x, y }, hp });
     const orbEvents = {
       11: [{ kind: "lifeforce-told", at: 11, void: "inner-void" }],
-      12: [{ kind: "lifeforce-drained", at: 12, void: "inner-void", receipt: { applied: 49, afterHp: 50 } }],
-      13: [{ kind: "orb-spawned", at: 13, void: "inner-void", tile: { x: 3, y: 2 }, credit: 49 }],
-      24: [{ kind: "orb-matured", at: 24, void: "inner-void", tile: { x: 3, y: 2 } }],
+      12: [{ kind: "lifeforce-drained", at: 12, void: "inner-void", receipt: { applied: 49, afterHp: 50 } }, { kind: "orb-spawned", at: 12, void: "inner-void", tile: { x: 9, y: 4 }, credit: 49 }],
+      24: [{ kind: "orb-matured", at: 24, void: "inner-void", tile: { x: 9, y: 4 } }],
       [orbReturn]: [{ kind: "orb-returned", at: orbReturn, void: "inner-void", receipt: { afterHp: 99, applied: 49, beforeHp: 50, requested: 49 } }],
     };
-    const orb = Array.from({ length: 31 }, (_, t) => ({ tick: t, playerAtPostTick: t < 27 ? orbAt(5, 1, 99) : orbAt(3, 2, t < orbReturn ? 50 : 99), events: orbEvents[t] ?? [] }));
+    const orb = Array.from({ length: 31 }, (_, t) => ({ tick: t, playerAtPostTick: t < 27 ? orbAt(5, 1, 99) : orbAt(9, 4, t < orbReturn ? 50 : 99), events: orbEvents[t] ?? [] }));
     const skipEvents = {
       30: [{ kind: "orb-expired", at: 30, void: "inner-void" }],
       61: [{ kind: "orb-expired", at: 61, void: "outer-void" }],
@@ -306,7 +306,34 @@ fixture_logs() {
       return [t, { frames: fault === "gap-unseen" && t === 38 ? 0 : 36, sprites: kept === null ? [] : [spriteOf[kept]] }];
     }));
     fs.writeFileSync(`${dir}/overhead-draws.json`, JSON.stringify({ data: { result: draws } }));
-  ' "$T" "$inner_void_tick" "$focus" "$fault"
+    const cueSamples = JSON.parse(cueSoundSamples);
+    const [END, FLOOD, CHIME, FIRST_CHIME] = [cueSamples["12490"], cueSamples["12497"], cueSamples["12621"], cueSamples["12624"]];
+    const chimeLate = fault === "chimes-late" ? 1 : 0;
+    const cueSchedule = [
+      [5, END],
+      [12.4 + chimeLate, FIRST_CHIME], [15.87 + chimeLate, CHIME], [19.8 + chimeLate, CHIME], [22.8 + chimeLate, CHIME],
+      ...(fault === "no-flood" ? [] : [[39.02, FLOOD]]),
+      [43.1 + chimeLate, FIRST_CHIME], [44.7 + chimeLate, CHIME], [46.8 + chimeLate, CHIME], ...(chimeLate ? [] : [[48.3, CHIME]]),
+    ];
+    const cueState = fault === "never-resumed" ? "suspended" : "running";
+    const cueAt = ([at, samples], state = cueState, rate = 22050) => ({ tick: Math.floor(at), phase: Math.round((at - Math.floor(at)) * 100) / 100, samples, rate, state });
+    const frameSounds = [[8.05, 39690], ...[10, 12, 14, 16, 18, 20, 22, 24, 26, 28].map((t) => [t + 0.07, 44100]), [29.1, 19845], [29.83, 33075], [31.03, 22050], [31.47, 22050]];
+    const byTime = (a, b) => a.tick + a.phase - (b.tick + b.phase);
+    const cueAudio = [...cueSchedule.map((cue) => cueAt(cue)), ...frameSounds.map((sound) => cueAt(sound)), cueAt([12.01, 30720], cueState, 48000)].sort(byTime);
+    const toggledAudio = [
+      ...(fault === "sound-before-toggle" ? [cueAt([5, END], "suspended")] : []),
+      ...[...cueSchedule, ...frameSounds].filter(([at]) => at >= 6).map((cue) => cueAt(cue)),
+    ].sort(byTime);
+    fs.writeFileSync(`${dir}/cue-audio.json`, JSON.stringify({ data: { result: cueAudio } }));
+    fs.writeFileSync(`${dir}/cue-toggle-audio.json`, JSON.stringify({ data: { result: toggledAudio } }));
+    const cueEvents = {
+      11: [{ kind: "lifeforce-told", at: 11, void: "inner-void" }],
+      12: [{ kind: "orb-spawned", at: 12, void: "inner-void", tile: { x: 9, y: 4 }, credit: 49 }],
+      42: [{ kind: "lifeforce-told", at: 42, void: "outer-void" }],
+      43: [{ kind: "orb-spawned", at: 43, void: "outer-void", tile: { x: 4, y: 3 }, credit: 25 }],
+    };
+    write("cue-log.json", "lifeforce-orb", Array.from({ length: 51 }, (_, t) => ({ tick: t, events: cueEvents[t] ?? [] })));
+  ' "$T" "$inner_void_tick" "$focus" "$fault" "$CUE_SOUND_SAMPLES"
 }
 
 fixture_shards() {
@@ -465,8 +492,8 @@ fixture_hover_text() {
 
 OK_DORMANT_TEAL=(0 2.3 0.4 0 0 0)
 OK_GLOW_TEAL=(2.4 11.1 12.7 12.9 14.4 9.2)
-NOORB_DORMANT_TEAL=(0 0 0 0 0 0.2)
-NOORB_GLOW_TEAL=(3.5 4 3.4 3.1 2.9 2.5)
+NOORB_DORMANT_TEAL=(1.6 1.1 0.8 0.2 0 0.4)
+NOORB_GLOW_TEAL=(0 0 0 0 0 0)
 
 fake_screenshot() {
   local name frame
@@ -628,6 +655,43 @@ supply_probe() {
   esac
 }
 
+cue_probe() {
+  local n
+  case "$1" in
+    contexts)
+      n=$(($(cat "$T/context-probes" 2>/dev/null || echo 0) + 1))
+      echo "$n" >"$T/context-probes"
+      local state=suspended
+      case "$n:$FAULT" in
+        *:never-resumed) ;;
+        1:running-at-load | 2:* | 4:*) state=running ;;
+      esac
+      printf '{"data":{"result":["%s"]}}\n' "$state"
+      ;;
+    checked)
+      local checked=false
+      [[ ! -e "$T/toggled" && "$FAULT" != toggles-on ]] || checked=true
+      [[ ! -e "$T/cues-restarted" || "$FAULT" != unsaved-sound ]] || checked=false
+      printf '{"data":{"checked":%s}}\n' "$checked"
+      ;;
+    tick)
+      n=$(($(cat "$T/tick-probes" 2>/dev/null || echo 0) + 1))
+      echo "$n" >"$T/tick-probes"
+      if [[ "$n" -eq 1 ]]; then [[ "$FAULT" == late-recorder ]] && echo '{"data":{"result":7}}' || echo '{"data":{"result":0}}'; else echo "{\"data\":{\"result\":${CUE_TOGGLE_TICK}}}"; fi
+      ;;
+    saved)
+      local on=true
+      [[ "$FAULT" != unsaved-sound ]] || on=false
+      printf '{"data":{"result":"{\\"version\\":1,\\"values\\":{\\"playsAudio\\":%s,\\"playsAreaAudio\\":%s}}"}}\n' "$on" "$on"
+      ;;
+    chat)
+      n=$(($(cat "$T/cue-chats" 2>/dev/null || echo 0) + 1))
+      echo "$n" >"$T/cue-chats"
+      if [[ "$n" -eq 1 || "$FAULT" == no-lifeforce-chat ]]; then echo '{"data":{"text":""}}'; else printf '{"data":{"text":"%s"}}\n' "$CUE_CHAT"; fi
+      ;;
+  esac
+}
+
 fake_browser() {
   FINAL_TILE="$1"
   SCREENSHOT="${2:-ok}"
@@ -650,19 +714,24 @@ fake_browser() {
         [[ "$n" -lt 3 ]] || { tile="$FINAL_TILE"; tick=12; fight="$PRESENT_FIGHT"; }
         [[ "$n" -ne 4 ]] || { tile="$EDGE_TILE"; tick=13; }
         [[ "$n" -ne 5 ]] || { tile="$EDGE_TILE"; tick="$EDGE_HELD_TICK"; }
-        [[ "$(cat "$T/restarts" 2>/dev/null || echo 0)" -lt 3 ]] || tile='{"x":3,"y":2}'
+        [[ "$(cat "$T/restarts" 2>/dev/null || echo 0)" -lt 3 ]] || tile='{"x":9,"y":4}'
         printf '{"data":{"result":{"ticking":true,"tick":%s,"player":%s,"destination":%s,"fight":%s}}}\n' "$tick" "$tile" "$tile" "$fight"
         ;;
+      "--init-script "*) : >"$T/cues" ;;
+      "--json eval (window.__audioContexts ?? []).map((context) => context.state)") cue_probe contexts ;;
+      "--json is checked "*) cue_probe checked ;;
+      "click #area_sound" | "click #sound") : >"$T/toggled" ;;
       "--json eval window.__overheadDraws") cat "$T/overhead-draws.json" ;;
-      "--json eval window.__cueAudio") if [[ -e "$T/rifts" ]]; then cat "$T/rift-audio.json"; elif [[ -e "$T/special-late" ]]; then cat "$T/special-audio.json"; else cat "$T/explosion-audio.json"; fi ;;
+      "--json eval window.__cueAudio") if [[ -e "$T/cues-restarted" ]]; then cat "$T/cue-audio.json"; elif [[ -e "$T/cues" ]]; then cat "$T/cue-toggle-audio.json"; elif [[ -e "$T/rifts" ]]; then cat "$T/rift-audio.json"; elif [[ -e "$T/special-late" ]]; then cat "$T/special-audio.json"; else cat "$T/explosion-audio.json"; fi ;;
       "--json eval window.__archiveOcellusProbe.snapshot().fight.player.inventory") supply_probe inventory ;;
       "--json eval window.__archiveOcellusProbe.snapshot().menu") supply_probe menu ;;
       "--json eval window.__archiveOcellusProbe.snapshot().icons") icons_probe ;;
-      "--json eval window.__archiveOcellusProbe.snapshot().fight.run.tick") echo '{"data":{"result":3}}' ;;
+      "--json eval window.__archiveOcellusProbe.snapshot().fight.run.tick") if [[ -e "$T/cues" ]]; then cue_probe tick; else echo '{"data":{"result":3}}'; fi ;;
       "--json eval window.__archiveOcellusProbe.log().rows.map((row) => [row.tick, row.playerAtPostTick.hp])") supply_probe hp ;;
       "--json eval window.__archiveOcellusProbe.snapshot().panel") supply_probe panel ;;
-      "--json eval localStorage.getItem('osrs-sdk:settings')") supply_probe saved ;;
+      "--json eval localStorage.getItem('osrs-sdk:settings')") if [[ -e "$T/cues" ]]; then cue_probe saved; else supply_probe saved; fi ;;
       "--json eval window.__archiveOcellusProbe.log()")
+        [[ ! -e "$T/cues" ]] || { cat "$T/cue-log.json"; return; }
         [[ ! -e "$T/scenery" ]] || { scenery_probe log; return; }
         [[ ! -e "$T/deflect" ]] || { cat "$T/deflect-log.json"; return; }
         [[ ! -e "$T/rifts" ]] || { cat "$T/rift-log.json"; return; }
@@ -682,7 +751,7 @@ fake_browser() {
       "open "*"${WALKWAY_QUERY}") echo walkway >"$T/scenery" ;;
       "open "*"${CORNER_QUERY}") echo corner >"$T/scenery" ;;
       "open "*"${HOLES_QUERY}") echo holes >"$T/scenery" ;;
-      "--json get value #seed") if [[ -e "$T/seed-stage" ]]; then seed_probe box; else echo '{"data":{"value":"1"}}'; fi ;;
+      "--json get value #seed") if [[ -e "$T/seed-stage" && ! -e "$T/cues" ]]; then seed_probe box; else echo '{"data":{"value":"1"}}'; fi ;;
       "--json eval window.__archiveOcellusProbe.log().header.seed") seed_probe seed ;;
       "--json eval location.search") seed_probe search ;;
       "--json eval performance.timeOrigin") seed_probe origin ;;
@@ -703,11 +772,12 @@ fake_browser() {
         [[ "$FAULT" != focus-not-reloaded || "$*" != "select #focus ${FOCUS_DRILL}" ]] || : >"$T/focus-not-reloaded"
         ;;
       "click #restart")
+        [[ ! -e "$T/cues" ]] || { : >"$T/cues-restarted"; return; }
         [[ ! -e "$T/seed-stage" ]] || { echo $(($(cat "$T/seed-stage") + 1)) >"$T/seed-stage"; return; }
         echo $(($(cat "$T/restarts" 2>/dev/null || echo 0) + 1)) >"$T/restarts"
         [[ ! -e "$T/special" ]] || : >"$T/special-late"
         ;;
-      "--json get text #game_chat") if [[ "$FAULT" == no-chat ]]; then echo '{"data":{"text":""}}'; else printf '{"data":{"text":"%s"}}\n' "$KILL_CHAT"; fi ;;
+      "--json get text #game_chat") if [[ -e "$T/cues" ]]; then cue_probe chat; elif [[ "$FAULT" == no-chat ]]; then echo '{"data":{"text":""}}'; else printf '{"data":{"text":"%s"}}\n' "$KILL_CHAT"; fi ;;
       "--json get text "*) printf '{"data":{"text":"%s"}}\n' "$CREDIT_LINE" ;;
       "--json is visible "*) echo '{"data":{"visible":true}}' ;;
       "--json get box "*) echo '{"data":{"x":0,"y":0,"width":1280,"height":800}}' ;;
@@ -1240,6 +1310,70 @@ holes_drawn_over_the_flood_fail() { holes_fault_fails_only holes-over-the-flood 
 harmless_hole_fails() { holes_fault_fails_only hole-harmless holeHitsStandingOnIt; }
 hits_off_the_hole_fail() { holes_fault_fails_only hole-hits-off-the-hole holeHitsStandingOnIt; }
 
+cue_toggles_checked_by_default_fail() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' toggles-on
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the sound toggles loaded checked"; return 1; fi
+  [[ "$(failed_checks)" == soundTogglesShownOff ]] || { echo "expected only soundTogglesShownOff to fail, got: $(failed_checks)"; return 1; }
+}
+
+cue_sound_before_the_toggle_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' sound-before-toggle
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although 12490 played with both toggles off"; return 1; fi
+  [[ "$(failed_checks)" == soundTogglesTurnOnCues ]] || { echo "expected only soundTogglesTurnOnCues to fail, got: $(failed_checks)"; return 1; }
+}
+
+cue_recorder_after_the_shout_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' late-recorder
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the audio probe went in after the shout it should have heard"; return 1; fi
+  [[ "$(failed_checks)" == soundTogglesTurnOnCues ]] || { echo "expected only soundTogglesTurnOnCues to fail, got: $(failed_checks)"; return 1; }
+}
+
+sound_choice_lost_on_reload_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' unsaved-sound
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the sound choice was not saved"; return 1; fi
+  [[ "$(failed_checks)" == soundChoiceSaved ]] || { echo "expected only soundChoiceSaved to fail, got: $(failed_checks)"; return 1; }
+}
+
+audio_never_resumed_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' never-resumed
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although no pointerdown resumed the audio context"; return 1; fi
+  [[ "$(failed_checks)" == "soundTogglesTurnOnCues audioResumesOnFirstPointerdown cueSoundsOnSchedule" ]] ||
+    { echo "expected the resume and both cue sound checks to fail, got: $(failed_checks)"; return 1; }
+}
+
+audio_running_before_any_click_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' running-at-load
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the audio context ran before any click, so the resume went unobserved"; return 1; fi
+  [[ "$(failed_checks)" == audioResumesOnFirstPointerdown ]] || { echo "expected only audioResumesOnFirstPointerdown to fail, got: $(failed_checks)"; return 1; }
+}
+
+orb_chimes_a_tick_late_fail() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' chimes-late
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although each orb chimed a tick late and the outer orb's last chime was cut"; return 1; fi
+  [[ "$(failed_checks)" == "soundTogglesTurnOnCues cueSoundsOnSchedule" ]] || { echo "expected both cue sound checks to fail, got: $(failed_checks)"; return 1; }
+}
+
+flood_without_its_sound_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' no-flood
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the flood played no 12497"; return 1; fi
+  [[ "$(failed_checks)" == "soundTogglesTurnOnCues cueSoundsOnSchedule" ]] || { echo "expected both cue sound checks to fail, got: $(failed_checks)"; return 1; }
+}
+
+lifeforce_chat_missing_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' no-lifeforce-chat
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the lifeforce tell posted no chat line"; return 1; fi
+  [[ "$(failed_checks)" == lifeforceChatOnTell ]] || { echo "expected only lifeforceChatOnTell to fail, got: $(failed_checks)"; return 1; }
+}
+
 failed=0
 for t in \
   refused_serve_does_not_stop_the_recorded_instance \
@@ -1323,7 +1457,16 @@ for t in \
   other_hole_layout_fails \
   holes_drawn_over_the_flood_fail \
   harmless_hole_fails \
-  hits_off_the_hole_fail; do
+  hits_off_the_hole_fail \
+  cue_toggles_checked_by_default_fail \
+  cue_sound_before_the_toggle_fails \
+  cue_recorder_after_the_shout_fails \
+  sound_choice_lost_on_reload_fails \
+  audio_never_resumed_fails \
+  audio_running_before_any_click_fails \
+  orb_chimes_a_tick_late_fail \
+  flood_without_its_sound_fails \
+  lifeforce_chat_missing_fails; do
   if ("$t") >"$WORK/$t.log" 2>&1; then
     echo "PASS $t"
   else

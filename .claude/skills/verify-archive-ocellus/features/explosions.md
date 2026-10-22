@@ -14,7 +14,7 @@ Five ticks after each lifeforce hit, Ocellus marks the tile the player starts th
 
 - Open `http://127.0.0.1:8002/` and stand still after the lifeforce hit at P4 tick 12. Shards appear under the player at 17 and a 16 lands at 18.
 - Click a neighbouring tile on each mark tick, or keep walking, and every mark is left behind.
-- Turn on area sound, the second icon in the settings tab, to hear 12638 and 12537. The SDK starts both sound toggles off.
+- Tick **Area sounds** at the bottom left to hear 12638 and 12537. Both sound checkboxes start off.
 - Pick `Explosions` in the `Focus` selector and press `Restart` to practise the explosions alone.
 - Add `explosions=wiki-six` or `explosions=v2-seven` to the URL for the other readings of the footage.
 
@@ -41,6 +41,6 @@ Preconditions:
 - A left-click under the boss attacks him once he is drawn. Walk under him while he is hidden (P4 ticks 0 to 3), or through the context menu.
 - Under `focus=explosions` the floor deals no damage, so camping under the boss in the inner void costs only the explosions. In the full fight the inner void floor would also hit.
 - The `scripts/verify.sh browser` order runs this recipe before the loadout recipe, which opens its own page.
-- The SDK never resumes its audio context. Headless Chrome starts it `running`, so the sound check passes there. A desktop browser that starts it suspended until a user gesture stays silent; that is untested.
+- Headless Chrome starts the audio context `running`, so this sound check does not test the resume on the first click. The [timing cues](./timing-cues.md) recipe does, in a session that starts each context suspended.
 - The buffer lengths come from the SDK's own synthesizer run on cache 2746. A different cache or synthesizer can change them.
 - The look is a footage-coloured placeholder. The spec's cache candidate, spotanims 4299 to 4302, renders a white disc and a white flash, so the data file records it as rejected.

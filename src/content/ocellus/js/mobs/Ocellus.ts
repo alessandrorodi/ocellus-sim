@@ -46,7 +46,6 @@ type Run =
   | Readonly<{ kind: "ended"; at: Tick; reason: RunEnd; phase: Phase }>;
 
 type Orb =
-  | Readonly<{ kind: "drained"; void: VoidKind; credit: number }>
   | Readonly<{ kind: "dormant"; void: VoidKind; credit: number; tile: Tile }>
   | Readonly<{ kind: "available"; void: VoidKind; credit: number; tile: Tile }>
   | Readonly<{ kind: "claimed"; void: VoidKind; credit: number; tile: Tile; returnsAt: Tick }>
@@ -381,10 +380,8 @@ export class Ocellus extends Mob {
       case "lifeforce-tell":
         return { kind: "lifeforce-told", at, void: beat.void };
       case "lifeforce-hit":
-        this.drain(beat.void, at);
+        this.drain(beat.void, at, player.tile);
         return null;
-      case "orb-spawns":
-        return this.spawnOrb(beat.void, at, player.tile);
       case "orb-matures":
         return this.matureOrb(beat.void, at);
       case "orb-expires":
@@ -504,11 +501,14 @@ export class Ocellus extends Mob {
     return null;
   }
 
-  private drain(kind: VoidKind, at: Tick): void {
+  private drain(kind: VoidKind, at: Tick, player: Tile): void {
     const divisor = OCELLUS_P4.lifeforceOrb.drainDivisor.value;
+    const tile = orbTile(this.config.seed, at, player, kind, this.config.choices);
     const hit = new P4Hit(this, this.target, (hp) => Math.floor(hp / divisor), (receipt) => {
-      this.orbs = [...this.orbs.filter((orb) => orb.void !== kind), { kind: "drained", void: kind, credit: receipt.applied }];
+      const credit = receipt.applied;
+      this.orbs = [...this.orbs.filter((orb) => orb.void !== kind), { kind: "dormant", void: kind, credit, tile }];
       this.recordEvent({ kind: "lifeforce-drained", at, void: kind, receipt });
+      this.recordEvent({ kind: "orb-spawned", at, void: kind, tile, credit });
     });
     this.target.addProjectile(hit);
   }
@@ -519,14 +519,6 @@ export class Ocellus extends Mob {
 
   private replaceOrb(kind: VoidKind, next: Orb | null): void {
     this.orbs = this.orbs.flatMap((orb) => (orb.void !== kind ? [orb] : next === null ? [] : [next]));
-  }
-
-  private spawnOrb(kind: VoidKind, at: Tick, player: Tile): FightEvent | null {
-    const orb = this.orb(kind);
-    if (orb?.kind !== "drained") return null;
-    const tile = orbTile(this.config.seed, at, player, kind, this.config.choices);
-    this.replaceOrb(kind, { kind: "dormant", void: kind, credit: orb.credit, tile });
-    return { kind: "orb-spawned", at, void: kind, tile, credit: orb.credit };
   }
 
   private matureOrb(kind: VoidKind, at: Tick): FightEvent | null {
