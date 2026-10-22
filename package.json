@@ -1,8 +1,8 @@
 {
-  "name": "archive-ocellus-trainer",
-  "version": "0.0.1",
+  "name": "ocellus-sim",
+  "version": "0.1.0",
   "private": true,
-  "description": "A free practice simulator for phase 4 of the Ocellus fight in The Fractured Archive.",
+  "description": "A free practice simulator for the whole Ocellus fight in The Fractured Archive, all four phases. Forked from ArchiveOcellusTrainer.",
   "license": "GPL-3.0-only",
   "repository": {
     "type": "git",
@@ -17,7 +17,8 @@
     "test": "jest",
     "typecheck": "tsc --noEmit && node scripts/check-types.mjs",
     "assets": "bash scripts/assets.sh",
-    "item-icons": "tsx src/itemIcons/build.ts"
+    "item-icons": "tsx src/itemIcons/build.ts",
+    "deploy": "npm run build && vercel deploy dist --prod --yes"
   },
   "devDependencies": {
     "@types/jest": "^27.4.1",

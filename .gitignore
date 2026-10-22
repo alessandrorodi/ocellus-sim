@@ -6,3 +6,5 @@ public/osrs-assets/
 .verify/
 *.log
 .DS_Store
+.vercel/
+.osrs-assets-config-*.mjs
