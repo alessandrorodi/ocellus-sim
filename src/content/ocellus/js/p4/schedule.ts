@@ -61,11 +61,6 @@ function mechanicOf(beat: Beat): Mechanic | null {
   }
 }
 
-function acts(focus: Focus, beat: Beat): boolean {
-  const mechanic = mechanicOf(beat);
-  return mechanic === null || focus.kind === "full-fight" || focus.mechanics.includes(mechanic);
-}
-
 export class Schedule {
   private constructor(
     private readonly leadIn: readonly Moment[],
@@ -180,6 +175,10 @@ export class Schedule {
     return new Schedule(leadInTable, slots, choices.focus.option.value);
   }
 
+  acts(mechanic: Mechanic): boolean {
+    return this.focus.kind === "full-fight" || this.focus.mechanics.includes(mechanic);
+  }
+
   at(t: Tick): Moment {
     if (t < this.leadIn.length) return this.leadIn[t];
     const sinceFirstVoid = t - this.leadIn.length;
@@ -187,7 +186,10 @@ export class Schedule {
     const cycleNumber = cycle(Math.floor(sinceFirstVoid / this.slots.length) + 1);
     const cycleStart = tick(t - offset);
     const slot = this.slots[offset];
-    const beats = slot.beats.flatMap((beat) => beat(cycleNumber, cycleStart) ?? []).filter((beat) => acts(this.focus, beat));
+    const beats = slot.beats.flatMap((beat) => beat(cycleNumber, cycleStart) ?? []).filter((beat) => {
+      const mechanic = mechanicOf(beat);
+      return mechanic === null || this.acts(mechanic);
+    });
     return { tick: t, phase: slot.phase(cycleNumber), beats };
   }
 }

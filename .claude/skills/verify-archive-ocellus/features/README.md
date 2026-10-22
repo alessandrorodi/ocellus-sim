@@ -44,6 +44,7 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [P4 cycle](./p4-cycle.md) covers the boss, the lead-in, the 60-tick cycle's stages and overheads, the fight log and the drill focus control.
 - [Loadouts](./loadouts.md) covers the ranged and melee setups, inventory switches, Ralos's Division special attack and the setup control.
 - [Void floor](./void-floor.md) covers the inner square and outer flood, their damage, the safe 5x5 and how both draw in 3D.
+- [Floor holes](./floor-holes.md) covers the seeded hole layout, the holes drawn from the cache, their hiding under the flood, and the hit on a player who stands on one.
 - [Lifeforce orb](./lifeforce-orb.md) covers the lifeforce tell and hit, the orb from spawn to glow, its return, its expiry and the boss heal from an unclaimed outer orb.
 - [Supplies and key bindings](./supplies-and-keybinds.md) covers item names in menus, the carried brews, restores and boost potions, drinking them, and binding the side-panel tabs to keys.
 - [Personal explosions](./explosions.md) covers the marks on the player's tile, the hit a tick later, dodging on mark ticks, the late step, standing under the boss and how the shards draw.

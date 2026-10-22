@@ -1,5 +1,6 @@
-import { Projectile, Settings, TrainerInstance } from "osrs-sdk";
+import { Projectile, Settings, TrainerInstance, Viewport } from "osrs-sdk";
 import type { Mob, Player, Unit } from "osrs-sdk";
+import { paintedFills } from "../../../../test/paintedTiles";
 import { OcellusRegion } from "../js/OcellusRegion";
 import type { DrillSelection } from "../js/OcellusTimings";
 import { OCELLUS_P4, resolveDrill } from "../js/OcellusTimings";
@@ -32,6 +33,7 @@ export function startDrill(options: DrillOptions = {}) {
   trainer.mount(document.createElement("canvas"), document.createElement("div"));
   // The SDK counts GET READY down only in its browser loop, never in tickWorld.
   if (!options.keepGetReady) region.world.getReadyTimer = 0;
+  Viewport.viewport.resize(800, 600);
 
   const rows = (): readonly TickRow[] => region.fightLog().rows;
   const player = (): Player => region.players[0];
@@ -98,6 +100,13 @@ export function startDrill(options: DrillOptions = {}) {
       return rows()
         .flatMap((row) => row.events)
         .filter((event): event is Extract<FightEvent, { kind: K }> => event.kind === kind);
+    },
+    drawnHoles(): readonly At[] {
+      const { rim } = OCELLUS_P4.floor.look.value;
+      return paintedFills((context) => region.entities.forEach((entity) => entity.draw(0, context)))
+        .filter((fill) => fill.style === rim)
+        .map((fill) => ({ x: Math.floor(fill.x / Settings.tileSize), y: Math.floor(fill.y / Settings.tileSize) }))
+        .sort((a, b) => a.x - b.x || a.y - b.y);
     },
     walkTo,
     pray,

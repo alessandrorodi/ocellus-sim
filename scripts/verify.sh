@@ -77,6 +77,19 @@ CORNER_VIEW_CLICK_RIGHT_PX=150
 CORNER_VIEW_CLICK_UP_PX=20
 CORNER_VIEW_TILE='{"x":2,"y":2}'
 CORNER_VIEW_DRAG_LEFT_PX=95
+HOLES_QUERY="?seed=1&focus=floor-holes"
+HOLE_LAYOUT='{"key":"v1-turn","tiles":[{"x":1,"y":5},{"x":1,"y":6},{"x":2,"y":8},{"x":2,"y":9},{"x":4,"y":9},{"x":8,"y":5}]}'
+HOLE_PIXELS='[[{"x":8,"y":5},-128,-95],[{"x":1,"y":5},170,-95],[{"x":1,"y":6},161,-115],[{"x":2,"y":8},108,-151],[{"x":2,"y":9},102,-167]]'
+HOLE_FREE_PIXELS='[[{"x":2,"y":5},127,-95],[{"x":2,"y":6},117,-116]]'
+HOLE_BOX_HALF_PX=8
+HOLE_MIN_DARK_SHARE=30
+HOLE_MAX_DARK_SHARE=5
+HOLE_FLOOD_SHOT_TICK=45
+HOLE_CLICK_LEFT_PX=128
+HOLE_CLICK_UP_PX=95
+HOLE_TILE='{"x":8,"y":5}'
+HOLE_HITS=3
+HOLE_DAMAGE='{"min":9,"max":11}'
 BOSS_CLICK_RIGHT_PX=150
 BOSS_CLICK_UP_PX=150
 RING_CLICK_RIGHT_PX=140
@@ -741,6 +754,20 @@ drive_corner() {
   ab --json errors | json data.errors >"$VERIFY_DIR/corner-view-page-errors.json" || { log "page error capture failed"; return 1; }
 }
 
+drive_floor_holes() {
+  ab open "${URL}${HOLES_QUERY}" >/dev/null && wait_until_ticking && canvas_centre || return 1
+  ab wait 1200 >/dev/null && ab screenshot "$VERIFY_DIR/holes-drawn.png" >/dev/null || { log "holes screenshot failed"; return 1; }
+  shot_after_tick "$HOLE_FLOOD_SHOT_TICK" 300 holes-flood.png || { log "the holes drill never reached P4 tick ${HOLE_FLOOD_SHOT_TICK}"; return 1; }
+  echo "{\"x\":$((CX - HOLE_CLICK_LEFT_PX)),\"y\":$((CY - HOLE_CLICK_UP_PX))}" >"$VERIFY_DIR/hole-click.json"
+  walk_by_click $((CX - HOLE_CLICK_LEFT_PX)) $((CY - HOLE_CLICK_UP_PX)) "$HOLE_TILE" || return 1
+  ab wait --fn "window.__archiveOcellusProbe.log().rows.flatMap((row) => row.events).filter((e) => e.kind === 'hole-hit').length >= ${HOLE_HITS}" \
+    --timeout 15000 >/dev/null || log "the player on the hole never took ${HOLE_HITS} hits"
+  ab screenshot "$VERIFY_DIR/hole-hit.png" >/dev/null || { log "hole hit screenshot failed"; return 1; }
+  probe "log()" >"$VERIFY_DIR/holes.json"
+  ab console >"$VERIFY_DIR/holes-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/holes-page-errors.json" || { log "page error capture failed"; return 1; }
+}
+
 drive_void_floor() {
   choose_focus "$VOID_DRILL" || return 1
   fight_tick_at_least "$VOID_INNER_SHOT_TICK" 120000 || { log "the reloaded boss never stepped to P4 tick ${VOID_INNER_SHOT_TICK}"; return 1; }
@@ -894,7 +921,7 @@ drive() {
   drive_lead_in || return 1
   ab wait --fn "window.__archiveOcellusProbe?.snapshot().ticking === true && window.__archiveOcellusProbe.snapshot().tick >= 8" \
     --timeout 90000 >/dev/null || { log "trainer never started ticking"; return 1; }
-  drive_walk && drive_edge && drive_cycle && drive_focus && drive_void_floor && drive_void_shot && drive_lifeforce_orb && drive_explosions && drive_transition_attack && drive_loadouts && drive_supplies && drive_keybinds && drive_overheads_rifts && drive_seed && drive_walkway && drive_corner || return 1
+  drive_walk && drive_edge && drive_cycle && drive_focus && drive_void_floor && drive_void_shot && drive_lifeforce_orb && drive_explosions && drive_transition_attack && drive_loadouts && drive_supplies && drive_keybinds && drive_overheads_rifts && drive_seed && drive_floor_holes && drive_walkway && drive_corner || return 1
 
   local capture
   for capture in hidden.json hidden.png before.json before.png after.json after.png edge-click.json edge-arrived.json edge.json edge.png boss.png cycle-ring-click.json cycle-snapshot.json cycle.json console.log page-errors.json focus.json focus.png focus-console.log focus-page-errors.json \
@@ -910,6 +937,7 @@ drive() {
     $(printf 'overhead-%s.png ' $OVERHEAD_SHOT_TICKS) overhead-draws.json rift-spawned.png rift-destroyed.png rift-chat.json rift-burst.png rifts.json rift-audio.json rift-console.log rift-page-errors.json \
     hover-out-of-reach.png deflect-blocked.png deflect.json deflect-console.log deflect-page-errors.json \
     seed-fresh.png seed.json seed.png seed-console.log seed-page-errors.json \
+    holes-drawn.png holes-flood.png hole-click.json hole-hit.png holes.json holes-console.log holes-page-errors.json \
     walkway-click.json walkway-arrived.json walkway.json walkway-log.json walkway.png walkway-console.log walkway-page-errors.json \
     corner-hole.json corner-hole-log.json corner-hole.png corner-nub.json corner-nub-log.json corner-console.log corner-page-errors.json corner-view.png corner-view-page-errors.json; do
     [[ -s "$VERIFY_DIR/$capture" ]] || { log "required capture ${capture} is missing or empty"; return 1; }
@@ -921,7 +949,8 @@ drive() {
       tellCentreBox, transitionSamples, landingSounds, landingWindows, styleSounds, styleWindows, soundTolerance,
       supplyInventory, namedMenu, hpAfterBrew, defaultKey, newKey, trainerIcons, brewY, hoverNamePixel, overheadShots, iconBox, riftExpected, burstTick, soulSplitExpected, killChat,
       riftSoundSamples, riftSpawnSounds, riftKillSound, riftBurstSounds, riftSoundWindow, gapDraws, hoverTile, hoverTicks, firstMeleeTick,
-      walkwayOrder, walkwayStop, walkwayPixel, walkwayMinShare, cornerHole, cornerNub] = process.argv.slice(1);
+      walkwayOrder, walkwayStop, walkwayPixel, walkwayMinShare, cornerHole, cornerNub,
+      holeLayout, holePixels, holeFreePixels, holeBoxHalf, holeMinDark, holeMaxDark, holeTile, holeHits, holeDamage] = process.argv.slice(1);
     const fs = require("fs");
     const read = (file) => JSON.parse(fs.readFileSync(`${dir}/${file}`, "utf8"));
     const [hidden, before, after, edgeArrived, edge, errors, cycle, snapshot, focus, focusErrors, voidLog, voidErrors, shot, shotErrors] =
@@ -937,6 +966,7 @@ drive() {
     const [walkwayArrived, walkwayHeld, walkwayLog, cornerAtHole, cornerHoleLog, cornerAtNub, cornerNubLog] =
       ["walkway-arrived.json", "walkway.json", "walkway-log.json", "corner-hole.json", "corner-hole-log.json", "corner-nub.json", "corner-nub-log.json"].map(read);
     const [seedErrors, walkwayErrors, cornerErrors, cornerViewErrors] = ["seed-page-errors.json", "walkway-page-errors.json", "corner-page-errors.json", "corner-view-page-errors.json"].map(read);
+    const [holesLog, holesErrors] = ["holes.json", "holes-page-errors.json"].map(read);
     const [keysOpen, keysBound, keysSaved, keysOldKey, keysReloaded, keysRestored, keybindsErrors] = ["keybinds-open.json", "keybinds-bound.json", "keybinds-saved.json", "keybinds-old-key.json", "keybinds-reloaded.json", "keybinds-restored.json", "keybinds-page-errors.json"].map(read);
     const [riftLog, riftChat, riftAudio, riftErrors, deflectLog, deflectErrors, overheadDraws] = ["rifts.json", "rift-chat.json", "rift-audio.json", "rift-page-errors.json", "deflect.json", "deflect-page-errors.json", "overhead-draws.json"].map(read);
     const [spawnTile, targetTile, edgeOrderTile, edgeStopTile, nearSquare] = [spawn, target, edgeOrder, edgeStop, square].map((tile) => JSON.parse(tile));
@@ -1072,6 +1102,12 @@ drive() {
       kill: destroyedAt === null ? [] : riftTimed([[destroyedAt + killOffset, killId]]),
       burst: riftTimed(JSON.parse(riftBurstSounds)),
     };
+    const holeTiles = JSON.parse(holeLayout).tiles;
+    const onHole = (tile) => holeTiles.some((hole) => same(tile, hole));
+    const darkAround = (file, [, dx, dy]) => {
+      const half = Number(holeBoxHalf), x = Number(centreX) + dx, y = Number(centreY) + dy;
+      return pixelShare(file, (r, g, b) => Math.max(r, g, b) <= 30, { minX: x - half, maxX: x + half, minY: y - half, maxY: y + half });
+    };
     const observed = {
       firstWalkOrders: cycle.rows.flatMap((row) => row.inputs.filter((i) => i.kind === "walk-ordered").map((i) => i.destination)).slice(0, 2),
       edge: { arrived: [edgeArrived.tick, edgeArrived.player], held: [edge.tick, edge.player] },
@@ -1153,6 +1189,17 @@ drive() {
         share: pixelShare("walkway.png", (...rgb) => walkwayRgb.every((v, c) => Math.abs(rgb[c] - v) <= 4)),
       },
       corner: { orders: [...walkOrders(cornerHoleLog), ...walkOrders(cornerNubLog)], stood: [cornerAtHole.player, cornerAtNub.player] },
+      holes: {
+        layout: { key: holesLog.header.choices.floorHoleLayout.key, tiles: holesLog.header.choices.floorHoleLayout.option.value },
+        darkShare: JSON.parse(holePixels).map((box) => ({ tile: box[0], drawn: darkAround("holes-drawn.png", box), flood: darkAround("holes-flood.png", box) })),
+        freeDarkShare: JSON.parse(holeFreePixels).map((box) => ({ tile: box[0], drawn: darkAround("holes-drawn.png", box) })),
+        rows: holesLog.rows.map((row) => ({
+          tick: row.tick,
+          stage: row.phase.stage,
+          startedOn: row.playerAtBossStep.tile,
+          hits: row.events.filter((e) => e.kind === "hole-hit").map((e) => ({ at: e.at, tile: e.tile, requested: e.receipt.requested })),
+        })),
+      },
       keybinds: {
         tabs: [keysOpen.tab, keysBound.tab, keysOldKey.tab, keysReloaded.tab],
         inventoryKey: [keysOpen.keys.inventory, keysBound.keys.inventory, keysSaved.values?.inventory_key ?? null, keysReloaded.keys.inventory, keysRestored.keys.inventory],
@@ -1282,7 +1329,15 @@ drive() {
         walkwayHeld.tick - walkwayArrived.tick >= Number(holdTicks),
       walkwayDrawn: observed.walkway.share >= Number(walkwayMinShare),
       cornerFilled: sameJson(observed.corner.orders, `[${cornerHole},${cornerNub}]`) && sameJson(observed.corner.stood, `[${cornerHole},${cornerNub}]`),
-      noPageErrors: [errors, focusErrors, voidErrors, shotErrors, orbErrors, orbSkipErrors, explosionErrors, underErrors, specialErrors, lateErrors, loadoutErrors, selectorErrors, suppliesErrors, keybindsErrors, riftErrors, deflectErrors, seedErrors, walkwayErrors, cornerErrors, cornerViewErrors].every((list) => list.length === 0),
+      holesDrawnOnLayout: sameJson(observed.holes.layout, holeLayout) && observed.holes.darkShare.every((box) => onHole(box.tile) && box.drawn >= Number(holeMinDark)) &&
+        observed.holes.freeDarkShare.every((box) => !onHole(box.tile) && box.drawn <= Number(holeMaxDark)),
+      holesHiddenUnderFlood: observed.holes.darkShare.every((box) => box.flood <= Number(holeMaxDark)),
+      holeHitsStandingOnIt: (() => {
+        const { rows } = observed.holes, hits = rows.flatMap((row) => row.hits), damage = JSON.parse(holeDamage);
+        return rows.every((row) => row.hits.length === (onHole(row.startedOn) ? 1 : 0) && row.hits.every((hit) => hit.at === row.tick)) && rows.some((row) => !onHole(row.startedOn)) &&
+          hits.length >= Number(holeHits) && hits.every((hit) => same(hit.tile, JSON.parse(holeTile)) && hit.requested >= damage.min && hit.requested <= damage.max);
+      })(),
+      noPageErrors: [errors, focusErrors, voidErrors, shotErrors, orbErrors, orbSkipErrors, explosionErrors, underErrors, specialErrors, lateErrors, loadoutErrors, selectorErrors, suppliesErrors, keybindsErrors, riftErrors, deflectErrors, seedErrors, holesErrors, walkwayErrors, cornerErrors, cornerViewErrors].every((list) => list.length === 0),
     };
     if (!checks.clickTargetedExpectedTile) {
       console.error(`verify: the click resolved to ${JSON.stringify(after.destination)}, not ${JSON.stringify(targetTile)}; the click-to-tile mapping for this viewport and camera changed`);
@@ -1299,7 +1354,8 @@ drive() {
     "$OVERHEAD_SHOT_TICKS" "$ICON_BOX" "$RIFT_EXPECTED" "$RIFT_BURST_TICK" "$SOUL_SPLIT_EXPECTED" "$KILL_CHAT" \
     "$RIFT_SOUND_SAMPLES" "$RIFT_SPAWN_SOUNDS" "$RIFT_KILL_SOUND" "$RIFT_BURST_SOUNDS" "$RIFT_SOUND_WINDOW" "$OVERHEAD_GAP_DRAWS" \
     "$DEFLECT_HOVER_TILE" "$DEFLECT_HOVER_TICKS" "$DEFLECT_FIRST_MELEE_TICK" \
-    "$WALKWAY_ORDER_TILE" "$WALKWAY_STOP_TILE" "$WALKWAY_PIXEL" "$WALKWAY_MIN_SHARE" "$CORNER_HOLE_TILE" "$CORNER_NUB_TILE" >"$VERIFY_DIR/observed.json"
+    "$WALKWAY_ORDER_TILE" "$WALKWAY_STOP_TILE" "$WALKWAY_PIXEL" "$WALKWAY_MIN_SHARE" "$CORNER_HOLE_TILE" "$CORNER_NUB_TILE" \
+    "$HOLE_LAYOUT" "$HOLE_PIXELS" "$HOLE_FREE_PIXELS" "$HOLE_BOX_HALF_PX" "$HOLE_MIN_DARK_SHARE" "$HOLE_MAX_DARK_SHARE" "$HOLE_TILE" "$HOLE_HITS" "$HOLE_DAMAGE" >"$VERIFY_DIR/observed.json"
   local verdict=$?
   cat "$VERIFY_DIR/observed.json"
   return $verdict

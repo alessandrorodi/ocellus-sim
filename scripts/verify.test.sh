@@ -5,8 +5,8 @@ SCRIPT="$(cd "$(dirname "$0")" && pwd)/verify.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-eval "$(grep -E '^(DRILL_QUERY|BOSS_NPC|SPAWN_TILE|WALK_[A-Z_]+|EDGE_[A-Z_]+|CYCLE_[A-Z_]+|FOCUS_[A-Z_]+|BOSS_CLICK_[A-Z_]+|RING_CLICK_[A-Z_]+|FLOOD_[A-Z_]+|NEAR_SQUARE|VOID_[A-Z_]+|ORB_[A-Z_]+|LOADOUT_[A-Z_]+|EXPLOSION_[A-Z_]+|STEP_CLICK_[A-Z_]+|DODGE_CLICK_[A-Z_]+|UNDER_BOSS_CLICK_[A-Z_]+|MARKER_SHOT_[A-Z_]+|SOUND_[A-Z_]+|SPECIAL_[A-Z_]+|PROTECT_[A-Z_]+|TELL_[A-Z_]+|TRANSITION_[A-Z_]+|LANDING_[A-Z_]+|STYLE_[A-Z_]+|SUPPLY_[A-Z_]+|KEYBIND_[A-Z_]+|RIFT_[A-Z_]+|OVERHEAD_[A-Z_]+|ICON_BOX|NORTH_EAST_RIFT_[A-Z_]+|CHAT_POLL_[A-Z_]+|RISEN_BOSS_[A-Z_]+|DEFLECT_[A-Z_]+|SOUL_SPLIT_[A-Z_]+|KILL_CHAT|WALKWAY_[A-Z_]+|CORNER_[A-Z_]+|CREDIT_LINE)=' "$SCRIPT")"
-for fn in json process_start serve state doctor stop probe fight_tick_at_least canvas_centre click_after_tick shot_after_tick save_sound_settings record_audio_starts record_overhead_draws step_on_marks step_south_and_back_on_marks drive_lead_in drive_walk click_past_the_edge drive_edge drive_flood_shot drive_cycle keep_seed choose_focus drive_focus drive_void_floor drive_void_shot drive_lifeforce_orb drive_explosions drive_transition_attack click_at click_inventory_slot drive_loadouts right_click_inventory_slot drive_supplies bind_inventory_key drive_keybinds drive_overheads_rifts seed_run restart_run drive_seed wait_until_ticking walk_by_click drive_walkway drive_corner drive release_browser stage_browser; do
+eval "$(grep -E '^(DRILL_QUERY|BOSS_NPC|SPAWN_TILE|WALK_[A-Z_]+|EDGE_[A-Z_]+|CYCLE_[A-Z_]+|FOCUS_[A-Z_]+|BOSS_CLICK_[A-Z_]+|RING_CLICK_[A-Z_]+|FLOOD_[A-Z_]+|NEAR_SQUARE|VOID_[A-Z_]+|ORB_[A-Z_]+|LOADOUT_[A-Z_]+|EXPLOSION_[A-Z_]+|STEP_CLICK_[A-Z_]+|DODGE_CLICK_[A-Z_]+|UNDER_BOSS_CLICK_[A-Z_]+|MARKER_SHOT_[A-Z_]+|SOUND_[A-Z_]+|SPECIAL_[A-Z_]+|PROTECT_[A-Z_]+|TELL_[A-Z_]+|TRANSITION_[A-Z_]+|LANDING_[A-Z_]+|STYLE_[A-Z_]+|SUPPLY_[A-Z_]+|KEYBIND_[A-Z_]+|RIFT_[A-Z_]+|OVERHEAD_[A-Z_]+|ICON_BOX|NORTH_EAST_RIFT_[A-Z_]+|CHAT_POLL_[A-Z_]+|RISEN_BOSS_[A-Z_]+|DEFLECT_[A-Z_]+|SOUL_SPLIT_[A-Z_]+|KILL_CHAT|WALKWAY_[A-Z_]+|CORNER_[A-Z_]+|HOLES?_[A-Z_]+|CREDIT_LINE)=' "$SCRIPT")"
+for fn in json process_start serve state doctor stop probe fight_tick_at_least canvas_centre click_after_tick shot_after_tick save_sound_settings record_audio_starts record_overhead_draws step_on_marks step_south_and_back_on_marks drive_lead_in drive_walk click_past_the_edge drive_edge drive_flood_shot drive_cycle keep_seed choose_focus drive_focus drive_void_floor drive_void_shot drive_lifeforce_orb drive_explosions drive_transition_attack click_at click_inventory_slot drive_loadouts right_click_inventory_slot drive_supplies bind_inventory_key drive_keybinds drive_overheads_rifts seed_run restart_run drive_seed drive_floor_holes wait_until_ticking walk_by_click drive_walkway drive_corner drive release_browser stage_browser; do
   eval "$(sed -n "/^${fn}() {\$/,/^}\$/p" "$SCRIPT")"
 done
 
@@ -413,6 +413,38 @@ fixture_fill() {
   ' "$1" "$2" "$3"
 }
 
+fixture_holes() {
+  command node -e '
+    const [file, centreX, centreY, half, ...boxLists] = process.argv.slice(1);
+    const zlib = require("zlib");
+    const crc = (buf) => { let c = ~0; for (const b of buf) { c ^= b; for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xedb88320 : c >>> 1; } return ~c >>> 0; };
+    const chunk = (type, data) => { const head = Buffer.alloc(8), tail = Buffer.alloc(4); head.writeUInt32BE(data.length); head.write(type, 4); tail.writeUInt32BE(crc(Buffer.concat([Buffer.from(type), data]))); return Buffer.concat([head, data, tail]); };
+    const [width, height] = [1280, 800];
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4); ihdr[8] = 8; ihdr[9] = 2;
+    const boxes = boxLists.flatMap((list) => JSON.parse(list)).map(([, dx, dy]) => [Number(centreX) + dx, Number(centreY) + dy]);
+    const dark = (x, y) => boxes.some(([bx, by]) => Math.abs(x - bx) <= Number(half) && Math.abs(y - by) <= Number(half));
+    const raw = Buffer.alloc(height * (1 + width * 3));
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) raw.set(dark(x, y) ? [0x03, 0x03, 0x06] : [0x68, 0x60, 0x58], y * (1 + width * 3) + 1 + x * 3);
+    require("fs").writeFileSync(file, Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]));
+  ' "$1" 640 400 "$HOLE_BOX_HALF_PX" "${@:2}"
+}
+
+holes_log() {
+  command node -e '
+    const [layout, holeTile, fault] = process.argv.slice(1);
+    const { key, tiles } = JSON.parse(layout);
+    const path = [[44, { x: 5, y: 1 }], [45, { x: 5, y: 1 }], [46, { x: 6, y: 3 }], [47, JSON.parse(holeTile)], [48, JSON.parse(holeTile)], [49, JSON.parse(holeTile)]];
+    const hits = (tick, tile) => {
+      const onHole = tiles.some((hole) => hole.x === tile.x && hole.y === tile.y);
+      if (fault === "hole-harmless" || (!onHole && fault !== "hole-hits-off-the-hole")) return [];
+      return [{ kind: "hole-hit", at: tick, tile, receipt: { requested: 10, applied: 10, beforeHp: 99, afterHp: 89, prayer: null } }];
+    };
+    const rows = path.map(([tick, tile]) => ({ tick, phase: { stage: "outer-void" }, playerAtBossStep: { tile }, events: hits(tick, tile) }));
+    const choice = fault === "holes-other-layout" ? { key: "j1-mirror", option: { value: tiles.slice(1) } } : { key, option: { value: tiles } };
+    console.log(JSON.stringify({ data: { result: { header: { seed: 1, choices: { floorHoleLayout: choice } }, rows } } }));
+  ' "$HOLE_LAYOUT" "$HOLE_TILE" "$FAULT"
+}
+
 fixture_hover_text() {
   command node -e '
     const [file, cursorY, clipped] = process.argv.slice(1);
@@ -445,6 +477,14 @@ fake_screenshot() {
     empty:*) ;;
     *:brew-heal.png | *:keybinds.png) fixture_hover_text "$1" ;;
     *:walkway.png) fixture_fill "$1" "$WALKWAY_PIXEL" "$([[ "$FAULT" == walkway-not-drawn ]] && echo 0 || echo 2)" ;;
+    *:holes-drawn.png)
+      case "$FAULT" in
+        holes-not-drawn) fixture_holes "$1" ;;
+        hole-on-a-free-tile) fixture_holes "$1" "$HOLE_PIXELS" "$HOLE_FREE_PIXELS" ;;
+        *) fixture_holes "$1" "$HOLE_PIXELS" ;;
+      esac
+      ;;
+    *:holes-flood.png) if [[ "$FAULT" == holes-over-the-flood ]]; then fixture_holes "$1" "$HOLE_PIXELS"; else fixture_holes "$1"; fi ;;
     markerfollows:explosion-left.png | *:explosion-standing.png) fixture_shards "$1" 0.5 ;;
     *:explosion-left.png) fixture_shards "$1" 0.44 ;;
     notell:special-* | *:special-before.png) fixture_tell "$1" 0 ;;
@@ -537,6 +577,7 @@ scenery_probe() {
       [[ "$FAULT" != corner-hole || "$n" -ne 1 ]] || player='{"x":2,"y":8}'
       printf '{"data":{"result":{"ticking":true,"tick":%s,"player":%s,"destination":%s}}}\n' $((10 + n)) "$player" "$player"
       ;;
+    holes:log) holes_log ;;
     corner:log)
       n=$(($(cat "$T/corner-logs" 2>/dev/null || echo 0) + 1))
       echo "$n" >"$T/corner-logs"
@@ -640,6 +681,7 @@ fake_browser() {
       "open ${URL}") echo 1 >"$T/seed-stage" ;;
       "open "*"${WALKWAY_QUERY}") echo walkway >"$T/scenery" ;;
       "open "*"${CORNER_QUERY}") echo corner >"$T/scenery" ;;
+      "open "*"${HOLES_QUERY}") echo holes >"$T/scenery" ;;
       "--json get value #seed") if [[ -e "$T/seed-stage" ]]; then seed_probe box; else echo '{"data":{"value":"1"}}'; fi ;;
       "--json eval window.__archiveOcellusProbe.log().header.seed") seed_probe seed ;;
       "--json eval location.search") seed_probe search ;;
@@ -1184,6 +1226,20 @@ corner_hole_fails() {
   [[ "$(failed_checks)" == cornerFilled ]] || { echo "expected only cornerFilled to fail, got: $(failed_checks)"; return 1; }
 }
 
+holes_fault_fails_only() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' "$1"
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed with fault $1"; return 1; fi
+  [[ "$(failed_checks)" == "$2" ]] || { echo "expected only $2 to fail for $1, got: $(failed_checks)"; return 1; }
+}
+
+holes_not_drawn_fail() { holes_fault_fails_only holes-not-drawn holesDrawnOnLayout; }
+hole_drawn_on_a_free_tile_fails() { holes_fault_fails_only hole-on-a-free-tile holesDrawnOnLayout; }
+other_hole_layout_fails() { holes_fault_fails_only holes-other-layout holesDrawnOnLayout; }
+holes_drawn_over_the_flood_fail() { holes_fault_fails_only holes-over-the-flood holesHiddenUnderFlood; }
+harmless_hole_fails() { holes_fault_fails_only hole-harmless holeHitsStandingOnIt; }
+hits_off_the_hole_fail() { holes_fault_fails_only hole-hits-off-the-hole holeHitsStandingOnIt; }
+
 failed=0
 for t in \
   refused_serve_does_not_stop_the_recorded_instance \
@@ -1261,7 +1317,13 @@ for t in \
   typed_seed_ignored_fails \
   walkway_walkable_fails \
   walkway_not_drawn_fails \
-  corner_hole_fails; do
+  corner_hole_fails \
+  holes_not_drawn_fail \
+  hole_drawn_on_a_free_tile_fails \
+  other_hole_layout_fails \
+  holes_drawn_over_the_flood_fail \
+  harmless_hole_fails \
+  hits_off_the_hole_fail; do
   if ("$t") >"$WORK/$t.log" 2>&1; then
     echo "PASS $t"
   else

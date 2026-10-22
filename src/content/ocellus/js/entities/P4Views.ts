@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { CacheRenderInstancedModel, CacheRenderReferences, CollisionType, Entity, GROUND_OVERLAY_Y, LineOfSightMask, Settings } from "osrs-sdk";
+import { CacheRenderInstancedModel, CacheRenderModel, CacheRenderReferences, CollisionType, Entity, GROUND_OVERLAY_Y, LineOfSightMask, Settings } from "osrs-sdk";
 import type { Location3, Model, Region, Renderable, Unit } from "osrs-sdk";
 import { spriteFile } from "../../../../assets";
 import { OCELLUS_P4 } from "../OcellusTimings";
@@ -200,6 +200,54 @@ export class VoidField extends Entity {
 
   protected override create3dModel(): Model {
     return new VoidFloorModel(() => this.showing);
+  }
+}
+
+const HOLES = OCELLUS_P4.floorHoles;
+
+export class FloorHole extends Entity {
+  private covered = false;
+
+  constructor(region: Region, at: Tile) {
+    super(region, { x: at.x, y: at.y });
+  }
+
+  cover(floor: VoidKind | null): void {
+    this.covered = floor === HOLES.hiddenUnder.value;
+  }
+
+  override visible(): boolean {
+    return !this.covered;
+  }
+
+  override get collisionType(): CollisionType {
+    return CollisionType.NONE;
+  }
+
+  override get lineOfSight(): LineOfSightMask {
+    return LineOfSightMask.NONE;
+  }
+
+  override get drawOutline(): boolean {
+    return false;
+  }
+
+  override get animationIndex(): number {
+    return HOLES.look.idle.value;
+  }
+
+  override draw(tickPercent: number, context: OffscreenCanvasRenderingContext2D): void {
+    if (!this.visible()) return;
+    const scale = Settings.tileSize;
+    const { x, y } = this.location;
+    context.fillStyle = LOOK.rim;
+    context.fillRect((x + 0.1) * scale, (y + 0.1) * scale, 0.8 * scale, 0.8 * scale);
+    context.fillStyle = LOOK.void;
+    context.fillRect((x + 0.2) * scale, (y + 0.2) * scale, 0.6 * scale, 0.6 * scale);
+  }
+
+  protected override create3dModel(): Model {
+    return CacheRenderModel.forRenderable(this, CacheRenderReferences.model(HOLES.look.model.value));
   }
 }
 

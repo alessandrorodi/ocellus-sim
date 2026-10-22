@@ -5,7 +5,7 @@ import { OCELLUS_P4 } from "./OcellusTimings";
 import { dress } from "./OcellusLoadout";
 import { OcellusPlayer } from "./OcellusPlayer";
 import type { FightEvent, FightLog, FightSnapshot, SoundId, Tile, TickRow, VoidKind } from "./P4Types";
-import { BossLook, ExplosionViews, FragmentFlash, OrbView, PlayerLook, VoidField } from "./entities/P4Views";
+import { BossLook, ExplosionViews, FloorHole, FragmentFlash, OrbView, PlayerLook, VoidField } from "./entities/P4Views";
 import { Brazier, Walkway } from "./entities/Scenery";
 import { Ocellus } from "./mobs/Ocellus";
 import { BRAZIERS, PLATFORM, WALKWAY, voidUnder } from "./p4/floor";
@@ -20,6 +20,7 @@ function itemId(item: Item | null | undefined): number | null {
 
 type Views = Readonly<{
   field: VoidField;
+  holes: readonly FloorHole[];
   orbs: Readonly<Record<VoidKind, OrbView>>;
   fragment: FragmentFlash;
   explosions: ExplosionViews;
@@ -90,6 +91,7 @@ function present(event: FightEvent, views: Views, player: Tile): void {
     case "boss-shouted":
     case "player-hit-judged":
     case "floor-hit":
+    case "hole-hit":
     case "lifeforce-drained":
     case "boss-healed":
     case "special-hit":
@@ -144,6 +146,7 @@ export class OcellusRegion extends Region {
     Object.values(sounds).forEach((sound) => SoundCache.preload(cacheSound(sound.value)));
     const views: Views = {
       field: new VoidField(this),
+      holes: ocellus.holes.tiles().map((at) => new FloorHole(this, at)),
       orbs: { "inner-void": new OrbView(this), "outer-void": new OrbView(this) },
       fragment: new FragmentFlash(this),
       explosions: new ExplosionViews(this),
@@ -151,7 +154,7 @@ export class OcellusRegion extends Region {
       player: new PlayerLook(player),
       chat: [],
     };
-    [views.field, views.orbs["inner-void"], views.orbs["outer-void"], views.fragment].forEach((view) => this.addEntity(view));
+    [views.field, ...views.holes, views.orbs["inner-void"], views.orbs["outer-void"], views.fragment].forEach((view) => this.addEntity(view));
     [new Walkway(this), ...BRAZIERS.tiles().map((at) => new Brazier(this, at))].forEach((scenery) => this.addEntity(scenery));
     for (const edge of PLATFORM.surround().tiles()) this.addEntity(new InvisibleMovementBlocker(this, { ...edge }));
     this.addPlayer(player);
@@ -175,7 +178,9 @@ export class OcellusRegion extends Region {
     if (!row) return;
     this.mounted.rows.push(row);
     const { views } = this.mounted;
-    views.field.show(voidUnder(row.phase));
+    const floor = voidUnder(row.phase);
+    views.field.show(floor);
+    views.holes.forEach((hole) => hole.cover(floor));
     row.events.forEach((event) => present(event, views, row.playerAtPostTick.tile));
   }
 

@@ -1,6 +1,7 @@
 import type { TwistedBow } from "osrs-sdk";
 import type { BossOverhead, Cycle, HoveringBoss, Mechanic, Seed, SoundId, Special, Style, TickSpan, Tile, TransitionKind, VoidKind } from "./P4Types";
-import { cycle, seed, soundId, span, tile } from "./P4Types";
+import { cycle, seed, soundId, span, tick, tile } from "./P4Types";
+import { roll } from "./p4/roll";
 
 type Basis = "footage-repeated" | "footage-once" | "spec-confirmed" | "spec-single" | "inferred" | "assumption";
 type Scale = "unscaled" | "team-4" | "team-5" | "team-4-and-5";
@@ -439,6 +440,38 @@ const INNER_VOID_FLOOR = choice("one-tick-grace", {
   harmless: selected<FloorRule>({ kind: "harmless" }, "assumption", "unscaled", "no capture shows inner-void damage", vod("V2", "k48 to k49")),
 });
 
+export type HoleRule = Readonly<{ kind: "damages"; perTick: DamageRange }> | Readonly<{ kind: "harmless" }>;
+type HoleLayout = readonly Tile[];
+
+type FloorHoleRecipe = Readonly<{
+  lifetime: Selected<"whole-phase">;
+  hiddenUnder: Selected<"outer-void">;
+  look: Readonly<{ model: Selected<number>; idle: Selected<number> }>;
+}>;
+
+const HOLE_FRAMES = vod("V1", "seen G29 to G176 on 84 fitted ticks; the same tiles at t-42 (clip 0.40 s) and t-5 (clip 23.00 s)");
+
+const FLOOR_HOLES: FloorHoleRecipe = {
+  lifetime: selected("whole-phase", "footage-repeated", "team-4-and-5", "on the platform before P4 tick 0 and on the same tiles to the kill (V1) or the wipe (V2); no hole appears, moves or leaves during P4; the wiki puts void pools in phase 3", HOLE_FRAMES, vod("V2", "seen k49 to k270 on 85 fitted ticks"), STRATEGIES),
+  hiddenUnder: selected("outer-void", "footage-repeated", "team-4", "V1's holes show on 0 of 99 in-view tile-ticks during the flood and 227 of 295 outside it; V2's stay visible on the strip the flood does not draw", HOLE_FRAMES),
+  look: {
+    model: selected(62508, "inferred", "unscaled", "loc 62701 Void (tfa_ocellus_void_degen_bomb), shape 22; one tile, black starfield texture 215 in a purple rim, colour 50130; 62507 is the shape-10 twin; which shape the server spawns is unknown", cache("loc 62701 models 62507, 62508")),
+    idle: selected(14891, "spec-confirmed", "unscaled", "the loc's own animation, 1.33-tick loop, no sounds", cache("loc 62701 animation 14891")),
+  },
+};
+
+const FLOOR_HOLE_LAYOUT = choice("v1-turn", {
+  "v1-turn": selected<HoleLayout>([tile(1, 5), tile(1, 6), tile(2, 8), tile(2, 9), tile(4, 9), tile(8, 5)], "footage-repeated", "team-4", "V1's six holes carried by the quarter turn, x = 3 + v, y = 3 + u; the only full layout that clears the spawn, the drill tiles and rift option A; (4, 9) is floor only on the 80-tile rows", HOLE_FRAMES),
+  "v1-mirror": selected<HoleLayout>([tile(5, 1), tile(6, 1), tile(8, 2), tile(9, 2), tile(9, 4), tile(5, 8)], "footage-repeated", "team-4", "V1's six holes carried by the east-west mirror, x = 3 + u, y = 3 + v, the carry rift option A uses; (5, 1) is the player spawn; (5, 8) is floor only on the 80-tile rows", HOLE_FRAMES),
+  "j1-mirror": selected<HoleLayout>([tile(9, 3), tile(9, 1), tile(2, 6), tile(2, 5), tile(2, 2)], "footage-once", "unscaled", "five holes in the owner's screenshot, team of 2, mirror carry; (2, 2) is rift option A's first tile", owner("P4 platform screenshot: five black hole blobs")),
+  "j1-turn": selected<HoleLayout>([tile(3, 9), tile(1, 9), tile(6, 2), tile(5, 2), tile(2, 2)], "footage-once", "unscaled", "the same five, quarter-turn carry; (5, 2) is a drill tile and (2, 2) is rift option A", owner("P4 platform screenshot: five black hole blobs")),
+});
+
+const FLOOR_HOLE_DAMAGE = choice("flood-rate", {
+  "flood-rate": selected<HoleRule>({ kind: "damages", perTick: FLOOD_PER_TICK }, "assumption", "unscaled", "the owner says they damage when stepped on, and the wiki's phase 3 void pools deal periodic damage; no capture shows anyone on a hole, so the amount copies the flood's 9 to 11 a tick, read on the tile a tick starts on, and a hole under a damaging flood hits as well as the flood", owner("black hole blobs damage if you step on them"), STRATEGIES, cache("loc 62701 tfa_ocellus_void_degen_bomb")),
+  harmless: selected<HoleRule>({ kind: "harmless" }, "assumption", "unscaled", "no capture shows a hole's effect", HOLE_FRAMES),
+});
+
 export type OrbFloor = "safe-floor" | "any-floor";
 type OrbVisual = "innerSpawn" | "outerSpawn" | "idle" | "despawn" | "tell" | "regain";
 
@@ -624,6 +657,7 @@ export const OCELLUS_P4 = {
   rifts: RIFTS,
   geometry: GEOMETRY,
   floor: FLOOR,
+  floorHoles: FLOOR_HOLES,
   lifeforceOrb: LIFEFORCE_ORB,
   explosion: EXPLOSION,
   presentation: PRESENTATION,
@@ -674,6 +708,8 @@ export const OCELLUS_P4 = {
       "cycle-3": selected<Cycle>(cycle(3), "footage-once", "team-4", "none in view before cycle 2, two before cycle 3", vod("V1", "G90-G95, G152")),
     }),
     innerVoidFloor: INNER_VOID_FLOOR,
+    floorHoleLayout: FLOOR_HOLE_LAYOUT,
+    floorHoleDamage: FLOOR_HOLE_DAMAGE,
     deflect: choice("block-at-launch", {
       "block-at-launch": selected<DeflectRule>({ kind: "block" }, "inferred", "unscaled", "a hit of the deflected style lands as 0, judged by the overhead up when it was launched: three ranged hits launched before Deflect Range rose landed in full under it, and no capture shows a hit launched into a deflect of its own style (Q8)", vod("V1", "G182 to G184"), vod("V2", "k78 to k81, k137 to k140")),
       none: selected<DeflectRule>({ kind: "none" }, "assumption", "unscaled", "the wiki names the prayers without saying what they do", STRATEGIES),
@@ -699,6 +735,7 @@ export const OCELLUS_P4 = {
       "transition-attacks": drill("transition-attacks"),
       "boss-heals": drill("transition-attacks", "lifeforce-orb"),
       rifts: drill("rifts"),
+      "floor-holes": drill("floor-holes"),
     }),
   },
 } as const;
@@ -729,10 +766,23 @@ function hasKey<O extends object>(record: O, key: string): key is keyof O & stri
   return Object.prototype.hasOwnProperty.call(record, key);
 }
 
-function resolveChoices(lookup: (name: ChoiceName) => string | undefined, rejected: string[]): ResolvedChoices {
-  const pick = <K extends ChoiceName>(name: K): ResolvedChoice<K> => {
+const HOLE_LAYOUTS = CHOICES.floorHoleLayout.options;
+const HOLE_FREE_TILES: readonly Tile[] = [
+  GEOMETRY.playerSpawn.value,
+  ...RIFTS.offsetsFromBoss.value.map(({ dx, dy }) => tile(GEOMETRY.bossAnchor.value.x + dx, GEOMETRY.bossAnchor.value.y + dy)),
+];
+const SEEDED_HOLE_LAYOUTS = Object.keys(HOLE_LAYOUTS).filter(
+  (key): key is OptionKey<"floorHoleLayout"> => hasKey(HOLE_LAYOUTS, key) && HOLE_LAYOUTS[key].value.every((hole) => !HOLE_FREE_TILES.some((free) => free.x === hole.x && free.y === hole.y)),
+);
+
+function seededHoleLayout(runSeed: Seed): OptionKey<"floorHoleLayout"> {
+  return SEEDED_HOLE_LAYOUTS[Math.floor(roll(runSeed, "holeLayout", tick(0), 0) * SEEDED_HOLE_LAYOUTS.length)] ?? CHOICES.floorHoleLayout.default;
+}
+
+function resolveChoices(lookup: (name: ChoiceName) => string | undefined, rejected: string[], runSeed: Seed): ResolvedChoices {
+  const pick = <K extends ChoiceName>(name: K, fallback: OptionKey<K> = CHOICES[name].default): ResolvedChoice<K> => {
     const raw = lookup(name);
-    const { default: fallback, options } = CHOICES[name];
+    const { options } = CHOICES[name];
     if (raw !== undefined && hasKey(options, raw)) return new ResolvedChoice(name, raw);
     if (raw !== undefined) rejected.push(`${name}=${raw}`);
     return new ResolvedChoice(name, fallback);
@@ -747,6 +797,8 @@ function resolveChoices(lookup: (name: ChoiceName) => string | undefined, reject
     unclaimedOuterOrb: pick("unclaimedOuterOrb"),
     riftFirstCycle: pick("riftFirstCycle"),
     innerVoidFloor: pick("innerVoidFloor"),
+    floorHoleLayout: pick("floorHoleLayout", seededHoleLayout(runSeed)),
+    floorHoleDamage: pick("floorHoleDamage"),
     deflect: pick("deflect"),
     hoverMeleeReach: pick("hoverMeleeReach"),
     orbPickupRadius: pick("orbPickupRadius"),
@@ -761,7 +813,7 @@ function isChoiceName(name: string): name is ChoiceName {
 
 export function resolveDrill(request: DrillRequest): DrillConfig {
   const selection: Readonly<Record<string, string | undefined>> = request.selection ?? {};
-  return { seed: request.seed, choices: resolveChoices((name) => selection[name], []) };
+  return { seed: request.seed, choices: resolveChoices((name) => selection[name], [], request.seed) };
 }
 
 export function parseDrillRequest(url: URL, freshSeed: () => number): ParsedDrill {
@@ -769,9 +821,10 @@ export function parseDrillRequest(url: URL, freshSeed: () => number): ParsedDril
   for (const [key, value] of url.searchParams) {
     if (key !== "seed" && !isChoiceName(key)) rejected.push(`${key}=${value}`);
   }
-  const choices = resolveChoices((name) => url.searchParams.get(name) ?? undefined, rejected);
   const raw = url.searchParams.get("seed");
   const parsed = raw !== null && /^\d{1,10}$/.test(raw) && Number(raw) <= 0xffffffff ? Number(raw) : null;
+  const runSeed = seed(parsed ?? freshSeed());
+  const choices = resolveChoices((name) => url.searchParams.get(name) ?? undefined, rejected, runSeed);
   if (raw !== null && parsed === null) rejected.push(`seed=${raw}`);
-  return { config: { seed: seed(parsed ?? freshSeed()), choices }, rejected };
+  return { config: { seed: runSeed, choices }, rejected };
 }

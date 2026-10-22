@@ -29,7 +29,7 @@ import type {
 } from "../P4Types";
 import { after, riftId, span, tick, tile, worldTick } from "../P4Types";
 import { drawHealSplats, drawOverheadIcon } from "../entities/P4Views";
-import { FOOTPRINT, VOID_MASKS, floorRule } from "../p4/floor";
+import { FOOTPRINT, TileMask, VOID_MASKS, floorRule } from "../p4/floor";
 import { orbTile, reach } from "../p4/orb";
 import { rollInt } from "../p4/roll";
 import type { Moment } from "../p4/schedule";
@@ -122,6 +122,7 @@ function specialAttack<V extends Special>(at: Tick, ordinal: Ordinal, variant: V
 
 export class Ocellus extends Mob {
   private readonly schedule: Schedule;
+  readonly holes: TileMask;
   private run: Run = { kind: "waiting", inputs: [] };
   private orbs: readonly Orb[] = [];
   private marks: readonly Mark[] = [];
@@ -132,6 +133,7 @@ export class Ocellus extends Mob {
   constructor(region: Region, private readonly config: DrillConfig, private readonly target: OcellusPlayer) {
     super(region, OCELLUS_P4.geometry.bossAnchor.value);
     this.schedule = Schedule.compile(config.seed, config.choices);
+    this.holes = TileMask.at(this.schedule.acts("floor-holes") ? config.choices.floorHoleLayout.option.value : []);
   }
 
   enterP4(): void {
@@ -331,6 +333,7 @@ export class Ocellus extends Mob {
     }
     const destroyed = this.destroyFallenRifts(moment.tick);
     const reactions = moment.beats.flatMap((beat) => this.react(beat, moment.tick, draft.playerAtBossStep) ?? []);
+    this.strikeHole(moment.tick, draft.playerAtBossStep);
     this.run = { kind: "stepping", draft: { ...draft, beats: moment.beats, events: [...logged, ...destroyed, ...reactions] } };
   }
 
@@ -421,6 +424,13 @@ export class Ocellus extends Mob {
     const requested = rollInt(this.config.seed, "floorDamage", at, rule.perTick, 0);
     const hit = new P4Hit(this, this.target, () => requested, (receipt) => this.recordEvent({ kind: "floor-hit", at, void: kind, tile: player.tile, receipt }));
     this.target.addProjectile(hit);
+  }
+
+  private strikeHole(at: Tick, player: PlayerObservation): void {
+    const rule = this.config.choices.floorHoleDamage.option.value;
+    if (rule.kind === "harmless" || !this.holes.contains(player.tile)) return;
+    const requested = rollInt(this.config.seed, "holeDamage", at, rule.perTick, 0);
+    this.target.addProjectile(new P4Hit(this, this.target, () => requested, (receipt) => this.recordEvent({ kind: "hole-hit", at, tile: player.tile, receipt })));
   }
 
   private strikeSpecial(ordinal: Ordinal, variant: Special, at: Tick): void {

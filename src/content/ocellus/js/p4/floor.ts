@@ -33,6 +33,10 @@ export class TileMask<K extends VoidKind | null = VoidKind | null> {
     return new TileMask(null, tiles);
   }
 
+  static at(tiles: readonly Tile[]): TileMask<null> {
+    return new TileMask(null, new Map(tiles.map((at) => [key(at), at])));
+  }
+
   static of(rows: readonly string[], ...glyphs: readonly ArenaGlyph[]): TileMask<null> {
     const tiles = new Map<string, Tile>();
     rows.forEach((row, y) =>
