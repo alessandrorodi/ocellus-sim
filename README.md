@@ -67,7 +67,8 @@ pools, an orange floor portal to the next quadrant, and all twelve fire at once.
 
 The "+" breaks into chasms with stepping stones. Three segments, each ending with your quadrant falling into the
 void: melee triples and the shadow slash, spins, void bombs, "Your panic... is futile...", the Void Vine,
-"Insolence...", rifts, and Untether. Jump the stones before the floor goes.
+"Insolence...", rifts, and Untether. Jump the stones before the floor goes. The void bombs land where you stand and on
+the same tile of every other quadrant, and stay: rag them to the edge or meet them again in phase 4.
 
 </td>
 </tr>
@@ -77,7 +78,8 @@ void: melee triples and the shadow slash, spins, void bombs, "Your panic... is f
 **Phase 4 · Last quadrant**
 
 A 60-tick loop: inner void and Deflect Melee, a wind that halves your HP, personal explosions, a hybrid attack under
-Soul Split, then outer void and Deflect Range. Take your lifeforce orb back before he does.
+Soul Split, then outer void and Deflect Range. Take your lifeforce orb back before he does. Dodge an explosion by one
+tile and your attack timer resets: move, attack, move for 2-tick Tbow or Scythe.
 
 </td>
 <td><img src="docs/screenshots/phase4-void.jpg" alt="Phase 4: the inner void under Ocellus"></td>

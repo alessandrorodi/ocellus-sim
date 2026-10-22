@@ -12,6 +12,8 @@ Where every timing, damage number and id in the full-fight simulator comes from.
 | **[G]** | RuneLite gameval: [AnimationID](https://github.com/runelite/runelite/blob/master/runelite-api/src/main/java/net/runelite/api/gameval/AnimationID.java), [SpotanimID](https://github.com/runelite/runelite/blob/master/runelite-api/src/main/java/net/runelite/api/gameval/SpotanimID.java), [NpcID](https://github.com/runelite/runelite/blob/master/runelite-api/src/main/java/net/runelite/api/gameval/NpcID.java) | Cache ids for every Ocellus seq, spotanim and NPC (cache rev 241) | Confirmed |
 | **[V]** | [Duo The Fractured Archive (ShadowStalkerTM)](https://www.youtube.com/watch?v=HAgq_qg0OIY), Ocellus from 12:45 to 25:10 | Visual check of every phase, the teal P1 / green P2+ boss bar, "You've been injured and can't use protection prayers!" during Untether, "Destroying the void rift/augmenter empowers you!", the 12:17 duo kill | Footage, single run |
 | **Cache** | OpenRS2 cache [2746](https://archive.openrs2.org/caches/runescape/2746) (OSRS build 241, 2026-10-20) | Models, animations, effects and sounds, extracted at build time by `osrs-sdk-assets`; nothing from the cache is committed | Confirmed. No XTEA keys yet, so the arena map is drawn by hand |
+| **[O]** | The owner, a player of the fight, checked against [V] | Phase 2's skip, the HP-driven quadrant falls, tendrils that cost nothing in the end | Player knowledge |
+| **[M]** | [Molgoatkirby's Ocellus guide](https://www.youtube.com/watch?v=GU8_yiucWtk) (narrated, day 3), with the [tile ragging video](https://www.youtube.com/watch?v=hR71l7hzuKM) and [markers](https://pastebin.com/6D7SEWEm) it links | Void bombs that stay into phase 4, the spin's rubble, magic through Untether, the tick-perfect step out, six attacks between specials, phase 4's 2-tick reset and its orb | Player knowledge, footage |
 
 ## Engine
 
@@ -19,8 +21,6 @@ Where every timing, damage number and id in the full-fight simulator comes from.
   `c7d9693`, the engine behind [colosim.com](https://colosim.com) (Sol Heredit) and
   [infernotrainer.com](https://www.infernotrainer.com).
 - [osrscachereader](https://github.com/Julian-Dasilva/osrscachereader) fork pinned at `8ba9131` (a build 241 decoder fix).
-
-| **[O]** | The owner, a player of the fight, checked against [V] | Phase 2's skip, the HP-driven quadrant falls, tendrils that cost nothing in the end | Player knowledge |
 
 ## Decisions where the sources disagree or are silent
 
@@ -42,6 +42,18 @@ Where every timing, damage number and id in the full-fight simulator comes from.
   from the room before ("You have been set alight!"), not the cracks. The sim heals 9-16 a blocked crack.
 - **"Your panic... is futile..."** [R] recorded it at fixed ticks; [W] says it is his answer to a tank out of melee
   reach. The sim fires it whenever a swing can't reach you.
+- **Void bombs.** [R] records one per standing quadrant and a void that "stays"; [M] says they fall on everyone
+  but the tank, and the community markers sit on the same three edge tiles of all four quadrants, a quarter turn
+  apart. The sim drops one over you (solo has no other target, as with the vine) and one on that tile turned into
+  each other standing quadrant. The voids last until their quadrant falls, so the last quadrant's carry into phase 4.
+- **The spin's rubble.** [R]: over every raider 3 ticks into the first segment's spin and 6 into later ones, falling
+  5 ticks on and leaving a void patch; [M]: "slow falling", one step clears it. Its damage is a guess (the bomb's).
+- **Untether.** [M]: pray Magic, "he'll mage you constantly"; the sim fires a magic shot with each of [R]'s pool waves,
+  where [R] logged 39 zeros. [M]: "you can step under early, but step out is tick perfect", so being outside the zone
+  on any tick from the eruption to the slam is one hit, and the only safe move out is the tick before the slam.
+- **Phase 4's 2-tick.** [M]: an explosion a tile from you resets your attack timer ("you can attack every two
+  ticks"); move the tick a mark goes down and attack the next. The melee-phase orb forms across his body from where
+  you stepped into his ring ([M] 15:40).
 - **Defence floor.** [J]: 60% for Ocellus, none for The Blade.
 - **Void Augmenter.** [W]: Attack and Strength to 116, Magic and Ranged to 112. The Void Rift's buff is still unknown
   (the sim keeps a max hit on your next attack). NPC 16679 is the Void Siphon ([W]).

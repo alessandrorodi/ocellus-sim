@@ -329,8 +329,19 @@ export const P3 = {
   volleyDamage: range(20, 26),
   patchDamage: range(6, 7),
   patchLasts: range(21, 51),
+  /**
+   * Void bombs fall on every raider but the tank (solo: you), and on the same tile turned into each other standing
+   * quadrant. Their voids stay until the quadrant falls, so the last quadrant's carry into phase 4. [R] [M] 8:55
+   */
   bombDropAfter: 2,
   bombDamage: range(6, 11),
+  /**
+   * Rubble over each raider during the spin, 3 ticks in (first segment) or 6 (later); it falls 5 ticks on and leaves
+   * a void patch. [R] [M] 7:20. The damage is a guess (nobody stood under it in [R]): the bomb's.
+   */
+  debrisIntoSpin: { first: 3, later: 6 },
+  debrisFalls: 5,
+  debrisDamage: range(6, 11),
   vineHp: 44,
   vineBreakWithin: 14,
   vineDamage: range(50, 55),
@@ -346,8 +357,11 @@ export const P3 = {
   healRiftHeal: [12, 14],
   /** Untether, from U. [R] [W] */
   untether: {
+    /** Each pool wave comes with a magic shot at everyone: "pray mage, he'll mage you constantly" [M] 4:37; [R]'s 39 zeros there. */
     pools: [6, 10, 14, 18],
+    magicDamage: range(20, 28),
     unleashVfx: 18,
+    /** Outside his zone from the eruption until the slam: one hit. So step in early, but out on the last tick. [M] 5:00 */
     erupt: 25,
     eruptDamage: range(40, 45),
     slam: 29,
@@ -383,6 +397,8 @@ export const P4 = {
     [40, 42, 44, 46, 48, 50],
   ],
   explosionDamage: range(14, 16),
+  /** A mark that explodes a tile from you resets your attack timer: 2-tick attacks with any weapon. [M] 12:50 */
+  explosionResetReach: 1,
   hybrids: [24, 52],
   hybridHitAfter: 5,
   hybridProtected: range(5, 10),

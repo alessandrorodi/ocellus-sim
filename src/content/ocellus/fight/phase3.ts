@@ -27,6 +27,7 @@ import {
   same,
   sign,
   stonesOf,
+  turnInto,
 } from "./geometry";
 import type { AddKind, Style } from "./units";
 import { VoidAdd } from "./units";
@@ -259,6 +260,7 @@ export class Phase3 implements PhaseScript {
     this.stationary = true;
     boss.playAnimation(SEQ.p3PrayerIn);
     boss.addSpotAnim({ id: SPOT.meleePrayerIn, channel: "spin" });
+    fight.after(this.segment === 0 ? P3.debrisIntoSpin.first : P3.debrisIntoSpin.later, () => this.debris());
     const loops = this.fight.destroyed.size;
     for (let i = 0; i <= loops; i++) {
       const last = i === loops;
@@ -301,14 +303,19 @@ export class Phase3 implements PhaseScript {
     });
   }
 
-  /** One void bomb on each standing quadrant; it drops two ticks later and leaves a patch. */
+  /**
+   * Void bombs: one over you (in a team, over everyone but the tank) and one on the same tile turned into each other
+   * standing quadrant. Each drops two ticks later and leaves a void that stays until its quadrant falls, so where you
+   * stand now decides where the last quadrant's voids sit in phase 4: the edge, not the middle. [R] [M]
+   */
   private bombs(): void {
     const { fight } = this;
+    const here = fight.playerTile;
+    const from = quadrantOf(here) ?? sideQuadrant(here);
     for (const q of QUADRANTS) {
       if (fight.destroyed.has(q)) continue;
-      const tiles = quadrantTiles(q).filter((t) => fight.isWalkable(t) && !covers(this.body(), t));
-      if (tiles.length === 0) continue;
-      const tile = q === quadrantOf(fight.playerTile) && fight.rng.chance(0.5) ? fight.playerTile : fight.rng.pick(tiles);
+      const tile = turnInto(here, from, q);
+      if (!fight.isWalkable(tile) || covers(this.body(), tile)) continue;
       fight.spot(tile, SPOT.bombSpawn, { height: 2, maxTicks: 2 });
       fight.spot(tile, SPOT.bombIdle, { height: 2, loopTicks: 1, maxTicks: 2 });
       this.telegraphs.push({ tiles: [tile], landsAt: fight.tick + P3.bombDropAfter, colour: 0x8a2be2 });
@@ -316,15 +323,31 @@ export class Phase3 implements PhaseScript {
         fight.spot(tile, SPOT.bombDrop, { maxTicks: 3 });
         fight.spot(tile, SPOT.bombImpact, { maxTicks: 3 });
         if (same(fight.playerTile, tile)) fight.hit({ amount: () => fight.rng.roll(P3.bombDamage) });
-        this.addPatch(tile, 30, "bomb");
+        this.addPatch(tile, Infinity, "bomb");
       });
     }
   }
 
+  /** Rubble over you during the spin: it falls slowly, so one step clears it, and leaves a void patch. [R] [M] */
+  private debris(): void {
+    if (this.levitating) return;
+    const { fight } = this;
+    const tile = fight.playerTile;
+    fight.spot(tile, SPOT.fallingDebris, { maxTicks: P3.debrisFalls + 1 });
+    this.telegraphs.push({ tiles: [tile], landsAt: fight.tick + P3.debrisFalls, colour: 0x8a6a3a });
+    fight.after(P3.debrisFalls, () => {
+      if (same(fight.playerTile, tile)) fight.hit({ amount: () => fight.rng.roll(P3.debrisDamage) });
+      this.addPatch(tile, fight.rng.roll(P3.patchLasts), "aoe");
+    });
+  }
+
+  /** A patch replaces a shorter-lived one on its tile; a bomb's void outlasts anything dropped on it later. */
   private addPatch(tile: ATile, lasts: number, kind: VoidLocKind): void {
     if (!this.fight.isFloor(tile)) return;
+    const until = this.fight.tick + lasts;
+    if (this.patches.some((p) => same(p.tile, tile) && p.until >= until)) return;
     this.patches = this.patches.filter((p) => !same(p.tile, tile));
-    this.patches.push({ tile, until: this.fight.tick + lasts, placed: this.fight.tick, kind });
+    this.patches.push({ tile, until, placed: this.fight.tick, kind });
   }
 
   /** The patches as the game draws them, each kind its own loc. */
@@ -451,15 +474,28 @@ export class Phase3 implements PhaseScript {
     this.zone = { sw: { x: CORNERS[q].x - 1, z: CORNERS[q].z - 1 }, size: 5 };
     const u = P3.untether;
     fight.after(2, () => (boss.pose = SEQ.p3UnleashLoop));
-    for (const t of u.pools) fight.after(t, () => this.untetherPools());
+    for (const t of u.pools) {
+      fight.after(t, () => {
+        this.untetherPools();
+        this.untetherShot();
+      });
+    }
     fight.after(u.unleashVfx, () => boss.addSpotAnim({ id: SPOT.unleashOnBoss, channel: "unleash" }));
     fight.after(u.erupt - 2, () => (this.zoneGlow = 1));
     fight.after(u.erupt, () => {
       const rotation = { NE: 2, NW: 1, SW: 0, SE: 3 }[q];
       fight.spot(bodyCentreTile(this.body()), SPOT.unleashArena[rotation], { maxTicks: 6 });
-      const here = fight.playerTile;
-      if (quadrantOf(here) === q && this.zone && !covers(this.zone, here)) fight.hit({ amount: () => fight.rng.roll(u.eruptDamage) });
     });
+    // The eruption holds until the slam: out of the zone on any of those ticks is one hit, so you step out on the last.
+    let erupted = false;
+    for (let t = u.erupt; t < u.slam; t++) {
+      fight.after(t, () => {
+        const here = fight.playerTile;
+        if (erupted || quadrantOf(here) !== q || !this.zone || covers(this.zone, here)) return;
+        erupted = true;
+        fight.hit({ amount: () => fight.rng.roll(u.eruptDamage) });
+      });
+    }
     fight.after(u.slam - 2, () => (this.zoneGlow = 2));
     fight.after(u.slam, () => {
       boss.pose = null;
@@ -521,6 +557,19 @@ export class Phase3 implements PhaseScript {
     });
   }
 
+  /** Magic from the air with each pool wave, so Untether is prayed with Protect from Magic. [M] [R] */
+  private untetherShot(): void {
+    const { fight } = this;
+    fight.hit({
+      from: this.boss,
+      style: "magic",
+      delay: 2,
+      amount: fight.prayable("magic", P3.untether.magicDamage),
+      visuals: { spotAnim: { id: SPOT.magicProjectile }, startCycleOffset: 45, endCycleOffset: 60, verticalOffset: 1 },
+      onLand: () => fight.player.addSpotAnim({ id: SPOT.magicImpact, channel: "impact" }),
+    });
+  }
+
   private obliterate(q: Quadrant): void {
     const { fight } = this;
     const boss = this.boss;
@@ -567,6 +616,7 @@ export class Phase3 implements PhaseScript {
       boss.hidden = false;
       if (this.segment >= 3) {
         this.finished = true;
+        fight.lingeringVoids = this.patches.filter((p) => p.until === Infinity).map(({ tile, placed }) => ({ tile, placed }));
         fight.enterPhase(4);
         return;
       }

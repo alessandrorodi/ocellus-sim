@@ -283,12 +283,15 @@ const TIPS: Readonly<Record<StartPhase, readonly string[]>> = {
   3: [
     "Pray Melee for his two swings, then step out of the shadow slash line.",
     "When he starts to spin, turn your overhead OFF (or be injured), then Protect from Melee for the saw blades.",
-    "Break the void vine within 14 ticks. Kill rifts. Untether: stand inside the purple zone for the eruption, step out before the slam.",
+    "He does six attacks between specials. Spin rubble falls over you slowly: one step clears it.",
+    "Void bombs drop where you stand and on the same tile of every quadrant, and stay. Stand at the edge when they come or they'll be under you in phase 4.",
+    "Break the void vine within 14 ticks. Kill rifts. Untether: pray Magic, be inside the purple zone by the eruption, and step out on the tick before the slam (the border at its brightest).",
     "After Obliteration, cross the stones (click a stone or the next quadrant) before the quadrant falls. Right-click a censer to light it.",
   ],
   4: [
     "Inner void + Deflect Melee: range from outside the 5x5. Outer void + Deflect Range: melee inside the 5x5.",
-    "Take your orb back after each wind. Move a tile every time an explosion marks you.",
+    "Take your orb back after each wind; in the melee phase it forms across from where you stepped in.",
+    "Move a tile every time an explosion marks you. A dodge resets your attack: move, attack, move for 2-tick attacks.",
     "Match your prayer to the hybrid tell: purple ring = Magic, spikes = Missiles, black disk = Melee.",
   ],
 };

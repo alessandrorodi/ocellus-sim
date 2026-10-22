@@ -3,10 +3,11 @@ import type { TileMark } from "./effects";
 import type { Fight, PhaseScript } from "./Fight";
 import { CHAT } from "./Fight";
 import type { BossOverhead } from "./data";
-import { P4, SEQ, SOUND, SPOT } from "./data";
+import { P3, P4, SEQ, SOUND, SPOT, VOID_LOC } from "./data";
 import type { ATile, Body, Quadrant } from "./geometry";
-import { ARMS, CORNERS, QUADRANTS, at, covers, distanceToBody, quadrantTiles, same, stonesOf } from "./geometry";
+import { ARMS, CORNERS, QUADRANTS, at, bodyCentre, covers, distanceToBody, quadrantTiles, reach, same, stonesOf } from "./geometry";
 import type { GroundSpot } from "./effects";
+import { LocField } from "./locs";
 import type { Style } from "./units";
 import { VoidAdd } from "./units";
 
@@ -36,6 +37,8 @@ export class Phase4 implements PhaseScript {
   private rifts: VoidAdd[] = [];
   private pending: Map<number, Variant> = new Map();
   private void: "inner" | "outer" | null = null;
+  /** Where you stepped into his ring once the outer void came: the melee-phase orb forms across from it. [M] 15:40 */
+  private entry: ATile | null = null;
   private dead = false;
 
   constructor(private readonly fight: Fight) {}
@@ -74,10 +77,30 @@ export class Phase4 implements PhaseScript {
     });
     fight.after(P4.shoutAt, () => fight.say("End...", 3));
     this.firstCycle = fight.tick + P4.firstCycleAt;
+    if (fight.lingeringVoids.length > 0) {
+      fight.region.addEntity(
+        new LocField(fight.region, () =>
+          fight.lingeringVoids.map((v) => ({ key: `bomb:${v.placed}:${v.tile.x},${v.tile.z}`, tile: v.tile, models: VOID_LOC.bomb.models })),
+        ),
+      );
+    }
   }
 
   private body(): Body {
     return { sw: this.boss.tile, size: 3 };
+  }
+
+  /** His 3x3 and the tiles touching it: the safe square while the outer void is up. */
+  private ring(): Body {
+    return { sw: at(this.boss.tile.x - 1, this.boss.tile.z - 1), size: 5 };
+  }
+
+  /** Phase 3's voids left on this quadrant hurt as they did there. */
+  private lingeringDamage(): void {
+    const { fight } = this;
+    const here = fight.playerTile;
+    const v = fight.lingeringVoids.find((l) => same(l.tile, here));
+    if (v && (fight.tick - v.placed) % 2 === 0) fight.hit({ amount: () => fight.rng.roll(P3.patchDamage) });
   }
 
   private inner(): ATile[] {
@@ -107,8 +130,11 @@ export class Phase4 implements PhaseScript {
     const { fight } = this;
     this.resolveExplosions();
     this.stepOrbs(now?.offset ?? -1);
+    this.lingeringDamage();
     if (!now) return;
     const { offset: o, cycle } = now;
+    if (o === P4.outerVoid.from) this.entry = null;
+    if (this.void === "outer" && this.entry === null && covers(this.ring(), fight.playerTile)) this.entry = fight.playerTile;
     const boss = this.boss;
     this.applyOverhead(o);
     switch (o) {
@@ -204,7 +230,7 @@ export class Phase4 implements PhaseScript {
       return kind === "inner" ? d >= 2 && d <= 5 && !covers(square, t) : d === 1;
     });
     if (candidates.length === 0) return;
-    const tile = fight.rng.pick(candidates);
+    const tile = kind === "outer" ? this.across(candidates, this.entry ?? fight.playerTile) : fight.rng.pick(candidates);
     const readyAfter = P4.orbReadyAfterWind[kind === "inner" ? 0 : 1];
     // The orb shows a tick after the wind and glows when ready.
     fight.after(1, () => {
@@ -212,6 +238,15 @@ export class Phase4 implements PhaseScript {
       const orb: Orb = { kind, tile, credit, readyAt: fight.tick + readyAfter - 1, expiresAt: fight.tick + readyAfter - 1 + P4.orbExpiresAfterReady, state: "dormant", spot };
       this.orbs = [...this.orbs.filter((o) => o.kind !== kind), orb];
     });
+  }
+
+  /** The candidate nearest the point straight across his body from `from`. */
+  private across(candidates: ATile[], from: ATile): ATile {
+    const centre = bodyCentre(this.body());
+    const target = { x: 2 * centre.x - from.x, z: 2 * centre.z - from.z };
+    const distance = (t: ATile) => Math.hypot(t.x - target.x, t.z - target.z);
+    const best = Math.min(...candidates.map(distance));
+    return this.fight.rng.pick(candidates.filter((t) => distance(t) - best < 0.01));
   }
 
   private stepOrbs(_o: number): void {
@@ -254,7 +289,12 @@ export class Phase4 implements PhaseScript {
     const { fight } = this;
     const due = this.explosionMarks.filter((m) => m.landsAt <= fight.tick);
     this.explosionMarks = this.explosionMarks.filter((m) => m.landsAt > fight.tick);
-    for (const mark of due) if (same(mark.tile, fight.playerTile)) fight.hit({ amount: () => fight.rng.roll(P4.explosionDamage) });
+    for (const mark of due) {
+      const here = fight.playerTile;
+      if (same(mark.tile, here)) fight.hit({ amount: () => fight.rng.roll(P4.explosionDamage) });
+      // Dodged by a tile: the attack timer resets, so this tick can attack. Move, attack, move: 2-tick. [M] 12:50
+      else if (reach(mark.tile, here) <= P4.explosionResetReach) fight.player.attackDelay = Math.min(fight.player.attackDelay, 1);
+    }
   }
 
   private tellHybrid(slot: number): void {

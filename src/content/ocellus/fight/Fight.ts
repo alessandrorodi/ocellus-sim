@@ -114,6 +114,8 @@ export class Fight implements BossHooks, PlayerHooks {
   private blockers = new Map<string, InvisibleMovementBlocker>();
   readonly censers = new Map<Quadrant, CenserLook>();
   destroyed = new Set<Quadrant>();
+  /** Phase 3's void bombs on the last quadrant: they stay through phase 4. */
+  lingeringVoids: readonly Readonly<{ tile: ATile; placed: number }>[] = [];
   private readonly makePhase: (n: StartPhase, fight: Fight) => PhaseScript;
   private markerEntities: Entity[] = [];
   private voidLayers = new Map<string, readonly ATile[]>();

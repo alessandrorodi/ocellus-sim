@@ -53,6 +53,14 @@ export function clockwise(q: Quadrant, steps = 1): Quadrant {
   return QUADRANTS[(((index + steps) % 4) + 4) % 4];
 }
 
+/** A tile turned about the middle, a quarter at a time, from one quadrant into the same spot of another. */
+export function turnInto(a: ATile, from: Quadrant, to: Quadrant): ATile {
+  const turns = (QUADRANTS.indexOf(to) - QUADRANTS.indexOf(from) + 4) % 4;
+  let { x, z } = a;
+  for (let i = 0; i < turns; i++) [x, z] = [z, -x];
+  return at(x, z);
+}
+
 /** A quadrant is the room past the arms: |x| >= 2 and |z| >= 2. */
 export function quadrantOf(a: ATile): Quadrant | null {
   if (!inRoom(a) || Math.abs(a.x) < 2 || Math.abs(a.z) < 2) return null;
