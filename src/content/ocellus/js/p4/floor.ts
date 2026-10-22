@@ -14,6 +14,13 @@ const STEP: Readonly<Record<Side, Readonly<{ dx: number; dy: number }>>> = {
 };
 const SIDES: readonly Side[] = ["north", "south", "west", "east"];
 
+export function beside(at: Tile, side: Side): Tile {
+  return tile(at.x + STEP[side].dx, at.y + STEP[side].dy);
+}
+
+export type ArenaGlyph = "#" | "." | "?" | "w" | "b";
+const ARENA_GLYPHS: readonly string[] = ["#", ".", "?", "w", "b"];
+
 export class TileMask<K extends VoidKind | null = VoidKind | null> {
   private constructor(readonly kind: K, private readonly byKey: ReadonlyMap<string, Tile>) {}
 
@@ -26,12 +33,12 @@ export class TileMask<K extends VoidKind | null = VoidKind | null> {
     return new TileMask(null, tiles);
   }
 
-  static floorOf(rows: readonly string[]): TileMask<null> {
+  static of(rows: readonly string[], ...glyphs: readonly ArenaGlyph[]): TileMask<null> {
     const tiles = new Map<string, Tile>();
     rows.forEach((row, y) =>
       [...row].forEach((cell, x) => {
-        if (cell === "#") tiles.set(`${x},${y}`, tile(x, y));
-        else if (cell !== "." && cell !== "?") throw new RangeError(`platform cell ${JSON.stringify(cell)} at ${x},${y} is not #, . or ?`);
+        if (!ARENA_GLYPHS.includes(cell)) throw new RangeError(`arena cell ${JSON.stringify(cell)} at ${x},${y} is not one of ${ARENA_GLYPHS.join(" ")}`);
+        if (glyphs.some((glyph) => glyph === cell)) tiles.set(`${x},${y}`, tile(x, y));
       }),
     );
     return new TileMask(null, tiles);
@@ -55,7 +62,7 @@ export class TileMask<K extends VoidKind | null = VoidKind | null> {
 
   border(): readonly Readonly<{ at: Tile; side: Side }>[] {
     return this.tiles().flatMap((at) =>
-      SIDES.filter((side) => !this.byKey.has(`${at.x + STEP[side].dx},${at.y + STEP[side].dy}`)).map((side) => ({ at, side })),
+      SIDES.filter((side) => !this.contains(beside(at, side))).map((side) => ({ at, side })),
     );
   }
 
@@ -88,7 +95,9 @@ if (!Number.isInteger(ring) || ring < 0) throw new RangeError(`a ${floor.squareS
 const aroundBoss = (grow: number) => TileMask.area(tile(anchor.x - grow, anchor.y - size + 1 - grow), tile(anchor.x + size - 1 + grow, anchor.y + grow));
 const nearSquare = aroundBoss(ring);
 export const FOOTPRINT = aroundBoss(0);
-export const PLATFORM = TileMask.floorOf(geometry.platform.value);
+export const PLATFORM = TileMask.of(geometry.platform.value, "#");
+export const WALKWAY = TileMask.of(geometry.platform.value, "w", "b");
+export const BRAZIERS = TileMask.of(geometry.platform.value, "b");
 
 function shaped(shape: FloorShape): TileMask {
   switch (shape) {

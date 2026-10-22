@@ -6,7 +6,9 @@ const ORB_DRILL = { focus: "lifeforce-orb" } as const;
 const INNER_ORB: At = { x: 3, y: 2 };
 const BESIDE_INNER_ORB: At = { x: 4, y: 2 };
 const OUTER_ORB_FROM_SPAWN: At = { x: 3, y: 6 };
-const OUTER_ORB_ON_FLOOD: At = { x: 2, y: 7 };
+const ANY_FLOOR_SEED = 9;
+const ANY_FLOOR_INNER_ORB: At = { x: 3, y: 1 };
+const OUTER_ORB_ON_FLOOD: At = { x: 2, y: 5 };
 
 function returnsAfterWalkingAt(orderedAfter: number, selection: DrillSelection = {}) {
   const drill = startDrill({ selection: { ...ORB_DRILL, ...selection } });
@@ -104,9 +106,9 @@ describe("U3 lifeforce hit and orb", () => {
 
   test("under any-floor the outer orb lands on the flood; a return due on the tick the floor kills the player is skipped", () => {
     const retrieve = (collectInnerOrb: boolean) => {
-      const drill = startDrill({ selection: { focus: "orb-retrieval", outerOrbTile: "any-floor" } });
+      const drill = startDrill({ seed: ANY_FLOOR_SEED, selection: { focus: "orb-retrieval", outerOrbTile: "any-floor" } });
       drill.tickTo(13);
-      if (collectInnerOrb) drill.walkTo(INNER_ORB);
+      if (collectInnerOrb) drill.walkTo(ANY_FLOOR_INNER_ORB);
       drill.tickTo(30);
       drill.walkTo(RING_NORTH);
       drill.tickTo(45);
@@ -123,18 +125,18 @@ describe("U3 lifeforce hit and orb", () => {
       return observed;
     };
     expect(retrieve(false)).toEqual({
-      outerOrb: [[44, { x: 2, y: 7 }, 25]],
-      floorHits: [[48, 10, 15], [49, 9, 6], [50, 6, 0]],
+      outerOrb: [[44, { x: 2, y: 5 }, 25]],
+      floorHits: [[48, 9, 16], [49, 9, 7], [50, 7, 0]],
       returned: [],
       ended: [[50, "death"]],
       hpAt50: 0,
     });
     expect(retrieve(true)).toEqual({
-      outerOrb: [[44, { x: 2, y: 7 }, 49]],
-      floorHits: [[48, 10, 40], [49, 9, 31], [50, 9, 22]],
-      returned: [[50, 22, 71]],
+      outerOrb: [[44, { x: 2, y: 5 }, 49]],
+      floorHits: [[48, 9, 41], [49, 9, 32], [50, 11, 21]],
+      returned: [[50, 21, 70]],
       ended: [],
-      hpAt50: 71,
+      hpAt50: 70,
     });
   });
 });

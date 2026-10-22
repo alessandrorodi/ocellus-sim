@@ -4,7 +4,7 @@ import type { Location3, Model, Region, Renderable, Unit } from "osrs-sdk";
 import { spriteFile } from "../../../../assets";
 import { OCELLUS_P4 } from "../OcellusTimings";
 import type { BossOverhead, Special, Stage, Tile, VoidKind } from "../P4Types";
-import type { TileMask } from "../p4/floor";
+import type { Side, TileMask } from "../p4/floor";
 import { VOID_MASKS } from "../p4/floor";
 
 const LOOK = OCELLUS_P4.floor.look.value;
@@ -14,20 +14,21 @@ const STAR_TILES = 4;
 const STAR_PX_PER_TILE = 32;
 
 type Point = Readonly<{ x: number; z: number }>;
-type Edge = Readonly<{ from: Point; to: Point; inward: Point }>;
+type Edge = Readonly<{ at: Tile; side: Side; from: Point; to: Point; inward: Point }>;
 
 /** Tile (x, y) spans world x to x + 1 and z from y - 1 to y; lower y is north. */
-function rimEdges(mask: TileMask): readonly Edge[] {
-  return mask.border().map(({ at: { x, y }, side }): Edge => {
+export function rimEdges(mask: TileMask): readonly Edge[] {
+  return mask.border().map(({ at, side }): Edge => {
+    const { x, y } = at;
     switch (side) {
       case "north":
-        return { from: { x, z: y - 1 }, to: { x: x + 1, z: y - 1 }, inward: { x: 0, z: 1 } };
+        return { at, side, from: { x, z: y - 1 }, to: { x: x + 1, z: y - 1 }, inward: { x: 0, z: 1 } };
       case "south":
-        return { from: { x, z: y }, to: { x: x + 1, z: y }, inward: { x: 0, z: -1 } };
+        return { at, side, from: { x, z: y }, to: { x: x + 1, z: y }, inward: { x: 0, z: -1 } };
       case "west":
-        return { from: { x, z: y - 1 }, to: { x, z: y }, inward: { x: 1, z: 0 } };
+        return { at, side, from: { x, z: y - 1 }, to: { x, z: y }, inward: { x: 1, z: 0 } };
       case "east":
-        return { from: { x: x + 1, z: y - 1 }, to: { x: x + 1, z: y }, inward: { x: -1, z: 0 } };
+        return { at, side, from: { x: x + 1, z: y - 1 }, to: { x: x + 1, z: y }, inward: { x: -1, z: 0 } };
       default: {
         const unhandled: never = side;
         return unhandled;

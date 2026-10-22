@@ -1,12 +1,6 @@
-import React, { act } from "react";
-import { createRoot } from "react-dom/client";
+import { act } from "react";
 import { ControlPanelController, Settings, SettingsControls } from "osrs-sdk";
-import { ArchiveOcellusApp } from "../../../ArchiveOcellusApp";
-
-declare global {
-  var IS_REACT_ACT_ENVIRONMENT: boolean;
-}
-globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+import { loadPage } from "./page";
 
 const SAVED_SETTINGS = "osrs-sdk:settings";
 
@@ -22,33 +16,11 @@ function savedKey(): unknown {
 // SettingsControls ignores tab keys until 20 ms after a key is bound.
 const bindingSettled = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-function loadPage() {
-  window.history.replaceState(null, "", "/?seed=1");
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  act(() => root.render(<ArchiveOcellusApp />));
-  const element = (id: string): HTMLElement => {
-    const found = container.querySelector<HTMLElement>(`#${id}`);
-    if (!found) throw new Error(`the page has no #${id}`);
-    return found;
-  };
-  return {
-    click: (id: string) => act(() => element(id).click()),
-    press: (key: string, target: EventTarget = document) => act(() => void target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }))),
-    element,
-    close: () => {
-      act(() => root.unmount());
-      container.remove();
-    },
-  };
-}
-
 describe("U7 key bindings", () => {
   beforeEach(() => localStorage.setItem(SAVED_SETTINGS, JSON.stringify({ version: 1, values: { use3dView: false, inventory_key: "F4" } })));
 
   test("the Keybinds button opens the key bindings, and a key bound there opens its tab after a reload", async () => {
-    const first = loadPage();
+    const first = loadPage("/?seed=1");
     first.click("keybinds");
     const tabAfterButton = openTab();
     act(() => SettingsControls.instance?.startKeyBinding("inventory"));
@@ -58,7 +30,7 @@ describe("U7 key bindings", () => {
     first.close();
 
     Settings.inventory_key = "F4";
-    const reloaded = loadPage();
+    const reloaded = loadPage("/?seed=1");
     reloaded.click("keybinds");
     reloaded.press("F4");
     const tabAfterOldKey = openTab();
@@ -70,7 +42,7 @@ describe("U7 key bindings", () => {
   });
 
   test("a bound key typed into the seed field keeps the open tab, and pressed with the Keybinds button focused opens its tab", async () => {
-    const page = loadPage();
+    const page = loadPage("/?seed=1");
     page.click("keybinds");
     act(() => SettingsControls.instance?.startKeyBinding("inventory"));
     page.press("1");

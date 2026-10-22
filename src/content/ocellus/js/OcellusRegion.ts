@@ -6,8 +6,9 @@ import { dress } from "./OcellusLoadout";
 import { OcellusPlayer } from "./OcellusPlayer";
 import type { FightEvent, FightLog, FightSnapshot, SoundId, Tile, TickRow, VoidKind } from "./P4Types";
 import { BossLook, ExplosionViews, FragmentFlash, OrbView, PlayerLook, VoidField } from "./entities/P4Views";
+import { Brazier, Walkway } from "./entities/Scenery";
 import { Ocellus } from "./mobs/Ocellus";
-import { PLATFORM, voidUnder } from "./p4/floor";
+import { BRAZIERS, PLATFORM, WALKWAY, voidUnder } from "./p4/floor";
 import { CombatStream } from "./p4/roll";
 
 const GRID = PLATFORM.extent();
@@ -126,6 +127,8 @@ export class OcellusRegion extends Region {
       context.fillStyle = (x + y) % 2 === 0 ? "#4a4339" : "#3f392f";
       context.fillRect(x * scale, y * scale, scale, scale);
     }
+    context.fillStyle = OCELLUS_P4.geometry.walkway.value.top;
+    for (const { x, y } of WALKWAY.tiles()) context.fillRect(x * scale, y * scale, scale, scale);
   }
 
   initialiseRegion(): { player: Player } {
@@ -149,6 +152,7 @@ export class OcellusRegion extends Region {
       chat: [],
     };
     [views.field, views.orbs["inner-void"], views.orbs["outer-void"], views.fragment].forEach((view) => this.addEntity(view));
+    [new Walkway(this), ...BRAZIERS.tiles().map((at) => new Brazier(this, at))].forEach((scenery) => this.addEntity(scenery));
     for (const edge of PLATFORM.surround().tiles()) this.addEntity(new InvisibleMovementBlocker(this, { ...edge }));
     this.addPlayer(player);
     this.addMob(ocellus);

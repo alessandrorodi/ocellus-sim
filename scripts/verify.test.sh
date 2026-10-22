@@ -5,8 +5,8 @@ SCRIPT="$(cd "$(dirname "$0")" && pwd)/verify.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-eval "$(grep -E '^(DRILL_QUERY|BOSS_NPC|SPAWN_TILE|WALK_[A-Z_]+|EDGE_[A-Z_]+|CYCLE_[A-Z_]+|FOCUS_[A-Z_]+|BOSS_CLICK_[A-Z_]+|RING_CLICK_[A-Z_]+|FLOOD_[A-Z_]+|NEAR_SQUARE|VOID_[A-Z_]+|ORB_[A-Z_]+|LOADOUT_[A-Z_]+|EXPLOSION_[A-Z_]+|STEP_CLICK_[A-Z_]+|DODGE_CLICK_[A-Z_]+|UNDER_BOSS_CLICK_[A-Z_]+|MARKER_SHOT_[A-Z_]+|SOUND_[A-Z_]+|SPECIAL_[A-Z_]+|PROTECT_[A-Z_]+|TELL_[A-Z_]+|TRANSITION_[A-Z_]+|LANDING_[A-Z_]+|STYLE_[A-Z_]+|SUPPLY_[A-Z_]+|KEYBIND_[A-Z_]+|RIFT_[A-Z_]+|OVERHEAD_[A-Z_]+|ICON_BOX|NORTH_EAST_RIFT_[A-Z_]+|CHAT_POLL_[A-Z_]+|RISEN_BOSS_[A-Z_]+|DEFLECT_[A-Z_]+|SOUL_SPLIT_[A-Z_]+|KILL_CHAT|CREDIT_LINE)=' "$SCRIPT")"
-for fn in json process_start serve state doctor stop probe fight_tick_at_least canvas_centre click_after_tick shot_after_tick save_sound_settings record_audio_starts record_overhead_draws step_on_marks step_south_and_back_on_marks drive_lead_in drive_walk click_past_the_edge drive_edge drive_flood_shot drive_cycle choose_focus drive_focus drive_void_floor drive_void_shot drive_lifeforce_orb drive_explosions drive_transition_attack click_at click_inventory_slot drive_loadouts right_click_inventory_slot drive_supplies bind_inventory_key drive_keybinds drive_overheads_rifts drive release_browser stage_browser; do
+eval "$(grep -E '^(DRILL_QUERY|BOSS_NPC|SPAWN_TILE|WALK_[A-Z_]+|EDGE_[A-Z_]+|CYCLE_[A-Z_]+|FOCUS_[A-Z_]+|BOSS_CLICK_[A-Z_]+|RING_CLICK_[A-Z_]+|FLOOD_[A-Z_]+|NEAR_SQUARE|VOID_[A-Z_]+|ORB_[A-Z_]+|LOADOUT_[A-Z_]+|EXPLOSION_[A-Z_]+|STEP_CLICK_[A-Z_]+|DODGE_CLICK_[A-Z_]+|UNDER_BOSS_CLICK_[A-Z_]+|MARKER_SHOT_[A-Z_]+|SOUND_[A-Z_]+|SPECIAL_[A-Z_]+|PROTECT_[A-Z_]+|TELL_[A-Z_]+|TRANSITION_[A-Z_]+|LANDING_[A-Z_]+|STYLE_[A-Z_]+|SUPPLY_[A-Z_]+|KEYBIND_[A-Z_]+|RIFT_[A-Z_]+|OVERHEAD_[A-Z_]+|ICON_BOX|NORTH_EAST_RIFT_[A-Z_]+|CHAT_POLL_[A-Z_]+|RISEN_BOSS_[A-Z_]+|DEFLECT_[A-Z_]+|SOUL_SPLIT_[A-Z_]+|KILL_CHAT|WALKWAY_[A-Z_]+|CORNER_[A-Z_]+|CREDIT_LINE)=' "$SCRIPT")"
+for fn in json process_start serve state doctor stop probe fight_tick_at_least canvas_centre click_after_tick shot_after_tick save_sound_settings record_audio_starts record_overhead_draws step_on_marks step_south_and_back_on_marks drive_lead_in drive_walk click_past_the_edge drive_edge drive_flood_shot drive_cycle keep_seed choose_focus drive_focus drive_void_floor drive_void_shot drive_lifeforce_orb drive_explosions drive_transition_attack click_at click_inventory_slot drive_loadouts right_click_inventory_slot drive_supplies bind_inventory_key drive_keybinds drive_overheads_rifts seed_run restart_run drive_seed wait_until_ticking walk_by_click drive_walkway drive_corner drive release_browser stage_browser; do
   eval "$(sed -n "/^${fn}() {\$/,/^}\$/p" "$SCRIPT")"
 done
 
@@ -397,6 +397,22 @@ fixture_png() {
   ' "$1" "$2" "${3:-0}" "${4:-0}" "$((1280 / 2 + ORB_CLICK_RIGHT_PX))" "$((800 / 2 - ORB_CLICK_UP_PX))" "$ORB_BOX"
 }
 
+fixture_fill() {
+  command node -e '
+    const [file, hex, percent] = process.argv.slice(1);
+    const zlib = require("zlib");
+    const crc = (buf) => { let c = ~0; for (const b of buf) { c ^= b; for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xedb88320 : c >>> 1; } return ~c >>> 0; };
+    const chunk = (type, data) => { const head = Buffer.alloc(8), tail = Buffer.alloc(4); head.writeUInt32BE(data.length); head.write(type, 4); tail.writeUInt32BE(crc(Buffer.concat([Buffer.from(type), data]))); return Buffer.concat([head, data, tail]); };
+    const [width, height] = [1280, 800];
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4); ihdr[8] = 8; ihdr[9] = 2;
+    const fill = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    let left = (width * height * Number(percent)) / 100;
+    const raw = Buffer.alloc(height * (1 + width * 3));
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) raw.set(left-- > 0 ? fill : [0x68, 0x60, 0x58], y * (1 + width * 3) + 1 + x * 3);
+    require("fs").writeFileSync(file, Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]));
+  ' "$1" "$2" "$3"
+}
+
 fixture_hover_text() {
   command node -e '
     const [file, cursorY, clipped] = process.argv.slice(1);
@@ -428,6 +444,7 @@ fake_screenshot() {
     fail:*) return 1 ;;
     empty:*) ;;
     *:brew-heal.png | *:keybinds.png) fixture_hover_text "$1" ;;
+    *:walkway.png) fixture_fill "$1" "$WALKWAY_PIXEL" "$([[ "$FAULT" == walkway-not-drawn ]] && echo 0 || echo 2)" ;;
     markerfollows:explosion-left.png | *:explosion-standing.png) fixture_shards "$1" 0.5 ;;
     *:explosion-left.png) fixture_shards "$1" 0.44 ;;
     notell:special-* | *:special-before.png) fixture_tell "$1" 0 ;;
@@ -480,6 +497,52 @@ icons_probe() {
     if (fault === "bundled-icon") icons["27238"].path = "/0b9f61e6f2a2c3a2b0d4.png";
     console.log(JSON.stringify({ data: { result: { ...icons, 22325: { path: "/670ddc4f152a60d91516.png", size: "30x27" } } } }));
   ' "$LOADOUT_TRAINER_ICONS" "$FAULT"
+}
+
+seed_probe() {
+  local stage fresh=3061190142 seed search
+  stage="$(cat "$T/seed-stage")"
+  [[ "$FAULT" != seed-one ]] || fresh=1
+  case "$stage:$FAULT" in
+    1:*) seed=$fresh search="" ;;
+    2:seed-reused) seed=$fresh search="?setup=ranged&focus=full-fight&seed=${fresh}" ;;
+    2:*) seed=777 search="?setup=ranged&focus=full-fight" ;;
+    *:typed-seed-ignored) seed=5150 search="?setup=ranged&focus=full-fight" ;;
+    *) seed=$fresh search="?setup=ranged&focus=full-fight&seed=${fresh}" ;;
+  esac
+  case "$1" in
+    box) printf '{"data":{"value":"%s"}}\n' "$seed" ;;
+    seed) printf '{"data":{"result":%s}}\n' "$seed" ;;
+    search) printf '{"data":{"result":"%s"}}\n' "$search" ;;
+    origin) printf '{"data":{"result":%s}}\n' "$stage" ;;
+  esac
+}
+
+scenery_probe() {
+  local n player
+  case "$(cat "$T/scenery"):$1" in
+    walkway:snapshot)
+      n=$(($(cat "$T/walkway-probes" 2>/dev/null || echo 0) + 1))
+      echo "$n" >"$T/walkway-probes"
+      player="$WALKWAY_STOP_TILE"
+      [[ "$FAULT" != walkway-walkable ]] || player="$WALKWAY_ORDER_TILE"
+      printf '{"data":{"result":{"ticking":true,"tick":%s,"player":%s,"destination":%s}}}\n' $((10 + 3 * n)) "$player" "$WALKWAY_ORDER_TILE"
+      ;;
+    walkway:log) printf '{"data":{"result":{"rows":[{"tick":10,"inputs":[{"kind":"walk-ordered","destination":%s}]}]}}}\n' "$WALKWAY_ORDER_TILE" ;;
+    corner:snapshot)
+      n=$(($(cat "$T/corner-probes" 2>/dev/null || echo 0) + 1))
+      echo "$n" >"$T/corner-probes"
+      player="$CORNER_NUB_TILE"
+      [[ "$n" -ne 1 ]] || player="$CORNER_HOLE_TILE"
+      [[ "$FAULT" != corner-hole || "$n" -ne 1 ]] || player='{"x":2,"y":8}'
+      printf '{"data":{"result":{"ticking":true,"tick":%s,"player":%s,"destination":%s}}}\n' $((10 + n)) "$player" "$player"
+      ;;
+    corner:log)
+      n=$(($(cat "$T/corner-logs" 2>/dev/null || echo 0) + 1))
+      echo "$n" >"$T/corner-logs"
+      printf '{"data":{"result":{"rows":[{"tick":10,"inputs":[{"kind":"walk-ordered","destination":%s}]}]}}}\n' "$([[ "$n" -eq 1 ]] && echo "$CORNER_HOLE_TILE" || echo "$CORNER_NUB_TILE")"
+      ;;
+  esac
 }
 
 supply_probe() {
@@ -538,6 +601,7 @@ fake_browser() {
     case "$*" in
       "--json eval window.__archiveOcellusProbe.snapshot().fight") loadout_snapshot ;;
       "--json eval window.__archiveOcellusProbe.snapshot()")
+        [[ ! -e "$T/scenery" ]] || { scenery_probe snapshot; return; }
         local n tile='{"x":5,"y":1}' tick=8 fight="$LEAD_IN_FIGHT"
         n=$(($(cat "$T/evals" 2>/dev/null || echo 0) + 1))
         echo "$n" >"$T/evals"
@@ -558,6 +622,7 @@ fake_browser() {
       "--json eval window.__archiveOcellusProbe.snapshot().panel") supply_probe panel ;;
       "--json eval localStorage.getItem('osrs-sdk:settings')") supply_probe saved ;;
       "--json eval window.__archiveOcellusProbe.log()")
+        [[ ! -e "$T/scenery" ]] || { scenery_probe log; return; }
         [[ ! -e "$T/deflect" ]] || { cat "$T/deflect-log.json"; return; }
         [[ ! -e "$T/rifts" ]] || { cat "$T/rift-log.json"; return; }
         [[ ! -e "$T/special-late" ]] || { cat "$T/special-late-log.json"; return; }
@@ -572,6 +637,13 @@ fake_browser() {
           *) cat "$T/orb-log.json" ;;
         esac
         ;;
+      "open ${URL}") echo 1 >"$T/seed-stage" ;;
+      "open "*"${WALKWAY_QUERY}") echo walkway >"$T/scenery" ;;
+      "open "*"${CORNER_QUERY}") echo corner >"$T/scenery" ;;
+      "--json get value #seed") if [[ -e "$T/seed-stage" ]]; then seed_probe box; else echo '{"data":{"value":"1"}}'; fi ;;
+      "--json eval window.__archiveOcellusProbe.log().header.seed") seed_probe seed ;;
+      "--json eval location.search") seed_probe search ;;
+      "--json eval performance.timeOrigin") seed_probe origin ;;
       "open "*"focus=${VOID_DRILL}") : >"$T/void-shot" ;;
       "open "*"focus=${ORB_DRILL}") : >"$T/orb-skip" ;;
       "open "*"focus=${EXPLOSION_DRILL}") : >"$T/explosion-under" ;;
@@ -589,6 +661,7 @@ fake_browser() {
         [[ "$FAULT" != focus-not-reloaded || "$*" != "select #focus ${FOCUS_DRILL}" ]] || : >"$T/focus-not-reloaded"
         ;;
       "click #restart")
+        [[ ! -e "$T/seed-stage" ]] || { echo $(($(cat "$T/seed-stage") + 1)) >"$T/seed-stage"; return; }
         echo $(($(cat "$T/restarts" 2>/dev/null || echo 0) + 1)) >"$T/restarts"
         [[ ! -e "$T/special" ]] || : >"$T/special-late"
         ;;
@@ -1069,6 +1142,48 @@ rift_sounds_before_the_first_click_fail() {
   done
 }
 
+seed_one_on_a_fresh_run_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' seed-one
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although a fresh run showed seed 1"; return 1; fi
+  [[ "$(failed_checks)" == seedFreshAndShown ]] || { echo "expected only seedFreshAndShown to fail, got: $(failed_checks)"; return 1; }
+}
+
+restart_reusing_the_seed_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' seed-reused
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although Restart replayed the shown seed"; return 1; fi
+  [[ "$(failed_checks)" == restartDrawsFreshSeed ]] || { echo "expected only restartDrawsFreshSeed to fail, got: $(failed_checks)"; return 1; }
+}
+
+typed_seed_ignored_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' typed-seed-ignored
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although Restart ignored the typed seed"; return 1; fi
+  [[ "$(failed_checks)" == typedSeedReplays ]] || { echo "expected only typedSeedReplays to fail, got: $(failed_checks)"; return 1; }
+}
+
+walkway_walkable_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' walkway-walkable
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed with the player standing on the walkway"; return 1; fi
+  [[ "$(failed_checks)" == walkwayClickStaysOnFloor ]] || { echo "expected only walkwayClickStaysOnFloor to fail, got: $(failed_checks)"; return 1; }
+}
+
+walkway_not_drawn_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' walkway-not-drawn
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed with no walkway pixels on screen"; return 1; fi
+  [[ "$(failed_checks)" == walkwayDrawn ]] || { echo "expected only walkwayDrawn to fail, got: $(failed_checks)"; return 1; }
+}
+
+corner_hole_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' corner-hole
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the player stopped short of (3, 8)"; return 1; fi
+  [[ "$(failed_checks)" == cornerFilled ]] || { echo "expected only cornerFilled to fail, got: $(failed_checks)"; return 1; }
+}
+
 failed=0
 for t in \
   refused_serve_does_not_stop_the_recorded_instance \
@@ -1140,7 +1255,13 @@ for t in \
   rift_spawn_sound_off_frame_fails \
   rift_kill_without_despawn_sound_fails \
   killed_rift_detonation_fails \
-  rift_sounds_before_the_first_click_fail; do
+  rift_sounds_before_the_first_click_fail \
+  seed_one_on_a_fresh_run_fails \
+  restart_reusing_the_seed_fails \
+  typed_seed_ignored_fails \
+  walkway_walkable_fails \
+  walkway_not_drawn_fails \
+  corner_hole_fails; do
   if ("$t") >"$WORK/$t.log" 2>&1; then
     echo "PASS $t"
   else

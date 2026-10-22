@@ -81,12 +81,13 @@ const label = (key: string) => key.charAt(0).toUpperCase() + key.slice(1).replac
 
 function DrillControls({ config }: Readonly<{ config: DrillConfig }>) {
   const [setup, setSetup] = useState<string>(config.choices.setup.key);
-  const [seed, setSeed] = useState(String(config.seed));
+  const [typedSeed, setTypedSeed] = useState<string | null>(null);
   const restart = (focus: string) => {
     const url = new URL(window.location.href);
     url.searchParams.set("setup", setup);
     url.searchParams.set("focus", focus);
-    url.searchParams.set("seed", seed);
+    if (typedSeed?.trim()) url.searchParams.set("seed", typedSeed.trim());
+    else url.searchParams.delete("seed");
     window.location.assign(url.href);
   };
 
@@ -105,7 +106,7 @@ function DrillControls({ config }: Readonly<{ config: DrillConfig }>) {
         </select>
       </label>
       <label>
-        Seed <input id="seed" inputMode="numeric" value={seed} onChange={(event) => setSeed(event.target.value)} onKeyDown={(event) => event.stopPropagation()} />
+        Seed <input id="seed" inputMode="numeric" value={typedSeed ?? String(config.seed)} onInput={(event) => setTypedSeed(event.currentTarget.value)} onKeyDown={(event) => event.stopPropagation()} />
       </label>
       <button id="restart" type="submit">Restart</button>
       <button id="keybinds" type="button" onClick={() => ControlPanelController.controller.setActiveControl("SETTINGS")}>Keybinds</button>

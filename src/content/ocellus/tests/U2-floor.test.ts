@@ -31,7 +31,7 @@ describe("U2 void floor", () => {
 
   test("the inner void hits a player on any tile of the 5x5 and the flood a player on any other platform tile", () => {
     const voidByTile = [
-      "...o........",
+      "............",
       "..oooooooooo",
       ".ooooooooooo",
       ".ooiiiiiooo.",
@@ -39,8 +39,8 @@ describe("U2 void floor", () => {
       ".ooiiiiio...",
       ".ooiiiii....",
       ".ooiiiii....",
-      ".oo.........",
-      ".ooo........",
+      ".oooooo.....",
+      ".ooooo......",
       ".oooo.......",
       ".ooo........",
     ];

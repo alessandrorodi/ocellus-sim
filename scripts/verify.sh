@@ -60,6 +60,23 @@ KEYBIND_INVENTORY_BUTTON_X=1130
 KEYBIND_INVENTORY_BUTTON_Y=650
 KEYBIND_DEFAULT_KEY=F4
 KEYBIND_NEW_KEY=F6
+WALKWAY_QUERY="?seed=1&focus=${FOCUS_DRILL}"
+WALKWAY_CLICK_LEFT_PX=400
+WALKWAY_ORDER_TILE='{"x":13,"y":2}'
+WALKWAY_STOP_TILE='{"x":11,"y":2}'
+WALKWAY_PIXEL="#6b6c40"
+WALKWAY_MIN_SHARE=1
+CORNER_QUERY="?seed=2&focus=${FOCUS_DRILL}"
+CORNER_HOLE_CLICK_RIGHT_PX=60
+CORNER_HOLE_CLICK_UP_PX=155
+CORNER_HOLE_TILE='{"x":3,"y":8}'
+CORNER_NUB_CLICK_RIGHT_PX=40
+CORNER_NUB_CLICK_UP_PX=170
+CORNER_NUB_TILE='{"x":4,"y":9}'
+CORNER_VIEW_CLICK_RIGHT_PX=150
+CORNER_VIEW_CLICK_UP_PX=20
+CORNER_VIEW_TILE='{"x":2,"y":2}'
+CORNER_VIEW_DRAG_LEFT_PX=95
 BOSS_CLICK_RIGHT_PX=150
 BOSS_CLICK_UP_PX=150
 RING_CLICK_RIGHT_PX=140
@@ -176,12 +193,13 @@ manifest_ready() {
     const npcs = Object.values(assets.npcs).every(({ id }) => m.assets?.[`npc-${id}`]);
     const items = Object.values(assets.items).every(({ id }) => m.playerItems?.[`item:${id}`]);
     const spotAnims = Object.values(assets.spotAnims).every(({ id }) => m.spotAnims?.[id]);
+    const models = Object.values(assets.models).every(({ id }) => m.assets?.[`model-${id}`]);
     const pack = m.soundEffects && join(dirname(process.argv[1]), m.soundEffects.file);
     const bytes = pack && existsSync(pack) ? readFileSync(pack) : Buffer.alloc(6);
     const packed = new Set();
     for (let at = 6, n = 0; n < bytes.readUInt16BE(4); n++, at += 4 + bytes.readUInt16BE(at + 2)) packed.add(bytes.readUInt16BE(at));
     const sounds = Object.values(assets.sounds).every(({ id }) => packed.has(id));
-    process.exit(m.cache?.source === "openrs2:2746" && npcs && items && spotAnims && sounds ? 0 : 1);
+    process.exit(m.cache?.source === "openrs2:2746" && npcs && items && spotAnims && models && sounds ? 0 : 1);
   ' "$MANIFEST" && node scripts/extract-sprites.mjs --check
 }
 
@@ -204,7 +222,7 @@ stage_test() {
 stage_assets() {
   local flags=(--cache-dir "$OSRS_CACHE_DIR" --reader-path "$OSRS_CACHE_READER")
   if manifest_ready; then
-    log "assets: manifest already has every configured npc, item, spotanim and sound from openrs2:2746, and every sprite, skipping the model rebuild" | tee "$VERIFY_DIR/assets.log"
+    log "assets: manifest already has every configured npc, model, item, spotanim and sound from openrs2:2746, and every sprite, skipping the model rebuild" | tee "$VERIFY_DIR/assets.log"
     npm run item-icons -- "${flags[@]}" >>"$VERIFY_DIR/assets.log" 2>&1
     return
   fi
@@ -497,7 +515,12 @@ drive_cycle() {
   ab --json errors | json data.errors >"$VERIFY_DIR/page-errors.json" || { log "page error capture failed"; return 1; }
 }
 
+keep_seed() {
+  ab fill "#seed" "$(ab --json get value "#seed" | json data.value)" >/dev/null || { log "the seed box did not take the run's own seed"; return 1; }
+}
+
 choose_focus() {
+  keep_seed || return 1
   ab select "#focus" "$1" >/dev/null || { log "focus control did not accept $1"; return 1; }
   ab wait --fn "new URLSearchParams(location.search).get('focus') === '$1'" --timeout 30000 >/dev/null || { log "choosing $1 did not load focus=$1 without Restart"; return 1; }
 }
@@ -579,7 +602,7 @@ drive_loadouts() {
   ab console >"$VERIFY_DIR/loadout-console.log" 2>&1 || { log "console capture failed"; return 1; }
   ab --json errors | json data.errors >"$VERIFY_DIR/loadout-page-errors.json" || { log "page error capture failed"; return 1; }
 
-  ab select "#setup" melee >/dev/null && ab click "#restart" >/dev/null || { log "setup control did not accept melee"; return 1; }
+  keep_seed && ab select "#setup" melee >/dev/null && ab click "#restart" >/dev/null || { log "setup control did not accept melee"; return 1; }
   ab wait --fn "new URLSearchParams(location.search).get('setup') === 'melee'" --timeout 30000 >/dev/null || { log "restart did not load setup=melee"; return 1; }
   fight_tick_at_least 1 120000 || { log "the reloaded melee drill never stepped to P4 tick 1"; return 1; }
   probe "snapshot().fight" >"$VERIFY_DIR/loadout-selector.json"
@@ -635,6 +658,87 @@ drive_keybinds() {
   probe "snapshot().panel" >"$VERIFY_DIR/keybinds-restored.json"
   ab console >"$VERIFY_DIR/keybinds-console.log" 2>&1 || { log "console capture failed"; return 1; }
   ab --json errors | json data.errors >"$VERIFY_DIR/keybinds-page-errors.json" || { log "page error capture failed"; return 1; }
+}
+
+seed_run() {
+  local box seed search
+  box="$(ab --json get value "#seed" | json data.value)" || return 1
+  seed="$(probe "log().header.seed")" || return 1
+  search="$(ab --json eval "location.search" | json data.result)" || return 1
+  node -e 'console.log(JSON.stringify({ box: process.argv[1], seed: Number(process.argv[2]), search: process.argv[3] }))' "$box" "$seed" "$search"
+}
+
+restart_run() {
+  local loaded
+  loaded="$(ab --json eval "performance.timeOrigin" | json data.result)" || return 1
+  ab click "#restart" >/dev/null || return 1
+  ab wait --fn "performance.timeOrigin !== ${loaded} && (window.__archiveOcellusProbe?.snapshot().fight?.run.tick ?? -1) >= 0" --timeout 120000 >/dev/null || { log "Restart never loaded a new run"; return 1; }
+}
+
+drive_seed() {
+  local fresh restarted typed
+  ab open "$URL" >/dev/null || return 1
+  fight_tick_at_least 0 120000 || { log "the unseeded run never took its first P4 step"; return 1; }
+  fresh="$(seed_run)" || return 1
+  ab screenshot "$VERIFY_DIR/seed-fresh.png" >/dev/null || { log "fresh seed screenshot failed"; return 1; }
+  restart_run || return 1
+  restarted="$(seed_run)" || return 1
+  ab fill "#seed" "$(json box <<<"$fresh")" >/dev/null || { log "the seed box did not take the typed seed"; return 1; }
+  restart_run || return 1
+  typed="$(seed_run)" || return 1
+  echo "{\"fresh\":${fresh},\"restarted\":${restarted},\"typed\":${typed}}" >"$VERIFY_DIR/seed.json"
+  ab screenshot "$VERIFY_DIR/seed.png" >/dev/null || { log "typed seed screenshot failed"; return 1; }
+  ab console >"$VERIFY_DIR/seed-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/seed-page-errors.json" || { log "page error capture failed"; return 1; }
+}
+
+wait_until_ticking() {
+  ab wait --fn "window.__archiveOcellusProbe?.snapshot().ticking === true && window.__archiveOcellusProbe.snapshot().tick >= 8" --timeout 90000 >/dev/null || { log "the drill never started ticking"; return 1; }
+}
+
+walk_by_click() {
+  click_at "$1" "$2" || return 1
+  ab wait --fn "(() => { const s = window.__archiveOcellusProbe.snapshot(), to = $3; return s.player.x === to.x && s.player.y === to.y; })()" \
+    --timeout 15000 >/dev/null || log "player never stood on $3"
+}
+
+drive_walkway() {
+  local arrived
+  ab open "${URL}${WALKWAY_QUERY}" >/dev/null && wait_until_ticking && canvas_centre || return 1
+  echo "{\"x\":$((CX - WALKWAY_CLICK_LEFT_PX)),\"y\":${CY}}" >"$VERIFY_DIR/walkway-click.json"
+  walk_by_click $((CX - WALKWAY_CLICK_LEFT_PX)) "$CY" "$WALKWAY_STOP_TILE" || return 1
+  arrived="$(probe "snapshot()")"
+  echo "$arrived" >"$VERIFY_DIR/walkway-arrived.json"
+  ab wait --fn "window.__archiveOcellusProbe.snapshot().tick >= $(json tick <<<"$arrived") + ${EDGE_HOLD_TICKS}" --timeout 15000 >/dev/null
+  probe "snapshot()" >"$VERIFY_DIR/walkway.json"
+  probe "log()" >"$VERIFY_DIR/walkway-log.json"
+  ab screenshot "$VERIFY_DIR/walkway.png" >/dev/null || { log "walkway screenshot failed"; return 1; }
+  ab console >"$VERIFY_DIR/walkway-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/walkway-page-errors.json" || { log "page error capture failed"; return 1; }
+}
+
+drive_corner() {
+  local step
+  ab open "${URL}${CORNER_QUERY}" >/dev/null && wait_until_ticking && canvas_centre || return 1
+  walk_by_click $((CX + CORNER_HOLE_CLICK_RIGHT_PX)) $((CY - CORNER_HOLE_CLICK_UP_PX)) "$CORNER_HOLE_TILE" || return 1
+  probe "snapshot()" >"$VERIFY_DIR/corner-hole.json"
+  probe "log()" >"$VERIFY_DIR/corner-hole-log.json"
+  ab wait 1000 >/dev/null && ab screenshot "$VERIFY_DIR/corner-hole.png" >/dev/null || { log "corner screenshot failed"; return 1; }
+  ab open "${URL}${CORNER_QUERY}" >/dev/null && wait_until_ticking || return 1
+  walk_by_click $((CX + CORNER_NUB_CLICK_RIGHT_PX)) $((CY - CORNER_NUB_CLICK_UP_PX)) "$CORNER_NUB_TILE" || return 1
+  probe "snapshot()" >"$VERIFY_DIR/corner-nub.json"
+  probe "log()" >"$VERIFY_DIR/corner-nub-log.json"
+  ab console >"$VERIFY_DIR/corner-console.log" 2>&1 || { log "console capture failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/corner-page-errors.json" || { log "page error capture failed"; return 1; }
+  ab open "${URL}${CORNER_QUERY}" >/dev/null && wait_until_ticking || return 1
+  walk_by_click $((CX + CORNER_VIEW_CLICK_RIGHT_PX)) $((CY - CORNER_VIEW_CLICK_UP_PX)) "$CORNER_VIEW_TILE" || return 1
+  ab mouse move "$CX" $((CY + 100)) >/dev/null && ab mouse down middle >/dev/null || return 1
+  for step in 1 2 3 4 5; do
+    ab mouse move $((CX - step * CORNER_VIEW_DRAG_LEFT_PX / 5)) $((CY + 100)) >/dev/null || return 1
+  done
+  ab mouse up middle >/dev/null && ab wait 1500 >/dev/null || return 1
+  ab screenshot "$VERIFY_DIR/corner-view.png" >/dev/null || { log "corner view screenshot failed"; return 1; }
+  ab --json errors | json data.errors >"$VERIFY_DIR/corner-view-page-errors.json" || { log "page error capture failed"; return 1; }
 }
 
 drive_void_floor() {
@@ -724,7 +828,7 @@ drive_transition_attack() {
   ab --json errors | json data.errors >"$VERIFY_DIR/special-page-errors.json" || { log "page error capture failed"; return 1; }
 
   save_sound_settings true || { log "the sound settings were not saved"; return 1; }
-  ab click "#restart" >/dev/null || { log "Restart was not clicked"; return 1; }
+  keep_seed && ab click "#restart" >/dev/null || { log "Restart was not clicked"; return 1; }
   ab wait --fn "new URLSearchParams(location.search).has('setup')" --timeout 30000 >/dev/null || { log "Restart did not reload the transition drill"; return 1; }
   fight_tick_at_least 0 120000 || { log "the late-prayer drill never started"; return 1; }
   record_audio_starts || { log "the audio probe was not installed"; return 1; }
@@ -747,7 +851,7 @@ drive_overheads_rifts() {
   ab open "${URL}${RIFT_QUERY}" >/dev/null || return 1
   fight_tick_at_least 0 120000 || { log "the rifts drill never loaded"; return 1; }
   save_sound_settings true || { log "the sound settings were not saved"; return 1; }
-  ab click "#restart" >/dev/null || { log "Restart was not clicked"; return 1; }
+  keep_seed && ab click "#restart" >/dev/null || { log "Restart was not clicked"; return 1; }
   ab wait --fn "new URLSearchParams(location.search).has('setup')" --timeout 30000 >/dev/null || { log "Restart did not reload the rifts drill"; return 1; }
   fight_tick_at_least 0 120000 || { log "the rifts drill never started"; return 1; }
   record_audio_starts || { log "the audio probe was not installed"; return 1; }
@@ -790,7 +894,7 @@ drive() {
   drive_lead_in || return 1
   ab wait --fn "window.__archiveOcellusProbe?.snapshot().ticking === true && window.__archiveOcellusProbe.snapshot().tick >= 8" \
     --timeout 90000 >/dev/null || { log "trainer never started ticking"; return 1; }
-  drive_walk && drive_edge && drive_cycle && drive_focus && drive_void_floor && drive_void_shot && drive_lifeforce_orb && drive_explosions && drive_transition_attack && drive_loadouts && drive_supplies && drive_keybinds && drive_overheads_rifts || return 1
+  drive_walk && drive_edge && drive_cycle && drive_focus && drive_void_floor && drive_void_shot && drive_lifeforce_orb && drive_explosions && drive_transition_attack && drive_loadouts && drive_supplies && drive_keybinds && drive_overheads_rifts && drive_seed && drive_walkway && drive_corner || return 1
 
   local capture
   for capture in hidden.json hidden.png before.json before.png after.json after.png edge-click.json edge-arrived.json edge.json edge.png boss.png cycle-ring-click.json cycle-snapshot.json cycle.json console.log page-errors.json focus.json focus.png focus-console.log focus-page-errors.json \
@@ -804,7 +908,10 @@ drive() {
     supplies-inventory.json item-menu.json item-menu.png item-menu-closed.json brew-click.json brew-hp.json brew-heal.png supplies-console.log supplies-page-errors.json \
     keybinds-open.json keybinds.png keybinds-bound.json keybinds-saved.json keybinds-old-key.json keybinds-reloaded.json keybinds-reloaded.png keybinds-restored.json keybinds-console.log keybinds-page-errors.json special-heal.png \
     $(printf 'overhead-%s.png ' $OVERHEAD_SHOT_TICKS) overhead-draws.json rift-spawned.png rift-destroyed.png rift-chat.json rift-burst.png rifts.json rift-audio.json rift-console.log rift-page-errors.json \
-    hover-out-of-reach.png deflect-blocked.png deflect.json deflect-console.log deflect-page-errors.json; do
+    hover-out-of-reach.png deflect-blocked.png deflect.json deflect-console.log deflect-page-errors.json \
+    seed-fresh.png seed.json seed.png seed-console.log seed-page-errors.json \
+    walkway-click.json walkway-arrived.json walkway.json walkway-log.json walkway.png walkway-console.log walkway-page-errors.json \
+    corner-hole.json corner-hole-log.json corner-hole.png corner-nub.json corner-nub-log.json corner-console.log corner-page-errors.json corner-view.png corner-view-page-errors.json; do
     [[ -s "$VERIFY_DIR/$capture" ]] || { log "required capture ${capture} is missing or empty"; return 1; }
   done
 
@@ -813,7 +920,8 @@ drive() {
       innerMarks, lateMark, explosionPixel, explosionExpected, soundSamples, explosionSounds, centreX, centreY, tellBox, specialExpected,
       tellCentreBox, transitionSamples, landingSounds, landingWindows, styleSounds, styleWindows, soundTolerance,
       supplyInventory, namedMenu, hpAfterBrew, defaultKey, newKey, trainerIcons, brewY, hoverNamePixel, overheadShots, iconBox, riftExpected, burstTick, soulSplitExpected, killChat,
-      riftSoundSamples, riftSpawnSounds, riftKillSound, riftBurstSounds, riftSoundWindow, gapDraws, hoverTile, hoverTicks, firstMeleeTick] = process.argv.slice(1);
+      riftSoundSamples, riftSpawnSounds, riftKillSound, riftBurstSounds, riftSoundWindow, gapDraws, hoverTile, hoverTicks, firstMeleeTick,
+      walkwayOrder, walkwayStop, walkwayPixel, walkwayMinShare, cornerHole, cornerNub] = process.argv.slice(1);
     const fs = require("fs");
     const read = (file) => JSON.parse(fs.readFileSync(`${dir}/${file}`, "utf8"));
     const [hidden, before, after, edgeArrived, edge, errors, cycle, snapshot, focus, focusErrors, voidLog, voidErrors, shot, shotErrors] =
@@ -825,6 +933,10 @@ drive() {
     const [specialLog, specialErrors, lateLog, lateErrors, transitionAudio] = ["special.json", "special-page-errors.json", "special-late.json", "special-late-page-errors.json", "special-audio.json"].map(read);
     const [carried, itemMenu, itemMenuClosed, brewClick, brewHp, suppliesErrors] = ["supplies-inventory.json", "item-menu.json", "item-menu-closed.json", "brew-click.json", "brew-hp.json", "supplies-page-errors.json"].map(read);
     const icons = read("icons.json");
+    const seeds = read("seed.json");
+    const [walkwayArrived, walkwayHeld, walkwayLog, cornerAtHole, cornerHoleLog, cornerAtNub, cornerNubLog] =
+      ["walkway-arrived.json", "walkway.json", "walkway-log.json", "corner-hole.json", "corner-hole-log.json", "corner-nub.json", "corner-nub-log.json"].map(read);
+    const [seedErrors, walkwayErrors, cornerErrors, cornerViewErrors] = ["seed-page-errors.json", "walkway-page-errors.json", "corner-page-errors.json", "corner-view-page-errors.json"].map(read);
     const [keysOpen, keysBound, keysSaved, keysOldKey, keysReloaded, keysRestored, keybindsErrors] = ["keybinds-open.json", "keybinds-bound.json", "keybinds-saved.json", "keybinds-old-key.json", "keybinds-reloaded.json", "keybinds-restored.json", "keybinds-page-errors.json"].map(read);
     const [riftLog, riftChat, riftAudio, riftErrors, deflectLog, deflectErrors, overheadDraws] = ["rifts.json", "rift-chat.json", "rift-audio.json", "rift-page-errors.json", "deflect.json", "deflect-page-errors.json", "overhead-draws.json"].map(read);
     const [spawnTile, targetTile, edgeOrderTile, edgeStopTile, nearSquare] = [spawn, target, edgeOrder, edgeStop, square].map((tile) => JSON.parse(tile));
@@ -895,6 +1007,9 @@ drive() {
     const readsInFull = (text) => text.action !== null && text.name !== null && text.action[1] < text.name[0] && text.name[1] <= text.width - 5;
     const want = [1, 3, 5].map((i) => parseInt(voidPixel.slice(i, i + 2), 16));
     const voidShare = (file) => pixelShare(file, (...rgb) => want.every((v, c) => Math.abs(rgb[c] - v) <= 10));
+    const walkwayRgb = [1, 3, 5].map((i) => parseInt(walkwayPixel.slice(i, i + 2), 16));
+    const walkOrders = (log) => log.rows.flatMap((row) => row.inputs.filter((i) => i.kind === "walk-ordered").map((i) => i.destination));
+    const seedInUrl = (run) => new URLSearchParams(run.search).get("seed");
     const offset = JSON.parse(orbBox);
     const around = { minX: orbClick.x + offset.minX, maxX: orbClick.x + offset.maxX, minY: orbClick.y + offset.minY, maxY: orbClick.y + offset.maxY };
     const orbTeal = (look) => Array.from({ length: Number(orbFrames) }, (_, i) => pixelShare(`orb-${look}-${i + 1}.png`, (r, g, b) => g >= 120 && g - r >= 60 && b - r >= 30, around));
@@ -1030,6 +1145,14 @@ drive() {
       },
       icons: Object.fromEntries(Object.keys(JSON.parse(trainerIcons)).map((id) => [id, icons[id] ?? null])),
       hoverText: { "brew-heal.png": hoverText("brew-heal.png"), "keybinds.png": hoverText("keybinds.png") },
+      seeds,
+      walkway: {
+        orders: walkOrders(walkwayLog),
+        arrived: [walkwayArrived.tick, walkwayArrived.player],
+        held: [walkwayHeld.tick, walkwayHeld.player],
+        share: pixelShare("walkway.png", (...rgb) => walkwayRgb.every((v, c) => Math.abs(rgb[c] - v) <= 4)),
+      },
+      corner: { orders: [...walkOrders(cornerHoleLog), ...walkOrders(cornerNubLog)], stood: [cornerAtHole.player, cornerAtNub.player] },
       keybinds: {
         tabs: [keysOpen.tab, keysBound.tab, keysOldKey.tab, keysReloaded.tab],
         inventoryKey: [keysOpen.keys.inventory, keysBound.keys.inventory, keysSaved.values?.inventory_key ?? null, keysReloaded.keys.inventory, keysRestored.keys.inventory],
@@ -1152,7 +1275,14 @@ drive() {
       riftSpawnSoundsOnFrame: onSchedule(rifts.sounds.spawn, riftExpectedSounds.spawn) && sameJson(rifts.sounds.contexts, JSON.stringify(["running"])),
       riftKillSoundOnFrame: riftExpectedSounds.kill.length === 1 && onSchedule(rifts.sounds.kill, riftExpectedSounds.kill) && sameJson(rifts.sounds.contexts, JSON.stringify(["running"])),
       riftBurstSoundsOnFrames: onSchedule(rifts.sounds.burst, riftExpectedSounds.burst) && sameJson(rifts.sounds.contexts, JSON.stringify(["running"])),
-      noPageErrors: [errors, focusErrors, voidErrors, shotErrors, orbErrors, orbSkipErrors, explosionErrors, underErrors, specialErrors, lateErrors, loadoutErrors, selectorErrors, suppliesErrors, keybindsErrors, riftErrors, deflectErrors].every((list) => list.length === 0),
+      seedFreshAndShown: /^\d+$/.test(seeds.fresh.box) && Number(seeds.fresh.box) === seeds.fresh.seed && seeds.fresh.seed !== 1 && seedInUrl(seeds.fresh) === null,
+      restartDrawsFreshSeed: seedInUrl(seeds.restarted) === null && seeds.restarted.seed !== seeds.fresh.seed && Number(seeds.restarted.box) === seeds.restarted.seed,
+      typedSeedReplays: seedInUrl(seeds.typed) === seeds.fresh.box && seeds.typed.seed === seeds.fresh.seed && seeds.typed.box === seeds.fresh.box,
+      walkwayClickStaysOnFloor: sameJson(observed.walkway.orders, `[${walkwayOrder}]`) && same(walkwayArrived.player, JSON.parse(walkwayStop)) && same(walkwayHeld.player, JSON.parse(walkwayStop)) &&
+        walkwayHeld.tick - walkwayArrived.tick >= Number(holdTicks),
+      walkwayDrawn: observed.walkway.share >= Number(walkwayMinShare),
+      cornerFilled: sameJson(observed.corner.orders, `[${cornerHole},${cornerNub}]`) && sameJson(observed.corner.stood, `[${cornerHole},${cornerNub}]`),
+      noPageErrors: [errors, focusErrors, voidErrors, shotErrors, orbErrors, orbSkipErrors, explosionErrors, underErrors, specialErrors, lateErrors, loadoutErrors, selectorErrors, suppliesErrors, keybindsErrors, riftErrors, deflectErrors, seedErrors, walkwayErrors, cornerErrors, cornerViewErrors].every((list) => list.length === 0),
     };
     if (!checks.clickTargetedExpectedTile) {
       console.error(`verify: the click resolved to ${JSON.stringify(after.destination)}, not ${JSON.stringify(targetTile)}; the click-to-tile mapping for this viewport and camera changed`);
@@ -1168,7 +1298,8 @@ drive() {
     "$LOADOUT_TRAINER_ICONS" "$((LOADOUT_SLOT_Y + SUPPLY_BREW_SLOT / 4 * LOADOUT_SLOT_DY))" "$SUPPLY_HOVER_NAME_PIXEL" \
     "$OVERHEAD_SHOT_TICKS" "$ICON_BOX" "$RIFT_EXPECTED" "$RIFT_BURST_TICK" "$SOUL_SPLIT_EXPECTED" "$KILL_CHAT" \
     "$RIFT_SOUND_SAMPLES" "$RIFT_SPAWN_SOUNDS" "$RIFT_KILL_SOUND" "$RIFT_BURST_SOUNDS" "$RIFT_SOUND_WINDOW" "$OVERHEAD_GAP_DRAWS" \
-    "$DEFLECT_HOVER_TILE" "$DEFLECT_HOVER_TICKS" "$DEFLECT_FIRST_MELEE_TICK" >"$VERIFY_DIR/observed.json"
+    "$DEFLECT_HOVER_TILE" "$DEFLECT_HOVER_TICKS" "$DEFLECT_FIRST_MELEE_TICK" \
+    "$WALKWAY_ORDER_TILE" "$WALKWAY_STOP_TILE" "$WALKWAY_PIXEL" "$WALKWAY_MIN_SHARE" "$CORNER_HOLE_TILE" "$CORNER_NUB_TILE" >"$VERIFY_DIR/observed.json"
   local verdict=$?
   cat "$VERIFY_DIR/observed.json"
   return $verdict

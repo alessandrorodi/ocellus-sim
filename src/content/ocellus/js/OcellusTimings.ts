@@ -136,10 +136,15 @@ type RiftRecipe = Readonly<{
   burstFlare: Selected<number>;
 }>;
 
+type WalkwayLook = Readonly<{ height: number; top: string; face: string; shade: string }>;
+type BrazierRecipe = Readonly<{ loc: number; model: number; burning: number }>;
+
 type GeometryRecipe = Readonly<{
   platform: Selected<readonly string[]>;
   bossAnchor: Selected<Tile>;
   playerSpawn: Selected<Tile>;
+  walkway: Selected<WalkwayLook>;
+  brazier: Selected<BrazierRecipe>;
 }>;
 
 export type Focus = Readonly<{ kind: "full-fight" }> | Readonly<{ kind: "drill"; mechanics: readonly [Mechanic, ...Mechanic[]] }>;
@@ -360,28 +365,49 @@ const V1_FLOOD_FRAMES = vod("V1", "G66, G126, G130");
 const GEOMETRY: GeometryRecipe = {
   platform: selected(
     [
-      "..?#........",
-      ".?##########",
-      ".###########",
-      ".##########.",
-      ".#########..",
-      ".########?..",
-      "?#######....",
-      ".#######....",
-      "?##?........",
-      "?###........",
-      "?####.......",
-      ".###?.......",
+      "...?........ww",
+      ".?##########ww",
+      ".###########ww",
+      ".##########ww.",
+      ".#########ww..",
+      ".########ww...",
+      ".#######ww....",
+      ".#######ww....",
+      ".######wb.....",
+      ".#####ww......",
+      ".####ww.......",
+      ".###ww........",
+      "wwwww.........",
     ],
     "footage-repeated",
-    "team-5",
-    "row y = 0 first, x = 0 leftmost; # is floor the outer void covers or the 5x5, . is not floor, ? is a ragged-edge tile fewer than two frames classified (±1 tile) and is left blocked; the flood draws this shape in all four V2 floods, and V1 draws it turned 270 degrees or mirrored east-west; cache 2746 has no XTEA keys for the raid",
+    "unscaled",
+    "row y = 0 first, x = 0 leftmost; # is floor, . is not floor, ? is a tile the kills disagree on (±1 tile) and is left blocked, w is the raised brazier walkway and b its brazier, drawn and never walkable; the walkway is the band 2 tiles past the floor's diagonal edge, ending where J1 ends it at y 12, and it covers the six disputed diagonal tiles (11, 3), (10, 4), (11, 4), (9, 5), (8, 6) and (4, 11), J1 floor that V2's walkway base excludes; the brazier sits in the walkway's step beside the 5x5's corner; a triangle with 2-tile bands north and west of the 5x5 and the brazier walkway on the diagonal; V2's drawn void and J1's rims agree on both legs, J1 adds the 6 floor tiles the boss hid south of the 5x5 in V2, and V2's north strip is left out because V1 and J1 drop away there; seen with teams of 2 (J1), 4 (V1) and 5 (V2); cache 2746 has no XTEA keys for the raid",
     FLOOD_FRAMES,
+    vod("V2", "k060 to k269, walkway base and strip rims, 18 frames"),
+    vod("V2", "k080, bare floor south of the 5x5"),
     V1_FLOOD_FRAMES,
+    owner("P4 platform screenshot: the triangle and the brazier walkway"),
     cache("region keys absent"),
   ),
   bossAnchor: selected(tile(4, 6), "footage-repeated", "team-4-and-5", "south-west tile of the boss's 3x3 at x 4-6, y 4-6, centred in the 5x5 at x 3-7, y 3-7; the cyan 3x3 marker sits inside the purple 5x5 rim in every fitted frame", FLOOD_FRAMES, V1_FLOOD_FRAMES),
   playerSpawn: selected(tile(5, 1), "inferred", "team-4-and-5", "two tiles north of the 5x5, where players wait through the first inner void; no clip pins one tile", vod("V2", "k49 to k52"), vod("V1", "G33")),
+  walkway: selected(
+    { height: 0.4, top: "#6b6c40", face: "#8e9a80", shade: "#3c4233" },
+    "footage-once",
+    "unscaled",
+    "a raised curb about 0.4 tile high with an olive top and a light stone face toward the platform; colours are approximate medians of the curb in one frame",
+    vod("V2", "k256, curb beside the 5x5"),
+    owner("P4 platform screenshot: the triangle and the brazier walkway"),
+  ),
+  brazier: selected(
+    { loc: 62697, model: 62440, burning: 14833 },
+    "assumption",
+    "unscaled",
+    "a god censer hangs over the fire bowl in the curb's step; the purple one in V2 reads as the Zarosian Censer, one of the raid's four (62693 to 62700); P4 use of the censers is not seen, so it is scenery; the fire bowl and its stand are among the raid's unnamed locs and are not drawn",
+    vod("V2", "k256, purple censer over the fire bowl on the curb"),
+    vod("V1", "G146, fire bowl in the curb's step beside the 5x5"),
+    cache("loc 62697 Zarosian Censer: model 62440, animation 14833"),
+  ),
 };
 
 type FloorDamage = Readonly<{ kind: "damages"; afterOnset: TickSpan; perTick: DamageRange }>;
