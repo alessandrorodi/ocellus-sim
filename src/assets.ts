@@ -1,19 +1,21 @@
 import type { CacheAssets } from "osrs-sdk/asset-manifest";
+import type { SpriteFrame } from "./content/ocellus/js/OcellusTimings";
 import { OCELLUS_P4 } from "./content/ocellus/js/OcellusTimings";
 
-const { boss, gear, presentation, lifeforceOrb } = OCELLUS_P4;
+const { boss, gear, presentation, lifeforceOrb, rifts } = OCELLUS_P4;
+
+const sequences = (poses: Readonly<Record<string, Readonly<{ value: number }>>>) => Object.fromEntries(Object.entries(poses).map(([pose, sequence]) => [pose, sequence.value]));
 
 export const ARCHIVE_OCELLUS_ASSETS = {
   npcs: {
-    ocellus: {
-      id: boss.npcId.value,
-      animations: Object.fromEntries(Object.entries(presentation.bossPoses).map(([pose, sequence]) => [pose, sequence.value])),
-    },
+    ocellus: { id: boss.npcId.value, animations: sequences(presentation.bossPoses) },
+    voidRift: { id: rifts.npcId.value, animations: sequences(rifts.poses) },
   },
   items: Object.fromEntries(Object.entries(gear.items).map(([key, item]) => [key, { id: item.itemId.value }])),
   spotAnims: Object.fromEntries([
     ...Object.entries(lifeforceOrb.look).map(([visual, spotAnim]) => [visual, { id: spotAnim.value }]),
     ...Object.entries(presentation.transitionTells).map(([variant, spotAnim]) => [`${variant.replace(/-(.)/g, (_, letter: string) => letter.toUpperCase())}Tell`, { id: spotAnim.value }]),
+    ["riftFlare", { id: rifts.burstFlare.value }],
   ]),
   sounds: Object.fromEntries(Object.entries(presentation.sounds).map(([cue, sound]) => [cue, { id: sound.value }])),
 } as const satisfies CacheAssets;
@@ -24,3 +26,10 @@ export const itemIconFile = (itemId: number) => `${ITEM_ICON_DIR}/${itemId}.png`
 export const ARCHIVE_OCELLUS_OVERRIDES = {
   items: Object.fromEntries(Object.entries(gear.sdkCacheIds).map(([key, id]) => [key, { id: id.value }])),
 } as const satisfies CacheAssets;
+
+/** The asset tool extracts no sprites, so scripts/extract-sprites.mjs writes these beside its output. */
+export const ARCHIVE_OCELLUS_SPRITES: readonly SpriteFrame[] = Object.values(presentation.overheadIcons).map((icon) => icon.value);
+
+export function spriteFile({ archive, frame }: SpriteFrame): string {
+  return `sprites/${archive}-${frame}.png`;
+}

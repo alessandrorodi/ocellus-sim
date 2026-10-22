@@ -1,6 +1,6 @@
 import type { Focus, ResolvedChoices, SpecialSelection, TransitionRecipe, VoidRecipe } from "../OcellusTimings";
 import { OCELLUS_P4 } from "../OcellusTimings";
-import type { Beat, Cycle, Mechanic, Phase, Seed, Special, Tick, TransitionKind, VoidKind } from "../P4Types";
+import type { Beat, BossOverhead, Cycle, Mechanic, Phase, Seed, Special, Tick, TransitionKind, VoidKind } from "../P4Types";
 import { cycle, ordinal, tick } from "../P4Types";
 import { floorRule } from "./floor";
 import { roll } from "./roll";
@@ -159,20 +159,21 @@ export class Schedule {
     put(riftSpawn, "rift spawn", (c) => (c + 1 >= firstRiftCycle ? { kind: "rifts-spawn", forCycle: cycle(c + 1) } : null));
     put(riftSpawn + rifts.chargeAfterSpawn.value - length, "rift charge", (c) => (c >= firstRiftCycle ? { kind: "rift-charge-ends", forCycle: c } : null));
 
-    const switchAt = (recipe: TransitionRecipe<TransitionKind>) => recipe.tellAfterStart.value + recipe.soulSplitAfterTell.value;
+    const overheadAfter = <D extends BossOverhead>(recipe: TransitionRecipe<TransitionKind>, sinceStart: number, deflect: D): D | "soul-split" | null => {
+      if (sinceStart >= recipe.duration.value - overheads.offBeforeVoid.value) return null;
+      return sinceStart < recipe.tellAfterStart.value + recipe.soulSplitAfterTell.value ? deflect : overheads.transition.value;
+    };
     const phaseAt = (offset: number) => (c: Cycle): Phase => {
       if (offset < afterInnerStart) {
-        return { stage: "inner-void", cycle: c, boss: "present-damageable", overhead: overheads["inner-void"].value };
+        return { stage: "inner-void", cycle: c, boss: choices.hoverMeleeReach.option.value, overhead: overheads["inner-void"].value };
       }
       if (offset < outerStart) {
-        const deflecting = offset - afterInnerStart < switchAt(afterInner);
-        return { stage: "after-inner", cycle: c, boss: "present-damageable", overhead: deflecting ? overheads["inner-void"].value : overheads.transition.value };
+        return { stage: "after-inner", cycle: c, boss: "present-damageable", overhead: overheadAfter(afterInner, offset - afterInnerStart, overheads["inner-void"].value) };
       }
       if (offset < afterOuterStart) {
         return { stage: "outer-void", cycle: c, boss: "present-damageable", overhead: overheads["outer-void"].value };
       }
-      const deflecting = offset - afterOuterStart < switchAt(afterOuter);
-      return { stage: "after-outer", cycle: c, boss: "present-damageable", overhead: deflecting ? overheads["outer-void"].value : overheads.transition.value };
+      return { stage: "after-outer", cycle: c, boss: "present-damageable", overhead: overheadAfter(afterOuter, offset - afterOuterStart, overheads["outer-void"].value) };
     };
 
     const slots = beats.map((slotBeats, offset): Slot => ({ phase: phaseAt(offset), beats: slotBeats }));

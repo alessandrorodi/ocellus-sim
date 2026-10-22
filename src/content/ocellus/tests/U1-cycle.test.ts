@@ -12,11 +12,12 @@ describe("U1 cycle skeleton", () => {
       [68, "inner-void"], [90, "after-inner"], [99, "outer-void"], [119, "after-outer"], [128, "inner-void"],
     ]);
     expect(drill.events("overhead-switched").map((e) => [e.at, e.overhead])).toEqual([
-      [8, "deflect-melee"], [33, "soul-split"], [39, "deflect-range"], [61, "soul-split"],
-      [68, "deflect-melee"], [93, "soul-split"], [99, "deflect-range"], [121, "soul-split"], [128, "deflect-melee"],
+      [8, "deflect-melee"], [33, "soul-split"], [38, null], [39, "deflect-range"], [61, "soul-split"], [67, null],
+      [68, "deflect-melee"], [93, "soul-split"], [98, null], [99, "deflect-range"], [121, "soul-split"], [127, null], [128, "deflect-melee"],
     ]);
     expect(drill.events("boss-state-changed").map((e) => [e.at, e.state])).toEqual([
-      [0, "hidden"], [4, "present-invulnerable"], [8, "present-damageable"],
+      [0, "hidden"], [4, "present-invulnerable"], [8, "present-out-of-melee-reach"], [30, "present-damageable"],
+      [68, "present-out-of-melee-reach"], [90, "present-damageable"], [128, "present-out-of-melee-reach"],
     ]);
     expect(drill.events("boss-shouted").map((e) => [e.at, e.text])).toEqual([[5, "End..."]]);
     drill.dispose();
@@ -24,7 +25,7 @@ describe("U1 cycle skeleton", () => {
 
   test("the transition attack ordinal runs across cycles and each selection names its variants", () => {
     const hits = (options: Parameters<typeof startDrill>[0]) => {
-      const drill = startDrill(options);
+      const drill = startDrill({ ...options, selection: { focus: "transition-attacks", ...options?.selection } });
       drill.playCorrectlyTo(217);
       const out = drill.rows().flatMap((row) => row.beats.flatMap((b) => (b.kind === "special-hit" ? [[row.tick, b.ordinal, b.variant]] : [])));
       drill.dispose();
@@ -119,11 +120,11 @@ describe("U1 cycle skeleton", () => {
   test.each([
     {
       at: 8,
-      phase: { stage: "inner-void", cycle: 1, boss: "present-damageable", overhead: "deflect-melee" },
+      phase: { stage: "inner-void", cycle: 1, boss: "present-out-of-melee-reach", overhead: "deflect-melee" },
       entered: [
         { kind: "stage-entered", at: 8, stage: "inner-void" },
         { kind: "overhead-switched", at: 8, overhead: "deflect-melee" },
-        { kind: "boss-state-changed", at: 8, state: "present-damageable" },
+        { kind: "boss-state-changed", at: 8, state: "present-out-of-melee-reach" },
       ],
     },
     {
@@ -178,7 +179,7 @@ describe("U1 cycle skeleton", () => {
   test("native combat rolls replay from the seed, and the SDK's random source is restored between ticks", () => {
     const fight = (global: number) => {
       Random.setRandom(() => global);
-      const drill = startDrill();
+      const drill = startDrill({ selection: { focus: "rifts" } });
       drill.tickTo(8);
       drill.player().setAggro(drill.boss());
       drill.tickTo(40);

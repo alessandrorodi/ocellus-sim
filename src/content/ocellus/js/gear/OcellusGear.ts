@@ -218,12 +218,28 @@ function inquisitorFactor(equipment: UnitEquipment): number {
   return 1 + worn / 1000;
 }
 
-/** The SDK rolls every melee attack as slash; Jab rolls crush, and only crush earns Inquisitor's bonus. */
+const WEAPON_SKIPS_HIT = -1;
+
+/** The SDK scythe sends both extra hits to its target when no other mob stands in the arc, so hits past the target's size are skipped before they roll. */
 export class OcellusScythe extends ScytheOfVitur {
+  private readonly hitsThisSwing = new Map<Unit, number>();
+
+  /** The SDK rolls every melee attack as slash; Jab rolls crush, and only crush earns Inquisitor's bonus. */
   override attack(from: Unit, to: Unit, bonuses: AttackBonuses): boolean {
+    this.hitsThisSwing.clear();
     if (this.attackStyle() !== AttackStyle.AGGRESSIVECRUSH) return super.attack(from, to, bonuses);
     const gearMeleeMultiplier = (bonuses.gearMeleeMultiplier ?? 1) * inquisitorFactor(from.equipment);
     return super.attack(from, to, { ...bonuses, attackStyle: "crush", gearMeleeMultiplier });
+  }
+
+  override rollDamage(from: Unit, to: Unit, bonuses: AttackBonuses): void {
+    const hits = this.hitsThisSwing.get(to) ?? 0;
+    if (hits >= Math.min(to.size, gear.scytheMaxHitsOnOneTarget.value)) {
+      this.damage = WEAPON_SKIPS_HIT;
+      return;
+    }
+    this.hitsThisSwing.set(to, hits + 1);
+    super.rollDamage(from, to, bonuses);
   }
 }
 

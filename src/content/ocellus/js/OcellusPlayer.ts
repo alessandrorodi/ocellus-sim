@@ -2,6 +2,7 @@ import { Player, Random } from "osrs-sdk";
 import type { Location, Region } from "osrs-sdk";
 import type { InputObservation, PlayerObservation, Style } from "./P4Types";
 import { tile } from "./P4Types";
+import { Ocellus } from "./mobs/Ocellus";
 import type { CombatStream } from "./p4/roll";
 
 export class OcellusPlayer extends Player {
@@ -45,6 +46,12 @@ export class OcellusPlayer extends Player {
   override postAttacksEvent(): void {
     super.postAttacksEvent();
     this.settle();
+  }
+
+  override attack(): boolean {
+    const swingsMelee = !this.manualSpellCastSelection && this.equipment.weapon?.isMeleeAttack === true;
+    if (swingsMelee && this.aggro instanceof Ocellus && this.aggro.outOfMeleeReach()) return false;
+    return super.attack();
   }
 
   override attackStep(): void {

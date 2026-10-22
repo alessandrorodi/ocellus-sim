@@ -1,8 +1,9 @@
 import * as THREE from "three";
 import { CacheRenderInstancedModel, CacheRenderReferences, CollisionType, Entity, GROUND_OVERLAY_Y, LineOfSightMask, Settings } from "osrs-sdk";
 import type { Location3, Model, Region, Renderable, Unit } from "osrs-sdk";
+import { spriteFile } from "../../../../assets";
 import { OCELLUS_P4 } from "../OcellusTimings";
-import type { Special, Stage, Tile, VoidKind } from "../P4Types";
+import type { BossOverhead, Special, Stage, Tile, VoidKind } from "../P4Types";
 import type { TileMask } from "../p4/floor";
 import { VOID_MASKS } from "../p4/floor";
 
@@ -434,7 +435,43 @@ export class FragmentFlash extends Entity {
   }
 }
 
-const { bossPoses, transitionTells, tellCentre } = OCELLUS_P4.presentation;
+const { bossPoses, transitionTells, tellCentre, overheadIcons, overheadIconBelowHpBar } = OCELLUS_P4.presentation;
+const OVERHEAD_ICONS = new Map<BossOverhead, HTMLImageElement>();
+
+export function drawOverheadIcon(context: OffscreenCanvasRenderingContext2D, scale: number, overhead: BossOverhead): void {
+  let icon = OVERHEAD_ICONS.get(overhead);
+  if (!icon) {
+    icon = new Image();
+    icon.src = `osrs-assets/${spriteFile(overheadIcons[overhead].value)}`;
+    OVERHEAD_ICONS.set(overhead, icon);
+  }
+  if (icon.complete && icon.naturalWidth > 0) context.drawImage(icon, -scale / 2, overheadIconBelowHpBar.value, scale, scale);
+}
+
+const HEAL_SPLAT_SLOTS: readonly Readonly<{ x: number; y: number }>[] = [{ x: 0, y: 30 }, { x: -18, y: 20 }, { x: 18, y: 20 }];
+
+/** Drawn like the SDK's own hitsplats, in the slots its damage splats use last. */
+export function drawHealSplats(context: OffscreenCanvasRenderingContext2D, image: HTMLImageElement, amounts: readonly number[], verticalOffset: number): void {
+  amounts.slice(0, HEAL_SPLAT_SLOTS.length).forEach((amount, slot) => {
+    const { x, y } = HEAL_SPLAT_SLOTS[slot];
+    context.drawImage(image, x - 11, verticalOffset - y - 1, 24, 23);
+    context.font = "16px Stats_11";
+    context.textAlign = "center";
+    context.fillStyle = "#000000";
+    context.fillText(String(amount), x + 1, verticalOffset - y + 16);
+    context.fillStyle = "#FFFFFF";
+    context.fillText(String(amount), x, verticalOffset - y + 15);
+    context.textAlign = "left";
+  });
+}
+
+export class PlayerLook {
+  constructor(private readonly player: Unit) {}
+
+  riftBurst(): void {
+    this.player.addSpotAnim({ id: OCELLUS_P4.rifts.burstFlare.value, channel: "rift-burst" });
+  }
+}
 
 export class BossLook {
   constructor(private readonly boss: Unit) {}

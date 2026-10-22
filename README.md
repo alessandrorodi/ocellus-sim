@@ -121,7 +121,8 @@ npm start                     # http://127.0.0.1:8002
 ```
 
 `npm run assets` downloads OpenRS2 cache 2746 (213 MB, once) and extracts every model, animation, effect and sound the
-fight uses into `public/osrs-assets/`, which is never committed. The cache reader is
+fight uses into `public/osrs-assets/`, which is never committed. It also draws the inventory icons from the items'
+cache models and writes the boss's overhead icons from the cache's sprite index. The cache reader is
 [Julian-Dasilva/osrscachereader](https://github.com/Julian-Dasilva/osrscachereader) at `8ba9131`.
 `scripts/patch-sdk-assets.mjs` fixes the beta asset tool on Windows and lets it skip sounds the cache doesn't ship.
 

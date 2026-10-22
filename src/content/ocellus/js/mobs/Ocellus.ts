@@ -5,14 +5,19 @@ import { OCELLUS_P4 } from "../OcellusTimings";
 import type { OcellusPlayer } from "../OcellusPlayer";
 import type {
   Beat,
+  BossState,
+  Cycle,
   ExplosionOutcome,
   FightEvent,
+  HealCause,
+  HitJudgement,
   HitReceipt,
   IncomingStyle,
   InputObservation,
   Ordinal,
   Phase,
   PlayerObservation,
+  RiftId,
   RunEnd,
   RunState,
   Special,
@@ -22,12 +27,14 @@ import type {
   Tile,
   VoidKind,
 } from "../P4Types";
-import { after, tick, worldTick } from "../P4Types";
+import { after, riftId, span, tick, tile, worldTick } from "../P4Types";
+import { drawHealSplats, drawOverheadIcon } from "../entities/P4Views";
 import { FOOTPRINT, VOID_MASKS, floorRule } from "../p4/floor";
 import { orbTile, reach } from "../p4/orb";
 import { rollInt } from "../p4/roll";
 import type { Moment } from "../p4/schedule";
 import { Schedule } from "../p4/schedule";
+import { VoidRift } from "./VoidRift";
 
 type RowDraft = Omit<TickRow, "playerAtPostTick" | "bossHp" | "combatDraws"> & Readonly<{ bossHpAtBossStep: number; drawsAtBossStep: number }>;
 
@@ -46,6 +53,11 @@ type Orb =
   | Readonly<{ kind: "expired"; void: VoidKind; credit: number; tile: Tile }>;
 
 type Mark = Readonly<{ void: VoidKind; pulse: number; tile: Tile }>;
+
+type Rift = Readonly<{ id: RiftId; tile: Tile; forCycle: Cycle; mob: VoidRift; hpAtPostTick: number }>;
+
+/** The SDK keeps a delay-1 hitsplat drawn for the tick it lands and the next. */
+const HEAL_SPLAT_TICKS = span(1);
 
 function incomingStyle(attackStyle: string): IncomingStyle {
   switch (attackStyle) {
@@ -84,9 +96,24 @@ class P4Hit extends Projectile {
 function phaseEvents(last: Phase | null, now: Phase, at: Tick): FightEvent[] {
   const events: FightEvent[] = [];
   if (last?.stage !== now.stage) events.push({ kind: "stage-entered", at, stage: now.stage });
-  if (now.overhead !== null && last?.overhead !== now.overhead) events.push({ kind: "overhead-switched", at, overhead: now.overhead });
+  if ((last?.overhead ?? null) !== now.overhead) events.push({ kind: "overhead-switched", at, overhead: now.overhead });
   if (last?.boss !== now.boss) events.push({ kind: "boss-state-changed", at, state: now.boss });
   return events;
+}
+
+function damageable(state: BossState): boolean {
+  switch (state) {
+    case "hidden":
+    case "present-invulnerable":
+      return false;
+    case "present-out-of-melee-reach":
+    case "present-damageable":
+      return true;
+    default: {
+      const unhandled: never = state;
+      return unhandled;
+    }
+  }
 }
 
 function specialAttack<V extends Special>(at: Tick, ordinal: Ordinal, variant: V): SpecialAttack<V> {
@@ -98,6 +125,9 @@ export class Ocellus extends Mob {
   private run: Run = { kind: "waiting", inputs: [] };
   private orbs: readonly Orb[] = [];
   private marks: readonly Mark[] = [];
+  private stolen: readonly Readonly<{ ordinal: Ordinal; credit: number }>[] = [];
+  private rifts: readonly Rift[] = [];
+  private healSplats: readonly Readonly<{ amount: number; lastShown: Tick }>[] = [];
 
   constructor(region: Region, private readonly config: DrillConfig, private readonly target: OcellusPlayer) {
     super(region, OCELLUS_P4.geometry.bossAnchor.value);
@@ -142,9 +172,23 @@ export class Ocellus extends Mob {
     return this.phase().boss !== "hidden";
   }
 
+  outOfMeleeReach(): boolean {
+    return this.phase().boss === "present-out-of-melee-reach";
+  }
+
   override get idlePoseId(): number {
     const { deflectLoop, idle } = OCELLUS_P4.presentation.bossPoses;
     return this.phase().stage === "inner-void" ? deflectLoop.value : idle.value;
+  }
+
+  override drawOverheadPrayers(context: OffscreenCanvasRenderingContext2D, scale: number): void {
+    const { overhead } = this.phase();
+    if (overhead !== null) drawOverheadIcon(context, scale, overhead);
+  }
+
+  override drawHitsplats(context: OffscreenCanvasRenderingContext2D, scale: number, verticalOffset = 0): void {
+    super.drawHitsplats(context, scale, verticalOffset);
+    drawHealSplats(context, this.healHitsplatImage, this.healSplats.map((splat) => splat.amount), verticalOffset);
   }
 
   override movementStep(): void {}
@@ -213,7 +257,10 @@ export class Ocellus extends Mob {
           combatDraws: this.target.combatDraws - drawsAtBossStep,
         };
         const reason: RunEnd | null = run.kind === "killed" ? "kill" : died ? "death" : null;
-        if (reason === null) this.claimOrbs(row.tick, playerAtPostTick.tile);
+        if (reason === null) {
+          this.claimOrbs(row.tick, playerAtPostTick.tile);
+          this.rifts = this.rifts.map((rift) => ({ ...rift, hpAtPostTick: rift.mob.currentStats.hitpoint }));
+        }
         this.run = reason === null
           ? { kind: "between", last: { tick: row.tick, phase: row.phase }, inputs: [] }
           : { kind: "ended", at: row.tick, reason, phase: row.phase };
@@ -274,6 +321,7 @@ export class Ocellus extends Mob {
       bossHpAtBossStep: this.currentStats.hitpoint,
       drawsAtBossStep: this.target.combatDraws,
     };
+    this.healSplats = this.healSplats.filter((splat) => splat.lastShown >= moment.tick);
     const judged = this.judgeLandingHits(moment);
     super.queueStep();
     const logged = [...judged, ...phaseEvents(last, moment.phase, moment.tick)];
@@ -281,22 +329,42 @@ export class Ocellus extends Mob {
       this.run = { kind: "killed", draft: { ...draft, beats: [], events: [...logged, { kind: "run-ended", at: moment.tick, reason: "kill" }] } };
       return;
     }
+    const destroyed = this.destroyFallenRifts(moment.tick);
     const reactions = moment.beats.flatMap((beat) => this.react(beat, moment.tick, draft.playerAtBossStep) ?? []);
-    this.run = { kind: "stepping", draft: { ...draft, beats: moment.beats, events: [...logged, ...reactions] } };
+    this.run = { kind: "stepping", draft: { ...draft, beats: moment.beats, events: [...logged, ...destroyed, ...reactions] } };
   }
 
   private judgeLandingHits(moment: Moment): FightEvent[] {
-    const damageable = moment.phase.boss === "present-damageable";
     return this.incomingProjectiles
       .filter((projectile) => projectile.remainingDelay === 1 && !projectile.shouldDestroy())
       .map((projectile): FightEvent => {
         const requested = projectile.damage;
-        if (!damageable) projectile.damage = 0;
-        return { kind: "player-hit-judged", at: moment.tick, style: incomingStyle(projectile.attackStyle), outcome: damageable ? "passed" : "invulnerable", requested };
+        const style = incomingStyle(projectile.attackStyle);
+        const launchedAt = tick(Math.max(0, moment.tick - projectile.totalDelay));
+        const outcome = this.judge(moment, style, launchedAt);
+        if (outcome !== "passed") projectile.damage = 0;
+        return { kind: "player-hit-judged", at: moment.tick, style, outcome, requested };
       });
   }
 
-  private react(beat: Beat, at: Tick, player: PlayerObservation): FightEvent | null {
+  private judge(moment: Moment, style: IncomingStyle, launchedAt: Tick): HitJudgement {
+    if (!damageable(moment.phase.boss)) return "invulnerable";
+    const rule = this.config.choices.deflect.option.value;
+    switch (rule.kind) {
+      case "none":
+        return "passed";
+      case "block": {
+        const { overhead } = this.schedule.at(launchedAt).phase;
+        return overhead !== null && OCELLUS_P4.deflects[overhead].value === style ? "blocked" : "passed";
+      }
+      default: {
+        const unhandled: never = rule;
+        return unhandled;
+      }
+    }
+  }
+
+  private react(beat: Beat, at: Tick, player: PlayerObservation): FightEvent | readonly FightEvent[] | null {
     switch (beat.kind) {
       case "boss-shouts":
         this.setOverheadText(beat.text);
@@ -334,8 +402,11 @@ export class Ocellus extends Mob {
       case "special-sound":
         return { kind: "special-sounded", at, ordinal: beat.ordinal, cue: beat.cue };
       case "soul-split-heal":
+        return this.soulSplit(beat.ordinal, at);
       case "rifts-spawn":
+        return this.spawnRifts(beat.forCycle, at);
       case "rift-charge-ends":
+        this.burstRifts(beat.forCycle, at);
         return null;
       default: {
         const unhandled: never = beat;
@@ -356,8 +427,55 @@ export class Ocellus extends Mob {
     const { protectedDamage, unprotectedDamage } = OCELLUS_P4.special;
     const special = specialAttack(at, ordinal, variant);
     const amount = () => rollInt(this.config.seed, "specialDamage", at, this.target.protection === special.style ? protectedDamage.value : unprotectedDamage.value, 0);
-    const hit = new P4Hit(this, this.target, amount, (receipt) => this.recordEvent({ kind: "special-hit", ...special, receipt }));
+    const hit = new P4Hit(this, this.target, amount, (receipt) => {
+      if (receipt.prayer !== special.style) this.stolen = [...this.stolen, { ordinal, credit: receipt.applied }];
+      this.recordEvent({ kind: "special-hit", ...special, receipt });
+    });
     this.target.addProjectile(hit);
+  }
+
+  private soulSplit(ordinal: Ordinal, at: Tick): FightEvent | null {
+    const stolen = this.stolen.find((theft) => theft.ordinal === ordinal);
+    if (!stolen) return null;
+    this.stolen = this.stolen.filter((theft) => theft !== stolen);
+    return this.healBoss({ kind: "soul-split", ordinal }, stolen.credit, at);
+  }
+
+  private spawnRifts(forCycle: Cycle, at: Tick): FightEvent[] {
+    const anchor = OCELLUS_P4.geometry.bossAnchor.value;
+    return OCELLUS_P4.rifts.offsetsFromBoss.value.map(({ dx, dy }, slot): FightEvent => {
+      const place = tile(anchor.x + dx, anchor.y + dy);
+      const mob = new VoidRift(this.region, place);
+      this.region.addMob(mob);
+      const id = riftId(at, slot);
+      this.rifts = [...this.rifts, { id, tile: place, forCycle, mob, hpAtPostTick: mob.currentStats.hitpoint }];
+      return { kind: "rift-spawned", at, rift: id, tile: place };
+    });
+  }
+
+  private destroyFallenRifts(at: Tick): FightEvent[] {
+    const fallen = this.rifts.filter((rift) => rift.hpAtPostTick <= 0);
+    this.rifts = this.rifts.filter((rift) => rift.hpAtPostTick > 0);
+    return fallen.map((rift) => ({ kind: "rift-destroyed", at, rift: rift.id, tile: rift.tile }));
+  }
+
+  private burstRifts(forCycle: Cycle, at: Tick): void {
+    const isDue = (rift: Rift) => rift.forCycle === forCycle;
+    const due = this.rifts.filter(isDue);
+    this.rifts = this.rifts.filter((rift) => !isDue(rift));
+    due.forEach((rift, draw) => {
+      rift.mob.detonate();
+      const requested = rollInt(this.config.seed, "riftBurst", at, OCELLUS_P4.rifts.burstDamage.value, draw);
+      this.target.addProjectile(new P4Hit(this, this.target, () => requested, (receipt) => this.recordEvent({ kind: "rift-burst", at, rift: rift.id, tile: rift.tile, receipt })));
+    });
+  }
+
+  private healBoss(cause: HealCause, requested: number, at: Tick): FightEvent {
+    const beforeHp = this.currentStats.hitpoint;
+    const afterHp = Math.min(this.stats.hitpoint, beforeHp + requested);
+    this.currentStats.hitpoint = afterHp;
+    this.healSplats = [...this.healSplats, { amount: afterHp - beforeHp, lastShown: after(at, HEAL_SPLAT_TICKS) }];
+    return { kind: "boss-healed", at, cause, receipt: { requested, applied: afterHp - beforeHp, beforeHp, afterHp } };
   }
 
   private markExplosion(kind: VoidKind, pulse: number, at: Tick, player: Tile): FightEvent {
@@ -419,10 +537,7 @@ export class Ocellus extends Mob {
     const orb = this.orb("outer-void");
     if (orb?.kind !== "expired") return null;
     this.replaceOrb("outer-void", null);
-    const beforeHp = this.currentStats.hitpoint;
-    const afterHp = Math.min(this.stats.hitpoint, beforeHp + orb.credit);
-    this.currentStats.hitpoint = afterHp;
-    return { kind: "boss-healed", at, cause: { kind: "unclaimed-orb" }, receipt: { requested: orb.credit, applied: afterHp - beforeHp, beforeHp, afterHp } };
+    return this.healBoss({ kind: "unclaimed-orb" }, orb.credit, at);
   }
 
   private claimOrbs(at: Tick, player: Tile): void {

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { CacheRender, ControlPanelController, Settings, TrainerInstance, TrainerLoadingState, Viewport } from "osrs-sdk";
 import type { Item } from "osrs-sdk";
 import { GameOverlay, TrainerApp, TrainerLoadingSplash } from "osrs-sdk-react";
@@ -72,7 +72,7 @@ function createTrainer() {
   const region = new OcellusRegion(config);
   const trainer = new TrainerInstance(region);
   if (process.env.NODE_ENV !== "production") exposeVerificationProbe(trainer, region, rejected);
-  return { trainer, config };
+  return { trainer, region, config };
 }
 
 const SETUP_KEYS = Object.keys(OCELLUS_P4.choices.setup.options);
@@ -113,14 +113,35 @@ function DrillControls({ config }: Readonly<{ config: DrillConfig }>) {
   );
 }
 
+const CHAT_LINES_SHOWN = 5;
+const CHAT_POLL_MS = 300;
+
+function GameChat({ region }: Readonly<{ region: OcellusRegion }>) {
+  const [lines, setLines] = useState<readonly string[]>([]);
+  useEffect(() => {
+    const poll = window.setInterval(() => setLines((shown) => {
+      const latest = region.chat();
+      return latest.length === shown.length ? shown : latest;
+    }), CHAT_POLL_MS);
+    return () => window.clearInterval(poll);
+  }, [region]);
+
+  return (
+    <ol id="game_chat">
+      {lines.slice(-CHAT_LINES_SHOWN).map((line, index) => <li key={index}>{line}</li>)}
+    </ol>
+  );
+}
+
 export function ArchiveOcellusApp() {
-  const [{ trainer, config }] = useState(createTrainer);
+  const [{ trainer, region, config }] = useState(createTrainer);
   const [loading, setLoading] = useState<TrainerLoadingState>();
 
   return (
     <TrainerApp trainer={trainer} onLoadingStateChange={setLoading}>
       <GameOverlay>
         <TrainerLoadingSplash state={loading} />
+        <GameChat region={region} />
         <DrillControls config={config} />
         <p id="credit_line">{CREDIT_LINE}</p>
       </GameOverlay>

@@ -63,12 +63,14 @@ export function after(start: Tick, offset: TickSpan): Tick {
   return tick(start + offset);
 }
 
+export type HoveringBoss = "present-out-of-melee-reach" | "present-damageable";
+
 export type Phase =
   | Readonly<{ stage: "lead-in"; boss: "hidden" | "present-invulnerable"; overhead: null }>
-  | Readonly<{ stage: "inner-void"; cycle: Cycle; boss: "present-damageable"; overhead: "deflect-melee" }>
-  | Readonly<{ stage: "after-inner"; cycle: Cycle; boss: "present-damageable"; overhead: "deflect-melee" | "soul-split" }>
+  | Readonly<{ stage: "inner-void"; cycle: Cycle; boss: HoveringBoss; overhead: "deflect-melee" }>
+  | Readonly<{ stage: "after-inner"; cycle: Cycle; boss: "present-damageable"; overhead: "deflect-melee" | "soul-split" | null }>
   | Readonly<{ stage: "outer-void"; cycle: Cycle; boss: "present-damageable"; overhead: "deflect-range" }>
-  | Readonly<{ stage: "after-outer"; cycle: Cycle; boss: "present-damageable"; overhead: "deflect-range" | "soul-split" }>;
+  | Readonly<{ stage: "after-outer"; cycle: Cycle; boss: "present-damageable"; overhead: "deflect-range" | "soul-split" | null }>;
 export type Stage = Phase["stage"];
 export type VoidKind = "inner-void" | "outer-void";
 export type TransitionKind = "after-inner" | "after-outer";
@@ -102,19 +104,25 @@ export type Beat =
 export type IncomingStyle = Style | "typeless";
 export type RunEnd = "kill" | "death";
 
+export type RiftId = `rift-${number}-${number}`;
+export function riftId(spawnedAt: Tick, slot: number): RiftId {
+  return `rift-${spawnedAt}-${slot}`;
+}
+
 export type HitReceipt = Readonly<{ requested: number; applied: number; beforeHp: number; afterHp: number; prayer: Style | null }>;
 export type HealReceipt = Readonly<{ requested: number; applied: number; beforeHp: number; afterHp: number }>;
-export type HealCause = Readonly<{ kind: "unclaimed-orb" }>;
+export type HealCause = Readonly<{ kind: "unclaimed-orb" }> | Readonly<{ kind: "soul-split"; ordinal: Ordinal }>;
 export type ExplosionOutcome = Readonly<{ kind: "hit"; receipt: HitReceipt }> | Readonly<{ kind: "avoided" }>;
 export type SpecialAttack<V extends Special = Special> = { [K in V]: Readonly<{ at: Tick; ordinal: Ordinal; variant: K; style: SpecialStyle<K> }> }[V];
+export type HitJudgement = "passed" | "invulnerable" | "blocked";
 
 export type FightEvent =
   | Readonly<{ kind: "stage-entered"; at: Tick; stage: Stage }>
-  | Readonly<{ kind: "overhead-switched"; at: Tick; overhead: BossOverhead }>
+  | Readonly<{ kind: "overhead-switched"; at: Tick; overhead: BossOverhead | null }>
   | Readonly<{ kind: "boss-state-changed"; at: Tick; state: BossState }>
   | Readonly<{ kind: "boss-shouted"; at: Tick; text: string }>
   | Readonly<{ kind: "boss-landing-started"; at: Tick }>
-  | Readonly<{ kind: "player-hit-judged"; at: Tick; style: IncomingStyle; outcome: "passed" | "invulnerable"; requested: number }>
+  | Readonly<{ kind: "player-hit-judged"; at: Tick; style: IncomingStyle; outcome: HitJudgement; requested: number }>
   | Readonly<{ kind: "floor-hit"; at: Tick; void: VoidKind; tile: Tile; receipt: HitReceipt }>
   | Readonly<{ kind: "lifeforce-told"; at: Tick; void: VoidKind }>
   | Readonly<{ kind: "lifeforce-drained"; at: Tick; void: VoidKind; receipt: HitReceipt }>
@@ -129,6 +137,9 @@ export type FightEvent =
   | (Readonly<{ kind: "special-told" }> & SpecialAttack)
   | (Readonly<{ kind: "special-hit"; receipt: HitReceipt }> & SpecialAttack)
   | Readonly<{ kind: "special-sounded"; at: Tick; ordinal: Ordinal; cue: TransitionCue }>
+  | Readonly<{ kind: "rift-spawned"; at: Tick; rift: RiftId; tile: Tile }>
+  | Readonly<{ kind: "rift-destroyed"; at: Tick; rift: RiftId; tile: Tile }>
+  | Readonly<{ kind: "rift-burst"; at: Tick; rift: RiftId; tile: Tile; receipt: HitReceipt }>
   | Readonly<{ kind: "run-ended"; at: Tick; reason: RunEnd }>;
 
 export type PlayerObservation = Readonly<{ tile: Tile; hp: number; prayer: Style | null }>;

@@ -1,11 +1,11 @@
 import { startDrill } from "./drill";
 import type { At } from "./drill";
 
-const NO_DAMAGE = { focus: "rifts" } as const;
+const NON_LETHAL = { focus: "lifeforce-orb" } as const;
 
 describe("Ocellus arena", () => {
   test("the player spawns two tiles north of the 5x5, the boss's 3x3 stands on x 4-6, y 4-6, and a walk runs two tiles a tick", () => {
-    const drill = startDrill({ selection: NO_DAMAGE });
+    const drill = startDrill({ selection: NON_LETHAL });
     const boss = drill.boss();
     expect([drill.player().location, boss.location, boss.size]).toEqual([{ x: 5, y: 1 }, { x: 4, y: 6 }, 3]);
 
@@ -18,7 +18,7 @@ describe("Ocellus arena", () => {
   });
 
   test("the player can stand on exactly the measured platform floor and on no tile around it", () => {
-    const drill = startDrill({ selection: NO_DAMAGE });
+    const drill = startDrill({ selection: NON_LETHAL });
     const standsOn = (to: At) => {
       drill.walkTo(to);
       for (let moved = true; moved; ) {
@@ -55,7 +55,7 @@ describe("Ocellus arena", () => {
 
   test("a walk past the edge, or onto the tile beside it, stops on the floor tile nearest the order", () => {
     const stopsAt = (to: At) => {
-      const drill = startDrill({ selection: NO_DAMAGE });
+      const drill = startDrill({ selection: NON_LETHAL });
       drill.walkTo(to);
       drill.region.world.tickWorld(6);
       const at = { ...drill.player().location };
@@ -70,7 +70,7 @@ describe("Ocellus arena", () => {
   });
 
   test("a walk between floor tiles goes around the platform's cut-outs instead of across them", () => {
-    const drill = startDrill({ selection: NO_DAMAGE });
+    const drill = startDrill({ selection: NON_LETHAL });
     drill.walkTo({ x: 4, y: 10 });
     drill.region.world.tickWorld(6);
     drill.walkTo({ x: 7, y: 7 });

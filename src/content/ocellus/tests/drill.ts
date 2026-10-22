@@ -101,8 +101,8 @@ export function startDrill(options: DrillOptions = {}) {
     },
     walkTo,
     pray,
-    hit(from: Unit, to: Unit, damage: number) {
-      to.addProjectile(new Projectile(null, damage, from, to, "typeless", { setDelay: 1 }));
+    hit(from: Unit, to: Unit, damage: number, style: "typeless" | "slash" | "range" = "typeless", delay = 1) {
+      to.addProjectile(new Projectile(null, damage, from, to, style, { setDelay: delay }));
     },
     restart() {
       region.reset(false);

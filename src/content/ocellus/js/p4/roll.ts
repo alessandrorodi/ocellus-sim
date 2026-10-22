@@ -1,7 +1,7 @@
 import type { DamageRange } from "../OcellusTimings";
 import type { Seed, Tick } from "../P4Types";
 
-type RollStream = "orbTile" | "floorDamage" | "explosionDamage" | "specialDamage" | "specialVariant";
+type RollStream = "orbTile" | "floorDamage" | "explosionDamage" | "specialDamage" | "specialVariant" | "riftBurst";
 
 const STREAM_ID: Readonly<Record<RollStream, number>> = {
   orbTile: 1,
@@ -9,6 +9,7 @@ const STREAM_ID: Readonly<Record<RollStream, number>> = {
   explosionDamage: 3,
   specialDamage: 4,
   specialVariant: 5,
+  riftBurst: 6,
 };
 
 export function roll(seed: Seed, stream: RollStream, at: Tick, draw: number): number {

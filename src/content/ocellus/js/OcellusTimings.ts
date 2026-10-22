@@ -1,5 +1,5 @@
 import type { TwistedBow } from "osrs-sdk";
-import type { Cycle, Mechanic, Seed, SoundId, Special, Style, TickSpan, Tile, TransitionKind, VoidKind } from "./P4Types";
+import type { BossOverhead, Cycle, HoveringBoss, Mechanic, Seed, SoundId, Special, Style, TickSpan, Tile, TransitionKind, VoidKind } from "./P4Types";
 import { cycle, seed, soundId, span, tile } from "./P4Types";
 
 type Basis = "footage-repeated" | "footage-once" | "spec-confirmed" | "spec-single" | "inferred" | "assumption";
@@ -41,6 +41,11 @@ const vod = (which: Vod, at: string): Source => ({ kind: "vod", vod: which, at }
 const wiki = (page: string, oldid: number | null): Source => ({ kind: "wiki", page, oldid });
 const cache = (record: string): Source => ({ kind: "cache", build: 2746, record });
 const owner = (topic: string): Source => ({ kind: "owner", date: "2026-10-21", topic });
+const pose = (id: number, name: string, basis: Basis, note: string): Selected<number> =>
+  selected(id, basis, "unscaled", note, cache(`seq ${id} ${name}`));
+const DEFLECT_MELEE_SEEN = [vod("V1", "G53, G55 to G57, G109, G115 to G117, G153, G154, G175 to G177"), vod("V2", "k48, k60, k70 to k72, k131, k132, k168, k170, k250 to k252")] as const;
+const DEFLECT_RANGE_SEEN = [vod("V1", "G64 to G85 but G74, G124 to G145 but G133, G184 to G186, G189 to G193"), vod("V2", "k79 to k93, k143 to k153, k199, k200, k214 to k217, k259 to k273 but k266")] as const;
+const SOUL_SPLIT_SEEN = [vod("V1", "G58 to G62, G86 to G91, G118 to G122, G146 to G151, G178 to G182"), vod("V2", "k73 to k77, k133 to k136, k161 to k166, k253 to k257")] as const;
 const STRATEGIES = wiki("https://oldschool.runescape.wiki/w/The_Fractured_Archive/Strategies", 15378365);
 const BOSS_PAGE = wiki("https://oldschool.runescape.wiki/w/Ocellus", 15378404);
 const SOLO_SCALE = wiki("https://secure.runescape.com/m=news/the-fractured-archive---everything-you-need-to-know?oldschool=1", null);
@@ -82,10 +87,11 @@ type CycleRecipe = readonly [
   TransitionRecipe<"after-outer">,
 ];
 
-type OverheadByStage = Readonly<{
+type OverheadRecipe = Readonly<{
   "inner-void": Selected<"deflect-melee">;
   "outer-void": Selected<"deflect-range">;
   transition: Selected<"soul-split">;
+  offBeforeVoid: Selected<TickSpan>;
 }>;
 
 type LifeforceRecipe = Readonly<{ tellAfterOnset: Selected<TickSpan>; hitAfterOnset: Selected<TickSpan> }>;
@@ -112,7 +118,23 @@ type SpecialRecipe = Readonly<{
 }>;
 export type SpecialStyle<V extends Special> = SpecialRecipe["styles"][V]["value"];
 type BossHealRecipe = Readonly<{ soulSplitAfterHit: Selected<TickSpan> }>;
-type RiftRecipe = Readonly<{ spawnBeforeOnset: Selected<TickSpan>; chargeAfterSpawn: Selected<TickSpan> }>;
+type RiftOffset = Readonly<{ dx: number; dy: number }>;
+type RiftPose = "idle" | "spawn" | "despawn" | "detonate";
+type RiftRecipe = Readonly<{
+  spawnBeforeOnset: Selected<TickSpan>;
+  chargeAfterSpawn: Selected<TickSpan>;
+  npcId: Selected<number>;
+  name: Selected<string>;
+  combatLevel: Selected<number>;
+  size: Selected<number>;
+  stats: Selected<Readonly<{ attack: number; strength: number; defence: number; range: number; magic: number; hitpoint: number }>>;
+  defenceBonuses: Selected<Readonly<{ stab: number; slash: number; crush: number; magic: number; range: number }>>;
+  offsetsFromBoss: Selected<readonly [RiftOffset, ...RiftOffset[]]>;
+  burstDamage: Selected<DamageRange>;
+  killChat: Selected<string>;
+  poses: Readonly<Record<RiftPose, Selected<number>>>;
+  burstFlare: Selected<number>;
+}>;
 
 type GeometryRecipe = Readonly<{
   platform: Selected<readonly string[]>;
@@ -147,6 +169,8 @@ export type TransitionCue = Readonly<{ sound: TransitionSound; afterTell: TickSp
 type CueSound = "explosionSeriesStart" | "explosionMark" | TransitionSound;
 type SoundPlayback = Readonly<{ volume: number; range: number; retain: number }>;
 
+export type SpriteFrame = Readonly<{ archive: number; frame: number }>;
+
 type PresentationRecipe = Readonly<{
   bossPoses: Readonly<Record<BossPose, Selected<number>>>;
   sounds: Readonly<Record<CueSound, Selected<SoundId>>>;
@@ -154,7 +178,12 @@ type PresentationRecipe = Readonly<{
   landingBeforeInnerClears: Selected<TickSpan>;
   transitionTells: Readonly<Record<Special, Selected<number>>>;
   tellCentre: Selected<Readonly<{ faceColour: number; rgb: number }>>;
+  overheadIcons: Readonly<Record<BossOverhead, Selected<SpriteFrame>>>;
+  overheadIconBelowHpBar: Selected<number>;
 }>;
+
+const headIcon = (frame: number, note: string, seen: readonly Source[]): Selected<SpriteFrame> =>
+  selected({ archive: 440, frame }, "footage-repeated", "unscaled", note, cache(`sprite 440 headicons_prayer frame ${frame}`), ...seen);
 
 type StyleBonuses = Readonly<{ stab: number; slash: number; crush: number; magic: number; range: number }>;
 export type ItemStats = Readonly<{
@@ -204,6 +233,7 @@ type GearRecipe = Readonly<{
   inquisitorCrushPerMille: Selected<Readonly<Record<InquisitorPiece, number>>>;
   rangedStrengthPrayers: Selected<Readonly<Record<RangedStrengthPrayer, number>>>;
   scytheStance: Selected<"jab">;
+  scytheMaxHitsOnOneTarget: Selected<number>;
   specialWeapon: Selected<GearKeys["weapon"]>;
 }>;
 
@@ -251,10 +281,19 @@ const AFTER_OUTER: TransitionRecipe<"after-outer"> = {
 
 const CYCLE: CycleRecipe = [INNER_VOID, AFTER_INNER, OUTER_VOID, AFTER_OUTER];
 
-const OVERHEADS: OverheadByStage = {
-  "inner-void": selected("deflect-melee", "footage-once", "team-5", "icon at S+12 and S+23; raised at the rise per the wiki order, the switch tick was not in frame (Q9)", vod("V2", "k60, k71"), STRATEGIES),
-  "outer-void": selected("deflect-range", "footage-once", "team-5", "icon with the flood from S+31", vod("V2", "k79, k80, k90"), STRATEGIES),
+const OVERHEADS: OverheadRecipe = {
+  "inner-void": selected("deflect-melee", "footage-repeated", "team-4-and-5", "up from the rise at S+0 to S+24 in all 7 cycles filmed, and absent the tick before the rise; the hovering boss's icon is mostly above the frame, and S+21 is never in it", ...DEFLECT_MELEE_SEEN, STRATEGIES),
+  "outer-void": selected("deflect-range", "footage-repeated", "team-4-and-5", "up with the flood from S+31 and through S+52, two ticks after it clears, in all 7 floods filmed", ...DEFLECT_RANGE_SEEN, STRATEGIES),
   transition: selected("soul-split", "footage-repeated", "team-4-and-5", "white star after each transition tell", vod("V1", "frames 2777, 3785, 4937"), vod("V2", "k73")),
+  offBeforeVoid: selected(span(1), "footage-repeated", "team-4-and-5", "no icon at S+30 in 5 cycles and at S+59 in 3, with the boss and his HP bar in frame and the icon up on the ticks either side", vod("V1", "G63, G123, G183, G92, G152"), vod("V2", "k78, k258, k167")),
+};
+
+export type DeflectRule = Readonly<{ kind: "block" }> | Readonly<{ kind: "none" }>;
+
+const DEFLECTS: Readonly<Record<BossOverhead, Selected<Style | null>>> = {
+  "deflect-melee": selected("melee", "inferred", "unscaled", "named for the style it turns away; no capture shows a melee hit landing during it (Q8)", STRATEGIES, vod("V2", "k60, k71")),
+  "deflect-range": selected("ranged", "inferred", "unscaled", "named for the style it turns away; no capture shows a ranged hit landing during it (Q8)", STRATEGIES, vod("V2", "k80, k90")),
+  "soul-split": selected(null, "inferred", "unscaled", "a healing prayer that turns no style away", STRATEGIES, vod("V2", "k73")),
 };
 
 const LIFEFORCE: LifeforceRecipe = {
@@ -299,6 +338,29 @@ const BOSS_HEALS: BossHealRecipe = {
 const RIFTS: RiftRecipe = {
   spawnBeforeOnset: selected(span(1), "footage-repeated", "team-4-and-5", "rifts one tick before the next inner void", vod("V1", "G152"), vod("V2", "k107, k167, k227")),
   chargeAfterSpawn: selected(span(11), "inferred", "team-5", "unexplained 14 on the streamer 11 ticks after rifts appear", vod("V2", "k107 to k118, k167 to k178")),
+  npcId: selected(16678, "spec-confirmed", "unscaled", "tfa_ocellus_p3_bombportal_basic, Void Rift", cache("npc 16678"), vod("V2", "k193")),
+  name: selected("Void Rift", "spec-confirmed", "unscaled", "hover text Attack Void Rift (level-138)", cache("npc 16678 name"), vod("V2", "k193")),
+  combatLevel: selected(138, "spec-confirmed", "unscaled", "cache level matches the hover text", cache("npc 16678 combat level"), vod("V2", "k193")),
+  size: selected(1, "spec-confirmed", "unscaled", "one-tile shard", cache("npc 16678 size")),
+  stats: selected({ attack: 1, strength: 1, defence: 175, range: 1, magic: 300, hitpoint: 44 }, "spec-confirmed", "unscaled", "the rift never attacks", cache("npc 16678 stats [1, 175, 1, 44, 1, 300]")),
+  defenceBonuses: selected({ stab: 0, slash: 0, crush: 0, magic: 0, range: 0 }, "spec-confirmed", "unscaled", "params 5 to 8 are 0; the decode has no ranged defence param, taken as 0 (inferred)", cache("npc 16678 params 5, 6, 7, 8")),
+  offsetsFromBoss: selected(
+    [{ dx: -2, dy: -4 }, { dx: 7, dy: -4 }],
+    "footage-once",
+    "team-4-and-5",
+    "(2, 2) and (11, 2), north of the 5x5: V1's two rifts, placed from their HP bars and carried onto the V2 platform by the east-west mirror; (2, 2) is the same tile under the 270-degree turn, and (11, 2) is also a V2 second-spawn rift; every observed rift is north of the 5x5, and V2's other rift tiles lie on the undrawn strip north of this grid",
+    vod("V1", "G152-G164"),
+    vod("V2", "k167-k173"),
+  ),
+  burstDamage: selected({ min: 14, max: 14 }, "inferred", "team-5", "the streamer took 14 from an unseen source 11 ticks after the rifts appeared; a rift's charge is the leading candidate", vod("V2", "k118, k178")),
+  killChat: selected("Destroying the void rift empowers you!", "footage-repeated", "team-4-and-5", "game chat line when a rift dies; what the empower does is not shown", vod("V1", "3:55:21.98"), vod("V2", "k116")),
+  poses: {
+    idle: pose(14895, "vfx_ocellus_voidflare_default_idle", "spec-confirmed", "rift stand and walk animation"),
+    spawn: pose(14896, "vfx_ocellus_voidflare_default_spawn", "inferred", "rift appearing, 1 tick, frame sound 12643"),
+    despawn: pose(14897, "vfx_ocellus_voidflare_default_despawn", "inferred", "rift dying, 1 tick, frame sound 12640"),
+    detonate: pose(14898, "vfx_ocellus_voidflare_default_detonate", "inferred", "rift releasing its charge, 2 ticks, frame sounds 12641 and 12642"),
+  },
+  burstFlare: selected(4306, "inferred", "unscaled", "vfx_human_ocellus_voidflare_default shares the rift's model 62369; played on the player as the charge lands", cache("spotanim 4306 vfx_human_ocellus_voidflare_default")),
 };
 
 const FLOOD_FRAMES = vod("V2", "k86, k95, k142, k156, k205, k212, k262, k269");
@@ -408,9 +470,6 @@ const EXPLOSION: ExplosionCueRecipe = {
 const sound = (id: number, note: string, first: Source, ...rest: Source[]): Selected<SoundId> =>
   selected(soundId(id), "footage-repeated", "team-4-and-5", note, first, ...rest, cache(`synth ${id}`));
 
-const pose = (id: number, name: string, basis: Basis, note: string): Selected<number> =>
-  selected(id, basis, "unscaled", note, cache(`seq ${id} ${name}`));
-
 const PRESENTATION: PresentationRecipe = {
   bossPoses: {
     idle: pose(14840, "phase3_idle", "spec-confirmed", "boss stand animation"),
@@ -457,6 +516,12 @@ const PRESENTATION: PresentationRecipe = {
     cache("texture 215 sprite 8803, mean texel #020203"),
     vod("V2", "k72 to k78, k100 to k106, k132 to k137"),
   ),
+  overheadIcons: {
+    "deflect-melee": headIcon(15, "a sword over a purple badge with blue arrows; 25 of the 168 icon detections in both clips match this frame, each closer to it than to the arrowless Dampen frames 12 and 13", DEFLECT_MELEE_SEEN),
+    "deflect-range": headIcon(16, "an arrow over the same badge; 96 of the 168 icon detections in both clips match this frame, each closer to it than to the arrowless Dampen frames 12 and 13", DEFLECT_RANGE_SEEN),
+    "soul-split": headIcon(11, "a white star with red arrows over a purple badge; 47 of the 168 icon detections in both clips match this frame", SOUL_SPLIT_SEEN),
+  },
+  overheadIconBelowHpBar: selected(7, "inferred", "unscaled", "the boss's HP bar sits above its curse icon, not over it as the SDK draws player overheads; 7 px clears the bar at the SDK's overhead scale", vod("V2", "k60, k71, k73, k80, k90")),
 };
 
 const OSRS_WIKI = "https://oldschool.runescape.wiki/w/";
@@ -516,6 +581,7 @@ const GEAR: GearRecipe = {
   inquisitorCrushPerMille: selected({ inquisitorsGreatHelm: 5, inquisitorsHauberk: 10, inquisitorsPlateskirt: 10 }, "spec-single", "unscaled", "crush accuracy and damage per piece; the 2026-07-22 update moved the 1% set bonus onto the hauberk and plateskirt", wiki(`${OSRS_WIKI}Inquisitor%27s_hauberk`, 15352823), wiki(`${OSRS_WIKI}Inquisitor%27s_plateskirt`, 15352824), INQUISITOR_SET),
   rangedStrengthPrayers: selected({ "Sharp Eye": 1.05, "Hawk Eye": 1.1, "Eagle Eye": 1.15, Deadeye: 1.18, Rigour: 1.23 }, "spec-single", "unscaled", "prayer bonus to effective ranged strength", MAX_RANGED_HIT),
   scytheStance: selected("jab", "spec-single", "unscaled", "Jab is the scythe's crush style; the owner wants the Scythe setup on crush", SCYTHE_PAGE, owner("melee setup")),
+  scytheMaxHitsOnOneTarget: selected(3, "spec-single", "unscaled", "one hit per tile of the target's width, up to three: a 1x1 target once, 2x2 twice, 3x3 or larger three times; other 1x1 targets in the 1x3 arc take their own hit", SCYTHE_PAGE),
   specialWeapon: selected("tonalzticsOfRalos", "assumption", "unscaled", "owner: players tend to use Ralos to spec the boss", owner("special attack weapon")),
 };
 
@@ -529,6 +595,7 @@ export const OCELLUS_P4 = {
   leadIn: LEAD_IN,
   cycle: CYCLE,
   overheads: OVERHEADS,
+  deflects: DEFLECTS,
   lifeforce: LIFEFORCE,
   orb: ORB,
   special: SPECIAL,
@@ -586,6 +653,14 @@ export const OCELLUS_P4 = {
       "cycle-3": selected<Cycle>(cycle(3), "footage-once", "team-4", "none in view before cycle 2, two before cycle 3", vod("V1", "G90-G95, G152")),
     }),
     innerVoidFloor: INNER_VOID_FLOOR,
+    deflect: choice("block-at-launch", {
+      "block-at-launch": selected<DeflectRule>({ kind: "block" }, "inferred", "unscaled", "a hit of the deflected style lands as 0, judged by the overhead up when it was launched: three ranged hits launched before Deflect Range rose landed in full under it, and no capture shows a hit launched into a deflect of its own style (Q8)", vod("V1", "G182 to G184"), vod("V2", "k78 to k81, k137 to k140")),
+      none: selected<DeflectRule>({ kind: "none" }, "assumption", "unscaled", "the wiki names the prayers without saying what they do", STRATEGIES),
+    }),
+    hoverMeleeReach: choice("unreachable", {
+      unreachable: selected<HoveringBoss>("present-out-of-melee-reach", "inferred", "unscaled", "melee cannot reach the boss while he hovers, from S+0 to S+21: all 28 of Kirby's attacks in 6 hovers are ranged, every player stands off the 5x5 while he hovers, and the owner believes melee cannot reach him in the air; whether the void ring or his height stops it is not filmed", vod("V1", "G33 to G54, G93 to G114, G153 to G174"), vod("V2", "k48 to k69, k108 to k129, k168 to k189"), owner("melee reach while airborne")),
+      reachable: selected<HoveringBoss>("present-damageable", "assumption", "unscaled", "melee reaches the hovering boss as it reaches the landed one; no capture shows a melee attack while he hovers", vod("V1", "G33 to G54, G93 to G114, G153 to G174"), vod("V2", "k48 to k69, k108 to k129, k168 to k189")),
+    }),
     orbPickupRadius: choice("on-tile", {
       "on-tile": selected(0, "footage-repeated", "team-5", "the streamer stands on the orb tile a tick before each heal (C9)", vod("V2", "k67, k95")),
       adjacent: selected(1, "footage-once", "team-4", "pickups read from an adjacent tile, with about 1 tile of perspective error (C9)", vod("V1", "G51, G135, G175")),
@@ -601,6 +676,7 @@ export const OCELLUS_P4 = {
       "orb-retrieval": drill("lifeforce-orb", "void-floor"),
       explosions: drill("explosions"),
       "transition-attacks": drill("transition-attacks"),
+      "boss-heals": drill("transition-attacks", "lifeforce-orb"),
       rifts: drill("rifts"),
     }),
   },
@@ -650,6 +726,8 @@ function resolveChoices(lookup: (name: ChoiceName) => string | undefined, reject
     unclaimedOuterOrb: pick("unclaimedOuterOrb"),
     riftFirstCycle: pick("riftFirstCycle"),
     innerVoidFloor: pick("innerVoidFloor"),
+    deflect: pick("deflect"),
+    hoverMeleeReach: pick("hoverMeleeReach"),
     orbPickupRadius: pick("orbPickupRadius"),
     outerOrbTile: pick("outerOrbTile"),
     focus: pick("focus"),

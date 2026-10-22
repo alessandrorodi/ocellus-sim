@@ -5,3 +5,4 @@ set -euo pipefail
 node "$(dirname "$0")/patch-sdk-assets.mjs"
 osrs-sdk-assets build "$@"
 npm run --silent item-icons -- "$@"
+node scripts/extract-sprites.mjs "$@"

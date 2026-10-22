@@ -5,7 +5,7 @@ import { OCELLUS_P4 } from "./OcellusTimings";
 import { dress } from "./OcellusLoadout";
 import { OcellusPlayer } from "./OcellusPlayer";
 import type { FightEvent, FightLog, FightSnapshot, SoundId, Tile, TickRow, VoidKind } from "./P4Types";
-import { BossLook, ExplosionViews, FragmentFlash, OrbView, VoidField } from "./entities/P4Views";
+import { BossLook, ExplosionViews, FragmentFlash, OrbView, PlayerLook, VoidField } from "./entities/P4Views";
 import { Ocellus } from "./mobs/Ocellus";
 import { PLATFORM, voidUnder } from "./p4/floor";
 import { CombatStream } from "./p4/roll";
@@ -17,7 +17,15 @@ function itemId(item: Item | null | undefined): number | null {
   return typeof id === "number" ? id : null;
 }
 
-type Views = Readonly<{ field: VoidField; orbs: Readonly<Record<VoidKind, OrbView>>; fragment: FragmentFlash; explosions: ExplosionViews; boss: BossLook }>;
+type Views = Readonly<{
+  field: VoidField;
+  orbs: Readonly<Record<VoidKind, OrbView>>;
+  fragment: FragmentFlash;
+  explosions: ExplosionViews;
+  boss: BossLook;
+  player: PlayerLook;
+  chat: string[];
+}>;
 
 const { sounds, soundPlayback } = OCELLUS_P4.presentation;
 
@@ -70,6 +78,12 @@ function present(event: FightEvent, views: Views, player: Tile): void {
     case "boss-landing-started":
       views.boss.land();
       return;
+    case "rift-destroyed":
+      views.chat.push(OCELLUS_P4.rifts.killChat.value);
+      return;
+    case "rift-burst":
+      views.player.riftBurst();
+      return;
     case "overhead-switched":
     case "boss-state-changed":
     case "boss-shouted":
@@ -78,6 +92,7 @@ function present(event: FightEvent, views: Views, player: Tile): void {
     case "lifeforce-drained":
     case "boss-healed":
     case "special-hit":
+    case "rift-spawned":
     case "run-ended":
       return;
     default: {
@@ -130,6 +145,8 @@ export class OcellusRegion extends Region {
       fragment: new FragmentFlash(this),
       explosions: new ExplosionViews(this),
       boss: new BossLook(ocellus),
+      player: new PlayerLook(player),
+      chat: [],
     };
     [views.field, views.orbs["inner-void"], views.orbs["outer-void"], views.fragment].forEach((view) => this.addEntity(view));
     for (const edge of PLATFORM.surround().tiles()) this.addEntity(new InvisibleMovementBlocker(this, { ...edge }));
@@ -183,6 +200,10 @@ export class OcellusRegion extends Region {
         specialEnergy: player.currentStats.specialAttack,
       },
     };
+  }
+
+  chat(): readonly string[] {
+    return this.mounted.kind === "mounted" ? [...this.mounted.views.chat] : [];
   }
 
   fightLog(): FightLog {
