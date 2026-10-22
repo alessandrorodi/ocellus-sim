@@ -272,7 +272,7 @@ function Result({ fight, params }: Readonly<{ fight: Fight; params: Params }>) {
 const TIPS: Readonly<Record<StartPhase, readonly string[]>> = {
   1: [
     "Pray Missiles for the orange fire volleys, Magic for the blue water ones. Prayer is checked when the shot lands.",
-    "At each corner 7 cracks grow toward him. Stand on a closing crack to block it (3-5 chip) or it feeds his yellow meter and heals him.",
+    "At each corner 7 cracks grow toward him. Stand on a closing crack to block it: it heals you instead of him. Unblocked, it feeds his yellow meter and heals him.",
     "Be 3+ tiles from his 3x3 when he explodes (28-30).",
     "At 66% and 25% he teleports to the middle: block the diagonal cracks from the marked squares, dodge the blasts. A full meter makes the strike lethal.",
   ],

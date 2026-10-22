@@ -223,7 +223,12 @@ export const P1 = {
   shouts: ["Pointless...", "You... fail...", "Unworthy..."],
   blastRadius: 2,
   blastDamage: range(28, 30),
-  lineChip: range(3, 5),
+  /**
+   * Standing on a crack as it closes blocks it and heals you: +16, +9, +13 on the blocker in [V] duo 13:31-13:35;
+   * "it'll heal all of the chip damage" (Bubba OSRS guide 1:21). [R]'s 3-5 every 2 ticks on blockers matches a burn
+   * left over from the room before ("You have been set alight!"), not the cracks.
+   */
+  blockHeal: range(9, 16),
   meterPerLine: 2,
   healPerLine: 2,
   meterMax: 96,

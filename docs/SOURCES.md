@@ -37,8 +37,9 @@ Where every timing, damage number and id in the full-fight simulator comes from.
   concentration, severing your prayer!") and locked for 3 ticks ([V] duo 18:53-18:55). Flick: off as it forms, on
   for the cut. One saw per quadrant destroyed, plus one.
 - **Shadow slash and Insolence.** A band 3 tiles wide to the platform edge ([V] duo 20:24, Bubba OSRS guide 4:56).
-- **Tendrils.** [R] recorded 3-5 per blocked line; [W] heals you after the last tendril; [O] says they shouldn't hurt.
-  The sim shows the chips and gives them back at the explosion (and at the middle's strike).
+- **Tendrils.** Blocking a closing crack heals you: +16, +9, +13 on the blocker in [V] (13:31-13:35), and Bubba
+  OSRS's guide ("it'll heal all of the chip damage"). [R]'s 3-5 every 2 ticks on blockers matches a burn left over
+  from the room before ("You have been set alight!"), not the cracks. The sim heals 9-16 a blocked crack.
 - **"Your panic... is futile..."** [R] recorded it at fixed ticks; [W] says it is his answer to a tank out of melee
   reach. The sim fires it whenever a swing can't reach you.
 - **Defence floor.** [J]: 60% for Ocellus, none for The Blade.
