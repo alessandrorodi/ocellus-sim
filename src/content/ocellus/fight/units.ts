@@ -38,7 +38,9 @@ export function styleOf(attackStyle: string): Style | null {
 }
 
 const FORM: Readonly<Record<Form, Readonly<{ npc: number; name: string; level: number; idle: number; walk: number | null }>>> = {
-  hooded: { npc: NPC.hoodedFigure, name: "Hooded Figure", level: 0, idle: SEQ.p1Idle, walk: SEQ.p1Walk },
+  // The intro NPC is on screen for one tick before he becomes phase 1; his phase 1 body stands in for it, which saves
+  // shipping a second 13 MB copy of the same hooded model.
+  hooded: { npc: NPC.p1, name: "Hooded Figure", level: 0, idle: SEQ.p1Idle, walk: SEQ.p1Walk },
   p1: { npc: NPC.p1, name: "Ocellus", level: P1.combatLevel, idle: SEQ.p1Idle, walk: SEQ.p1Walk },
   blade: { npc: NPC.p2, name: "The Blade", level: P3.combatLevel, idle: SEQ.p2Idle, walk: null },
   p3: { npc: NPC.p3, name: "Ocellus", level: P3.combatLevel, idle: SEQ.p3Idle, walk: SEQ.p3Walk },

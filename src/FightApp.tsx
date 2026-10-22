@@ -100,6 +100,23 @@ function createTrainer() {
   return { trainer, region, params };
 }
 
+/**
+ * Ocellus's later bodies are big (each animation is baked as vertex frames: 12 MB for phase 2, 34 MB for phase 3).
+ * Fetch them while phase 1 plays so the transformations do not stall; the hashed files are cached as immutable.
+ */
+function prefetchLaterPhases(start: StartPhase): void {
+  const ids = start <= 1 ? ["npc-16675", "npc-16677"] : start === 2 ? ["npc-16677"] : [];
+  void CacheRender.bundle().then(async (bundle) => {
+    for (const id of ids) {
+      try {
+        await bundle.fetchAsset(id);
+      } catch {
+        // The model loader fetches it again when the phase begins.
+      }
+    }
+  });
+}
+
 function useFight(region: FightRegion): Fight | null {
   const [fight, setFight] = useState<Fight | null>(region.fight);
   useEffect(() => {
@@ -299,6 +316,11 @@ export function FightApp() {
   const [{ trainer, region, params }] = useState(createTrainer);
   const [loading, setLoading] = useState<TrainerLoadingState>();
   const fight = useFight(region);
+  const ready = loading?.status === "ready";
+
+  useEffect(() => {
+    if (ready) prefetchLaterPhases(params.startPhase);
+  }, [ready, params.startPhase]);
 
   useEffect(() => {
     const probe = () => {

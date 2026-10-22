@@ -61,11 +61,10 @@ src/FightApp.tsx  the page: HUD, chatbox, sidebar, result panel
 
 ## Deploy
 
-The site is a static `dist/`. With the assets extracted and the [Vercel CLI](https://vercel.com/docs/cli) logged in:
-
-```sh
-npm run deploy
-```
+The site is a static `dist/`, deployed on Vercel from this repository: every push to `main` builds and goes live.
+`vercel.json` sets the build to `scripts/vercel-build.sh`, which installs the pinned beta SDK and cache reader, downloads
+OpenRS2 cache 2746, extracts the assets and runs webpack (about five minutes cold). The hashed asset payloads are served
+as immutable. A manual deploy from a logged-in [Vercel CLI](https://vercel.com/docs/cli) is `npm run deploy`.
 
 ## Credit
 

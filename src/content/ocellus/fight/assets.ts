@@ -14,18 +14,16 @@ const p1Seqs = {
   transformation: SEQ.p1Transformation,
 };
 
+// Only animations the fight plays: each one is baked into the payload as vertex frames.
 const p3Seqs = {
   idle: SEQ.p3Idle,
-  idleHigh: SEQ.p3IdleHigh,
   walk: SEQ.p3Walk,
   meleeBasic: SEQ.p3MeleeBasic,
   meleeHybrid: SEQ.p3MeleeHybrid,
-  meleePrayer: SEQ.p3MeleePrayer,
   meleeSlash: SEQ.p3MeleeSlash,
   superiorSlash: SEQ.p3SuperiorSlash,
   projectileAll: SEQ.p3ProjectileAll,
   soulFragmentStart: SEQ.p3SoulFragmentStart,
-  soulFragmentEnd: SEQ.p3SoulFragmentEnd,
   unleashIn: SEQ.p3UnleashIn,
   unleashLoop: SEQ.p3UnleashLoop,
   unleashOut: SEQ.p3UnleashOut,
@@ -62,7 +60,6 @@ function sounds(): Record<string, { id: number }> {
 /** Everything the full fight renders or plays, extracted from the cache at build time. */
 export const FIGHT_ASSETS = {
   npcs: {
-    fightHoodedFigure: { id: NPC.hoodedFigure, animations: p1Seqs },
     fightOcellusP1: { id: NPC.p1, animations: p1Seqs },
     fightOcellusP2: { id: NPC.p2, animations: { idle: SEQ.p2Idle, transformation: SEQ.p2Transformation, toP3Part1: SEQ.p2ToP3Part1, toP3Part2: SEQ.p2ToP3Part2 } },
     fightOcellusP3: { id: NPC.p3, animations: p3Seqs },

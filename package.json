@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit && node scripts/check-types.mjs",
     "assets": "bash scripts/assets.sh",
     "item-icons": "tsx src/itemIcons/build.ts",
-    "deploy": "npm run build && vercel deploy dist --prod --yes"
+    "deploy": "vercel deploy --prod"
   },
   "devDependencies": {
     "@types/jest": "^27.4.1",
