@@ -458,6 +458,7 @@ loadout_snapshot() {
   n=$(($(cat "$T/loadout-probes" 2>/dev/null || echo 0) + 1))
   echo "$n" >"$T/loadout-probes"
   case "$n:$FAULT" in
+    1:void-worn) worn='{"weapon":20997,"offhand":null,"helmet":11664,"chest":13072,"legs":13073,"gloves":8842,"cape":28951,"necklace":33639,"feet":31097,"ring":28310,"ammo":11212}' ;;
     2:unswitched) ;;
     2:* | 4:*) worn="$LOADOUT_MELEE_WORN" ;;
     3:unspent) worn="$LOADOUT_MELEE_WORN" ;;
@@ -476,6 +477,7 @@ icons_probe() {
     const icons = Object.fromEntries(Object.entries(JSON.parse(sizes)).map(([id, size]) => [id, { path: `/osrs-assets/item-icons/${id}.png`, size }]));
     if (fault === "placeholder-icon") icons["28922"].path = "image/svg+xml,%3Csvg%3E";
     if (fault === "unloaded-icon") icons["24420"].size = "0x0";
+    if (fault === "bundled-icon") icons["27238"].path = "/0b9f61e6f2a2c3a2b0d4.png";
     console.log(JSON.stringify({ data: { result: { ...icons, 22325: { path: "/670ddc4f152a60d91516.png", size: "30x27" } } } }));
   ' "$LOADOUT_TRAINER_ICONS" "$FAULT"
 }
@@ -931,6 +933,20 @@ unloaded_icon_fails() {
   [[ "$(failed_checks)" == trainerItemsShowCacheIcons ]] || { echo "expected only trainerItemsShowCacheIcons to fail, got: $(failed_checks)"; return 1; }
 }
 
+void_setup_worn_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' void-worn
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the ranged setup wore elite void"; return 1; fi
+  [[ "$(failed_checks)" == rangedSetupWorn ]] || { echo "expected only rangedSetupWorn to fail, got: $(failed_checks)"; return 1; }
+}
+
+bundled_icon_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' bundled-icon
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although Masori body (f) drew the SDK's bundled image"; return 1; fi
+  [[ "$(failed_checks)" == trainerItemsShowCacheIcons ]] || { echo "expected only trainerItemsShowCacheIcons to fail, got: $(failed_checks)"; return 1; }
+}
+
 clipped_hover_text_fails() {
   setup
   fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' clipped-hover-text
@@ -1106,6 +1122,8 @@ for t in \
   default_key_not_restored_fails \
   placeholder_icon_fails \
   unloaded_icon_fails \
+  void_setup_worn_fails \
+  bundled_icon_fails \
   clipped_hover_text_fails \
   overhead_icon_not_drawn_fails \
   overhead_track_without_gaps_fails \

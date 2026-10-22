@@ -22,7 +22,7 @@ Preconditions:
 - **Load.** Open the page. Run `agent-browser open http://127.0.0.1:8002/`. The title is `Archive Ocellus Trainer`.
 - **Ticking.** Wait for the countdown to finish. Run `agent-browser wait --fn "window.__archiveOcellusProbe?.snapshot().tick >= 8" --timeout 90000`. The command exits 0.
 - **Spawn state.** Read the state. Run `agent-browser --json eval "window.__archiveOcellusProbe.snapshot()"`. `data.result.player` is `{"x":5,"y":1}` and `data.result.ticking` is `true`.
-- **Proof.** Capture the screen. Run `agent-browser screenshot "$PWD/.verify/<run>/arena.png"`. The screenshot shows the checkered platform with black beyond its edges, the player in elite void with the Twisted Bow at the centre, the boss ahead on his 3x3, and the HUD at the right edge.
+- **Proof.** Capture the screen. Run `agent-browser screenshot "$PWD/.verify/<run>/arena.png"`. The screenshot shows the checkered platform with black beyond its edges, the player in Masori armour with the Twisted Bow at the centre, the boss ahead on his 3x3, and the HUD at the right edge.
 - **No errors.** Run `agent-browser --json errors`. `data.errors` is `[]`.
 
 ## Gotchas

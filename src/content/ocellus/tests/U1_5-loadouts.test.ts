@@ -6,6 +6,7 @@ type Target = Readonly<{ magic: number; defence: number; size: number }>;
 
 class MaxRollDummy extends TestNpc {
   readonly received: [number, string][] = [];
+  readonly attackRolls: number[] = [];
   readonly thrownAt: number[] = [];
   landed = 0;
   private readonly footprint: number;
@@ -21,7 +22,8 @@ class MaxRollDummy extends TestNpc {
     return this.footprint;
   }
 
-  override incomingAttackRollModifiers(_attack: IncomingAttackRoll): IncomingAttackRollModifiers {
+  override incomingAttackRollModifiers(attack: IncomingAttackRoll): IncomingAttackRollModifiers {
+    this.attackRolls.push(attack.weapon._attackRoll(attack.attacker, this, attack.bonuses));
     return this.received.length < this.maxedHits ? { guaranteedHit: true, maxDamage: true } : {};
   }
 
@@ -69,12 +71,12 @@ describe("U1.5 loadouts", () => {
       return player && { equipped: player.equipped, inventory: player.inventory };
     };
     expect(loadout("ranged")).toEqual({
-      equipped: { weapon: 20997, offhand: null, helmet: 11664, chest: 13072, legs: 13073, gloves: 8842, cape: 28951, necklace: 33639, feet: 31097, ring: 28310, ammo: 11212 },
+      equipped: { weapon: 20997, offhand: null, helmet: 27235, chest: 27238, legs: 27241, gloves: 26235, cape: 28951, necklace: 33639, feet: 31097, ring: 28310, ammo: 11212 },
       inventory: [28922, 22325, 24419, 24420, 24421, 22981, 21295, 29801, 25485, 12695, 22461, 6685, 3024, 12695, 22461, 6685, 3024, 6685, 6685, 6685, 3024, 6685, 6685, 6685, 3024, 6685, 6685, 3024],
     });
     expect(loadout("melee")).toEqual({
       equipped: { weapon: 22325, offhand: null, helmet: 24419, chest: 24420, legs: 24421, gloves: 22981, cape: 21295, necklace: 29801, feet: 31097, ring: 25485, ammo: 11212 },
-      inventory: [28922, 20997, 11664, 13072, 13073, 8842, 28951, 33639, 28310, 12695, 22461, 6685, 3024, 12695, 22461, 6685, 3024, 6685, 6685, 6685, 3024, 6685, 6685, 6685, 3024, 6685, 6685, 3024],
+      inventory: [28922, 20997, 27235, 27238, 27241, 26235, 28951, 33639, 28310, 12695, 22461, 6685, 3024, 12695, 22461, 6685, 3024, 6685, 6685, 6685, 3024, 6685, 6685, 6685, 3024, 6685, 6685, 3024],
     });
   });
 
@@ -89,38 +91,18 @@ describe("U1.5 loadouts", () => {
     expect(player?.inventory.filter((id) => id === 31097)).toEqual([]);
   });
 
-  test("full elite void raises the Twisted Bow's max hit, and without the gloves the set gives nothing", () => {
-    const full = startDrill();
-    expect(firstAttack(full, EAST_OF_SQUARE, RANGED_TARGET).received).toEqual([[64, "range"]]);
-    full.dispose();
-
-    const noGloves = startDrill();
-    // The SDK unequips only into a free inventory slot.
-    noGloves.player().inventory[27]?.consumeItem(noGloves.player());
-    noGloves.player().equipment.gloves?.unequip(noGloves.player());
-    expect(firstAttack(noGloves, EAST_OF_SQUARE, RANGED_TARGET).received).toEqual([[58, "range"]]);
-    noGloves.dispose();
-  });
-
-  test("elite void's damage factor is floored on effective ranged strength", () => {
-    const drill = startDrill();
-    drill.player().currentStats.range = 93;
-    expect(firstAttack(drill, EAST_OF_SQUARE, RANGED_TARGET).received).toEqual([[60, "range"]]);
-    drill.dispose();
-  });
-
-  test("elite void's accuracy factor is floored on the effective ranged level for the Twisted Bow and Ralos", () => {
-    const attackRoll = (ralos: boolean) => {
+  test("the ranged setup's Masori and Zaryte bonuses set each ranged weapon's attack roll and max hit, with no void factor", () => {
+    const shot = (ralos: boolean) => {
       const drill = startDrill();
       if (ralos) clickInventory(drill, 28922);
-      const player = drill.player();
-      const weapon = player.equipment.weapon;
-      if (!weapon) throw new Error("no weapon worn");
-      const roll = weapon._attackRoll(player, drill.boss(), { effectivePrayers: {}, voidMultiplier: 1.1, gearRangeMultiplier: 1 });
+      const dummy = firstAttack(drill, EAST_OF_SQUARE, RANGED_TARGET);
       drill.dispose();
-      return roll;
+      return { attackRoll: dummy.attackRolls[0], hits: dummy.received };
     };
-    expect([attackRoll(false), attackRoll(true)]).toEqual([32268, 28314]);
+    expect({ twistedBow: shot(false), ralos: shot(true) }).toEqual({
+      twistedBow: { attackRoll: 44490, hits: [[62, "range"]] },
+      ralos: { attackRoll: 36594, hits: [[18, "range"], [18, "range"]] },
+    });
   });
 
   test("the scythe rolls crush with Inquisitor's bonus on Jab, and slash without it on Chop", () => {

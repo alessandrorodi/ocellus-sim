@@ -81,7 +81,7 @@ expect_compile_error() {
 clean_tree_passes() { expect_clean; }
 helmet_factory_rejects_a_weapon() {
   expect_compile_error src/content/ocellus/js/OcellusLoadout.ts \
-    "voidRangerHelm: () => new VoidRangerHelm()" "voidRangerHelm: () => new OcellusScythe()" \
+    "inquisitorsGreatHelm: () => new InquisitorsGreatHelm()" "inquisitorsGreatHelm: () => new OcellusScythe()" \
     "error TS2322: Type 'OcellusScythe' is not assignable to type 'Helmet'."
 }
 void_masks_reject_a_swapped_mask() {

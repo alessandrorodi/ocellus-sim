@@ -197,10 +197,10 @@ export const GEAR_SLOTS = ["weapon", "helmet", "chest", "legs", "gloves", "cape"
 export type GearSlot = (typeof GEAR_SLOTS)[number];
 export type GearKeys = Readonly<{
   weapon: "twistedBow" | "scytheOfVitur" | "tonalzticsOfRalos";
-  helmet: "voidRangerHelm" | "inquisitorsGreatHelm";
-  chest: "eliteVoidTop" | "inquisitorsHauberk";
-  legs: "eliteVoidRobe" | "inquisitorsPlateskirt";
-  gloves: "voidKnightGloves" | "ferociousGloves";
+  helmet: "masoriMaskF" | "inquisitorsGreatHelm";
+  chest: "masoriBodyF" | "inquisitorsHauberk";
+  legs: "masoriChapsF" | "inquisitorsPlateskirt";
+  gloves: "zaryteVambraces" | "ferociousGloves";
   cape: "dizanasQuiver" | "infernalCape";
   necklace: "necklaceOfRupture" | "amuletOfRancour";
   feet: "avernicTreadsMax";
@@ -209,29 +209,20 @@ export type GearKeys = Readonly<{
 }>;
 export type Setup = Readonly<{ [S in GearSlot]: GearKeys[S] }>;
 export type SupplyKey = "superCombatPotion" | "bastionPotion" | "saradominBrew" | "superRestore";
-export type TrainerItemKey =
-  | "voidRangerHelm"
-  | "eliteVoidTop"
-  | "eliteVoidRobe"
-  | "voidKnightGloves"
-  | "inquisitorsGreatHelm"
-  | "inquisitorsHauberk"
-  | "inquisitorsPlateskirt"
-  | "tonalzticsOfRalos";
+export type TrainerItemKey = "inquisitorsGreatHelm" | "inquisitorsHauberk" | "inquisitorsPlateskirt" | "tonalzticsOfRalos";
+type SdkIconKey = "masoriMaskF" | "masoriBodyF" | "masoriChapsF" | "zaryteVambraces";
 type InquisitorPiece = "inquisitorsGreatHelm" | "inquisitorsHauberk" | "inquisitorsPlateskirt";
-type RangedStrengthPrayer = "Sharp Eye" | "Hawk Eye" | "Eagle Eye" | "Deadeye" | "Rigour";
 export type StanceSpeeds<T extends number = TickSpan> = Readonly<{ rapidSpeed: T; otherSpeed: T }>;
 
 type GearRecipe = Readonly<{
   items: Readonly<Record<TrainerItemKey, TrainerItem>>;
   sdkCacheIds: Readonly<{ necklaceOfRupture: Selected<number> }>;
+  sdkIcons: Readonly<Record<SdkIconKey, Selected<number>>>;
   supplies: Selected<readonly SupplyKey[]>;
   twistedBow: Selected<StanceSpeeds<TwistedBow["attackSpeed"]>>;
   ralos: Selected<StanceSpeeds & Readonly<{ range: number; longrangeRange: number; hits: number; hitMaxFraction: number }>>;
   division: Selected<Readonly<{ energy: number; accuracyFactor: number; defenceDrainOfMagic: number }>>;
-  eliteVoid: Selected<Readonly<{ accuracy: number; damage: number }>>;
   inquisitorCrushPerMille: Selected<Readonly<Record<InquisitorPiece, number>>>;
-  rangedStrengthPrayers: Selected<Readonly<Record<RangedStrengthPrayer, number>>>;
   scytheStance: Selected<"jab">;
   scytheMaxHitsOnOneTarget: Selected<number>;
   specialWeapon: Selected<GearKeys["weapon"]>;
@@ -525,9 +516,6 @@ const PRESENTATION: PresentationRecipe = {
 };
 
 const OSRS_WIKI = "https://oldschool.runescape.wiki/w/";
-const MAX_RANGED_HIT = wiki(`${OSRS_WIKI}Maximum_ranged_hit`, 15199053);
-const RANGED_ACCURACY = wiki(`${OSRS_WIKI}Damage_per_second/Ranged`, 14906132);
-const VOID_SET = wiki(`${OSRS_WIKI}Void_Knight_equipment`, 15363192);
 const INQUISITOR_SET = wiki(`${OSRS_WIKI}Inquisitor%27s_armour`, null);
 const TWISTED_BOW_PAGE = wiki(`${OSRS_WIKI}Twisted_bow`, 15363157);
 const RALOS_PAGE = wiki(`${OSRS_WIKI}Tonalztics_of_ralos`, 15368852);
@@ -536,7 +524,12 @@ const RUPTURE_PAGE = wiki(`${OSRS_WIKI}Necklace_of_rupture`, 15264776);
 const ANGUISH_PAGE = wiki(`${OSRS_WIKI}Necklace_of_anguish`, 15301384);
 const RANCOUR_PAGE = wiki(`${OSRS_WIKI}Amulet_of_rancour`, 15343231);
 const TREADS_PAGE = wiki(`${OSRS_WIKI}Avernic_treads_(max)`, 15320239);
+const MASORI_MASK_PAGE = wiki(`${OSRS_WIKI}Masori_mask_(f)`, 15190975);
+const MASORI_BODY_PAGE = wiki(`${OSRS_WIKI}Masori_body_(f)`, 15190976);
+const MASORI_CHAPS_PAGE = wiki(`${OSRS_WIKI}Masori_chaps_(f)`, 15190977);
+const ZARYTE_VAMBRACES_PAGE = wiki(`${OSRS_WIKI}Zaryte_vambraces`, 15190607);
 const RAID_INVENTORY = wiki(`${OSRS_WIKI}The_Fractured_Archive/Strategies`, 15378756);
+const RANGED_SWITCH = wiki(`${OSRS_WIKI}The_Fractured_Archive/Strategies`, 15379033);
 
 type Five = readonly [stab: number, slash: number, crush: number, magic: number, range: number];
 const stats = (attack: Five, defence: Five, other: readonly [meleeStrength: number, rangedStrength: number, magicDamage: number, prayer: number]): ItemStats => ({
@@ -548,13 +541,11 @@ const item = (itemId: number, page: string, oldid: number, itemStats: ItemStats)
   itemId: selected(itemId, "spec-single", "unscaled", "infobox item id", wiki(`${OSRS_WIKI}${page}`, oldid)),
   stats: selected(itemStats, "spec-single", "unscaled", "infobox combat bonuses", wiki(`${OSRS_WIKI}${page}`, oldid)),
 });
+const sdkIcon = (itemId: number, page: Source): Selected<number> =>
+  selected(itemId, "spec-single", "unscaled", "infobox item id of an SDK item whose inventory icon the trainer draws from cache 2746; the SDK's bundled Masori body (f) image matches the wiki's 2022 upload and differs from the cache render in 107 pixels", page, cache(`item ${itemId} inventory model`));
 
 const GEAR: GearRecipe = {
   items: {
-    voidRangerHelm: item(11664, "Void_ranger_helm", 15260468, stats([0, 0, 0, 0, 0], [6, 6, 6, 6, 6], [0, 0, 0, 0])),
-    eliteVoidTop: item(13072, "Elite_void_top", 15260476, stats([0, 0, 0, 0, 0], [45, 45, 45, 45, 45], [0, 0, 0, 3])),
-    eliteVoidRobe: item(13073, "Elite_void_robe", 15260481, stats([0, 0, 0, 0, 0], [30, 30, 30, 30, 30], [0, 0, 0, 3])),
-    voidKnightGloves: item(8842, "Void_knight_gloves", 15304461, stats([0, 0, 0, 0, 0], [6, 6, 6, 4, 6], [0, 0, 0, 0])),
     inquisitorsGreatHelm: item(24419, "Inquisitor%27s_great_helm", 15352822, stats([0, 0, 10, -5, -5], [19, 10, 21, 0, 12], [6, 0, 0, 1])),
     inquisitorsHauberk: item(24420, "Inquisitor%27s_hauberk", 15352823, stats([0, 0, 16, -11, -10], [67, 55, 71, 0, 35], [4, 0, 0, 2])),
     inquisitorsPlateskirt: item(24421, "Inquisitor%27s_plateskirt", 15352824, stats([0, 0, 12, -9, -5], [42, 30, 49, 0, 22], [2, 0, 0, 2])),
@@ -562,6 +553,12 @@ const GEAR: GearRecipe = {
   },
   sdkCacheIds: {
     necklaceOfRupture: selected(33639, "spec-confirmed", "unscaled", "the SDK's class carries anguish's id 19547 as a stand-in; cache 2746 holds item 33639 with male model 61426", cache("item 33639 maleModel0 61426"), RUPTURE_PAGE),
+  },
+  sdkIcons: {
+    masoriMaskF: sdkIcon(27235, MASORI_MASK_PAGE),
+    masoriBodyF: sdkIcon(27238, MASORI_BODY_PAGE),
+    masoriChapsF: sdkIcon(27241, MASORI_CHAPS_PAGE),
+    zaryteVambraces: sdkIcon(26235, ZARYTE_VAMBRACES_PAGE),
   },
   supplies: selected<readonly SupplyKey[]>(
     [
@@ -577,9 +574,7 @@ const GEAR: GearRecipe = {
   twistedBow: selected({ rapidSpeed: 5, otherSpeed: 6 }, "spec-single", "unscaled", "attack speed by stance: 5 ticks on Rapid, 6 on Accurate and Longrange", TWISTED_BOW_PAGE),
   ralos: selected({ rapidSpeed: span(6), otherSpeed: span(7), range: 7, longrangeRange: 9, hits: 2, hitMaxFraction: 0.75 }, "spec-single", "unscaled", "charged, one-handed thrown: two independent hits, each 0 to 75% of the max ranged hit", RALOS_PAGE),
   division: selected({ energy: 50, accuracyFactor: 1.5, defenceDrainOfMagic: 0.125 }, "spec-single", "unscaled", "+50% accuracy; each hit that deals damage lowers Defence by 12.5% of Magic (10% before 2026-07-22) and, on NPCs, before the second roll; the drain applies as each glaive lands, so a hit the target rejects drains nothing (inferred); rounding not stated, floored (inferred)", RALOS_PAGE),
-  eliteVoid: selected({ accuracy: 1.1, damage: 1.125 }, "spec-single", "unscaled", "void ranger helm, gloves, elite top and robe; each factor is floored on the effective ranged level it scales, accuracy and strength", VOID_SET, MAX_RANGED_HIT, RANGED_ACCURACY),
   inquisitorCrushPerMille: selected({ inquisitorsGreatHelm: 5, inquisitorsHauberk: 10, inquisitorsPlateskirt: 10 }, "spec-single", "unscaled", "crush accuracy and damage per piece; the 2026-07-22 update moved the 1% set bonus onto the hauberk and plateskirt", wiki(`${OSRS_WIKI}Inquisitor%27s_hauberk`, 15352823), wiki(`${OSRS_WIKI}Inquisitor%27s_plateskirt`, 15352824), INQUISITOR_SET),
-  rangedStrengthPrayers: selected({ "Sharp Eye": 1.05, "Hawk Eye": 1.1, "Eagle Eye": 1.15, Deadeye: 1.18, Rigour: 1.23 }, "spec-single", "unscaled", "prayer bonus to effective ranged strength", MAX_RANGED_HIT),
   scytheStance: selected("jab", "spec-single", "unscaled", "Jab is the scythe's crush style; the owner wants the Scythe setup on crush", SCYTHE_PAGE, owner("melee setup")),
   scytheMaxHitsOnOneTarget: selected(3, "spec-single", "unscaled", "one hit per tile of the target's width, up to three: a 1x1 target once, 2x2 twice, 3x3 or larger three times; other 1x1 targets in the 1x3 arc take their own hit", SCYTHE_PAGE),
   specialWeapon: selected("tonalzticsOfRalos", "assumption", "unscaled", "owner: players tend to use Ralos to spec the boss", owner("special attack weapon")),
@@ -610,9 +605,9 @@ export const OCELLUS_P4 = {
   choices: {
     setup: choice("ranged", {
       ranged: selected<Setup>(
-        { weapon: "twistedBow", helmet: "voidRangerHelm", chest: "eliteVoidTop", legs: "eliteVoidRobe", gloves: "voidKnightGloves", cape: "dizanasQuiver", necklace: "necklaceOfRupture", feet: "avernicTreadsMax", ring: "venatorRing", ammo: "dragonArrows" },
-        "assumption", "unscaled", "owner-named full elite void with void gloves, ranger helm and Twisted Bow; the owner asked for the best-in-slot ranged necklace, which the wiki names as the Necklace of rupture, and Avernic treads (max) in both setups; arrows, cape and ring are SDK items (assumption); the default because the first void's Deflect Melee leaves ranged open",
-        owner("ranged setup"), owner("ranged necklace"), owner("boots"), ANGUISH_PAGE, RUPTURE_PAGE, TREADS_PAGE,
+        { weapon: "twistedBow", helmet: "masoriMaskF", chest: "masoriBodyF", legs: "masoriChapsF", gloves: "zaryteVambraces", cape: "dizanasQuiver", necklace: "necklaceOfRupture", feet: "avernicTreadsMax", ring: "venatorRing", ammo: "dragonArrows" },
+        "assumption", "unscaled", "owner-named Twisted Bow with Masori mask, body and chaps (f) in place of elite void, the armour the wiki's ranged switch now lists first; Zaryte vambraces, the wiki's first ranged gloves, replace the void knight gloves, which had no bonus but the void set effect (inferred); the owner asked for the best-in-slot ranged necklace, which the wiki names as the Necklace of rupture, and Avernic treads (max) in both setups; arrows, cape and ring are SDK items (assumption); the default because the first void's Deflect Melee leaves ranged open",
+        owner("ranged setup"), owner("ranged armour"), owner("ranged necklace"), owner("boots"), RANGED_SWITCH, MASORI_MASK_PAGE, MASORI_BODY_PAGE, MASORI_CHAPS_PAGE, ZARYTE_VAMBRACES_PAGE, ANGUISH_PAGE, RUPTURE_PAGE, TREADS_PAGE,
       ),
       melee: selected<Setup>(
         { weapon: "scytheOfVitur", helmet: "inquisitorsGreatHelm", chest: "inquisitorsHauberk", legs: "inquisitorsPlateskirt", gloves: "ferociousGloves", cape: "infernalCape", necklace: "amuletOfRancour", feet: "avernicTreadsMax", ring: "ultorRing", ammo: "dragonArrows" },

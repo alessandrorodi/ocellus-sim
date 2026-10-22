@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { deflateSync } from "node:zlib";
 import config from "../../osrs-assets.config";
-import { ARCHIVE_OCELLUS_ASSETS, ITEM_ICON_DIR, itemIconFile } from "../assets";
+import { ITEM_ICON_DIR, ITEM_ICON_IDS, itemIconFile } from "../assets";
 import { TRANSPARENT, hsl, priority, renderItemIcon } from "./ItemIcon";
 import type { Face, IconItem, IconModel, Shading, Sprite } from "./ItemIcon";
 
@@ -20,7 +20,7 @@ async function main(args: readonly string[]): Promise<void> {
     const out = resolve(ROOT, config.outDir);
     rmSync(resolve(out, ITEM_ICON_DIR), { recursive: true, force: true });
     mkdirSync(resolve(out, ITEM_ICON_DIR), { recursive: true });
-    for (const { id } of Object.values(ARCHIVE_OCELLUS_ASSETS.items)) {
+    for (const id of ITEM_ICON_IDS) {
       const { inventoryModel, icon } = parseItem(id, await cache.item(id));
       const sprite = renderItemIcon(icon, parseModel(id, await cache.model(inventoryModel)));
       const file = resolve(out, itemIconFile(id));

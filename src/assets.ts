@@ -22,6 +22,7 @@ export const ARCHIVE_OCELLUS_ASSETS = {
 
 export const ITEM_ICON_DIR = "item-icons";
 export const itemIconFile = (itemId: number) => `${ITEM_ICON_DIR}/${itemId}.png`;
+export const ITEM_ICON_IDS = [...Object.values(gear.items).map((item) => item.itemId.value), ...Object.values(gear.sdkIcons).map((itemId) => itemId.value)];
 
 export const ARCHIVE_OCELLUS_OVERRIDES = {
   items: Object.fromEntries(Object.entries(gear.sdkCacheIds).map(([key, id]) => [key, { id: id.value }])),

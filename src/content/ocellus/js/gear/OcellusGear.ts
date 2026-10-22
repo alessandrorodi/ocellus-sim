@@ -2,11 +2,13 @@ import {
   AttackStyle,
   AttackStyleTypes,
   Chest,
-  Gloves,
   Helmet,
   ImageLoader,
   ItemName,
   Legs,
+  MasoriBodyF,
+  MasoriChapsF,
+  MasoriMaskF,
   mergeProjectileOptions,
   NecklaceOfRupture,
   Projectile,
@@ -14,24 +16,18 @@ import {
   ScytheOfVitur,
   TwistedBow,
   Unit,
+  ZaryteVambraces,
 } from "osrs-sdk";
 import type { AttackBonuses, ProjectileOptions, UnitBonuses, UnitEquipment, Weapon } from "osrs-sdk";
 import type { StanceSpeeds, TrainerItemKey } from "../OcellusTimings";
 import { OCELLUS_P4 } from "../OcellusTimings";
 import { itemIconFile } from "../../../../assets";
 
-// The SDK matches set effects by its closed ItemName enum and Player.attack never applies void, so the trainer's
-// weapons read the worn pieces by class and fold the set bonuses into their own rolls.
-
 const { gear } = OCELLUS_P4;
 
 // Menus and the combat tab read names only from the SDK's closed ItemName enum, so the trainer's items join it.
 declare module "osrs-sdk/lib/src/sdk/ItemName" {
   enum ItemName {
-    VOID_RANGER_HELM = "Void ranger helm",
-    ELITE_VOID_TOP = "Elite void top",
-    ELITE_VOID_ROBE = "Elite void robe",
-    VOID_KNIGHT_GLOVES = "Void knight gloves",
     INQUISITORS_GREAT_HELM = "Inquisitor's great helm",
     INQUISITORS_HAUBERK = "Inquisitor's hauberk",
     INQUISITORS_PLATESKIRT = "Inquisitor's plateskirt",
@@ -40,10 +36,6 @@ declare module "osrs-sdk/lib/src/sdk/ItemName" {
 }
 
 Object.assign(ItemName, {
-  VOID_RANGER_HELM: "Void ranger helm",
-  ELITE_VOID_TOP: "Elite void top",
-  ELITE_VOID_ROBE: "Elite void robe",
-  VOID_KNIGHT_GLOVES: "Void knight gloves",
   INQUISITORS_GREAT_HELM: "Inquisitor's great helm",
   INQUISITORS_HAUBERK: "Inquisitor's hauberk",
   INQUISITORS_PLATESKIRT: "Inquisitor's plateskirt",
@@ -55,64 +47,12 @@ function bonuses(key: TrainerItemKey): UnitBonuses {
   return { attack: { ...attack }, defence: { ...defence }, other: { ...other }, targetSpecific: { undead: 0, slayer: 0 } };
 }
 
-function inventoryIcon(key: TrainerItemKey): HTMLImageElement {
-  return ImageLoader.createImage(`osrs-assets/${itemIconFile(gear.items[key].itemId.value)}`);
-}
-
-export class VoidRangerHelm extends Helmet {
-  override inventorySprite = inventoryIcon("voidRangerHelm");
-  override get itemName(): ItemName {
-    return ItemName.VOID_RANGER_HELM;
-  }
-  override get cacheItemId(): number {
-    return gear.items.voidRangerHelm.itemId.value;
-  }
-  override setStats(): void {
-    this.bonuses = bonuses("voidRangerHelm");
-  }
-}
-
-export class EliteVoidTop extends Chest {
-  override inventorySprite = inventoryIcon("eliteVoidTop");
-  override get itemName(): ItemName {
-    return ItemName.ELITE_VOID_TOP;
-  }
-  override get cacheItemId(): number {
-    return gear.items.eliteVoidTop.itemId.value;
-  }
-  override setStats(): void {
-    this.bonuses = bonuses("eliteVoidTop");
-  }
-}
-
-export class EliteVoidRobe extends Legs {
-  override inventorySprite = inventoryIcon("eliteVoidRobe");
-  override get itemName(): ItemName {
-    return ItemName.ELITE_VOID_ROBE;
-  }
-  override get cacheItemId(): number {
-    return gear.items.eliteVoidRobe.itemId.value;
-  }
-  override setStats(): void {
-    this.bonuses = bonuses("eliteVoidRobe");
-  }
-}
-
-export class VoidKnightGloves extends Gloves {
-  override inventorySprite = inventoryIcon("voidKnightGloves");
-  override get itemName(): ItemName {
-    return ItemName.VOID_KNIGHT_GLOVES;
-  }
-  override get cacheItemId(): number {
-    return gear.items.voidKnightGloves.itemId.value;
-  }
-  override setStats(): void {
-    this.bonuses = bonuses("voidKnightGloves");
-  }
+function inventoryIcon(itemId: number): HTMLImageElement {
+  return ImageLoader.createImage(`osrs-assets/${itemIconFile(itemId)}`);
 }
 
 export class InquisitorsGreatHelm extends Helmet {
-  override inventorySprite = inventoryIcon("inquisitorsGreatHelm");
+  override inventorySprite = inventoryIcon(this.cacheItemId);
   override get itemName(): ItemName {
     return ItemName.INQUISITORS_GREAT_HELM;
   }
@@ -125,7 +65,7 @@ export class InquisitorsGreatHelm extends Helmet {
 }
 
 export class InquisitorsHauberk extends Chest {
-  override inventorySprite = inventoryIcon("inquisitorsHauberk");
+  override inventorySprite = inventoryIcon(this.cacheItemId);
   override get itemName(): ItemName {
     return ItemName.INQUISITORS_HAUBERK;
   }
@@ -138,7 +78,7 @@ export class InquisitorsHauberk extends Chest {
 }
 
 export class InquisitorsPlateskirt extends Legs {
-  override inventorySprite = inventoryIcon("inquisitorsPlateskirt");
+  override inventorySprite = inventoryIcon(this.cacheItemId);
   override get itemName(): ItemName {
     return ItemName.INQUISITORS_PLATESKIRT;
   }
@@ -156,38 +96,28 @@ export class OcellusNecklaceOfRupture extends NecklaceOfRupture {
   }
 }
 
-function wearsEliteVoid(equipment: UnitEquipment): boolean {
-  return (
-    equipment.helmet instanceof VoidRangerHelm &&
-    equipment.chest instanceof EliteVoidTop &&
-    equipment.legs instanceof EliteVoidRobe &&
-    equipment.gloves instanceof VoidKnightGloves
-  );
+export class OcellusMasoriMaskF extends MasoriMaskF {
+  override inventorySprite = inventoryIcon(this.cacheItemId);
+}
+
+export class OcellusMasoriBodyF extends MasoriBodyF {
+  override inventorySprite = inventoryIcon(this.cacheItemId);
+}
+
+export class OcellusMasoriChapsF extends MasoriChapsF {
+  override inventorySprite = inventoryIcon(this.cacheItemId);
+}
+
+export class OcellusZaryteVambraces extends ZaryteVambraces {
+  override inventorySprite = inventoryIcon(this.cacheItemId);
 }
 
 function stanceSpeed<T extends number>(weapon: Weapon, { rapidSpeed, otherSpeed }: StanceSpeeds<T>): T {
   return weapon.attackStyle() === AttackStyle.RAPID ? rapidSpeed : otherSpeed;
 }
 
-function rangedBonuses(weapon: Weapon, from: Unit, bonuses: AttackBonuses): AttackBonuses {
-  return {
-    ...bonuses,
-    isAccurate: weapon.attackStyle() === AttackStyle.ACCURATE,
-    voidMultiplier: wearsEliteVoid(from.equipment) ? gear.eliteVoid.value.accuracy : 1,
-  };
-}
-
-const PRAYER_FACTORS = gear.rangedStrengthPrayers.value;
-const strengthensRanged = (prayer: string): prayer is keyof typeof PRAYER_FACTORS => Object.prototype.hasOwnProperty.call(PRAYER_FACTORS, prayer);
-
-/** The wiki's maximum ranged hit; the SDK's own formula leaves the void product unfloored and reuses it for damage. */
-function rangedMaxHit(from: Unit, bonuses: AttackBonuses, weaponFactor: number): number {
-  const prayer = bonuses.effectivePrayers?.range?.name;
-  const prayerFactor = prayer !== undefined && strengthensRanged(prayer) ? PRAYER_FACTORS[prayer] : 1;
-  const voidFactor = wearsEliteVoid(from.equipment) ? gear.eliteVoid.value.damage : 1;
-  const strength = Math.floor((Math.floor(from.currentStats.range * prayerFactor) + (bonuses.isAccurate ? 3 : 0) + 8) * voidFactor);
-  const base = Math.floor(0.5 + (strength * (from.bonuses.other.rangedStrength + 64)) / 640);
-  return Math.floor(Math.floor(Math.floor(base * (bonuses.gearRangeMultiplier ?? 1)) * weaponFactor) * (bonuses.overallMultiplier ?? 1));
+function rangedBonuses(weapon: Weapon, bonuses: AttackBonuses): AttackBonuses {
+  return { ...bonuses, isAccurate: weapon.attackStyle() === AttackStyle.ACCURATE };
 }
 
 export class OcellusTwistedBow extends TwistedBow {
@@ -195,17 +125,8 @@ export class OcellusTwistedBow extends TwistedBow {
     return stanceSpeed(this, gear.twistedBow.value);
   }
 
-  /** The wiki floors the effective ranged level after the void factor; the SDK leaves that product unfloored. */
-  override _rangedAttack(from: Unit, to: Unit, bonuses: AttackBonuses): number {
-    return Math.floor(super._rangedAttack(from, to, bonuses));
-  }
-
   override attack(from: Unit, to: Unit, bonuses: AttackBonuses = {}, options: ProjectileOptions = {}): boolean {
-    return super.attack(from, to, rangedBonuses(this, from, bonuses), options);
-  }
-
-  override _maxHit(from: Unit, to: Unit, bonuses: AttackBonuses): number {
-    return rangedMaxHit(from, bonuses, this._damageMultiplier(from, to, bonuses));
+    return super.attack(from, to, rangedBonuses(this, bonuses), options);
   }
 }
 
@@ -265,7 +186,7 @@ class DivisionGlaive extends Projectile {
 }
 
 export class TonalzticsOfRalos extends RangedWeapon {
-  override inventorySprite = inventoryIcon("tonalzticsOfRalos");
+  override inventorySprite = inventoryIcon(this.cacheItemId);
   override get itemName(): ItemName {
     return ItemName.TONALZTICS_OF_RALOS;
   }
@@ -303,12 +224,8 @@ export class TonalzticsOfRalos extends RangedWeapon {
     return this.throwBoth(from, to, bonuses, options);
   }
 
-  override _rangedAttack(from: Unit, to: Unit, bonuses: AttackBonuses): number {
-    return Math.floor(super._rangedAttack(from, to, bonuses));
-  }
-
   override _maxHit(from: Unit, to: Unit, bonuses: AttackBonuses): number {
-    return Math.floor(rangedMaxHit(from, bonuses, 1) * gear.ralos.value.hitMaxFraction);
+    return Math.floor(super._maxHit(from, to, bonuses) * gear.ralos.value.hitMaxFraction);
   }
 
   override _accuracyMultiplier(from: Unit, to: Unit, bonuses: AttackBonuses): number {
@@ -338,7 +255,7 @@ export class TonalzticsOfRalos extends RangedWeapon {
     let defence = to.currentStats.defence;
     let thrown = false;
     for (let hit = 0; hit < gear.ralos.value.hits; hit++) {
-      if (!rollingAgainst(to, defence, () => super.attack(from, to, rangedBonuses(this, from, bonuses), options))) return thrown;
+      if (!rollingAgainst(to, defence, () => super.attack(from, to, rangedBonuses(this, bonuses), options))) return thrown;
       thrown = true;
       if (bonuses.isSpecialAttack && this.damage > 0) defence = drained(defence, to);
     }
