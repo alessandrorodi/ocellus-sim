@@ -20,13 +20,29 @@ Where every timing, damage number and id in the full-fight simulator comes from.
   [infernotrainer.com](https://www.infernotrainer.com).
 - [osrscachereader](https://github.com/Julian-Dasilva/osrscachereader) fork pinned at `8ba9131` (a build 241 decoder fix).
 
+| **[O]** | The owner, a player of the fight, checked against [V] | Phase 2's skip, the HP-driven quadrant falls, tendrils that cost nothing in the end | Player knowledge |
+
+## Decisions where the sources disagree or are silent
+
+- **Phase 2 skip.** [R] gives the volley's flight (the tile d out lands at 6d - 6 client cycles; 5 for the
+  all-twelve volley) but not how hits are judged. Per [O], each tile is judged as the volley reaches it, so running
+  through the wave skips it, as with the Wardens' skulls in Tombs of Amascut.
+- **Quadrant falls.** [R]'s two fights collapse 31 ticks after Untether with his HP already at the floor. [W] and [O]
+  say the quadrant only falls once he is at 75 / 50 / 25%: the sim collapses after Untether if he is there, otherwise
+  he lands, repeats the quadrant's rotation and collapses on the hit that reaches it.
+- **Tendrils.** [R] recorded 3-5 per blocked line; [W] heals you after the last tendril; [O] says they shouldn't hurt.
+  The sim shows the chips and gives them back at the explosion (and at the middle's strike).
+- **"Your panic... is futile..."** [R] recorded it at fixed ticks; [W] says it is his answer to a tank out of melee
+  reach. The sim fires it whenever a swing can't reach you.
+- **Defence floor.** [J]: 60% for Ocellus, none for The Blade.
+- **Void Augmenter.** [W]: Attack and Strength to 116, Magic and Ranged to 112. The Void Rift's buff is still unknown
+  (the sim keeps a max hit on your next attack). NPC 16679 is the Void Siphon ([W]).
+
 ## Open questions (nobody has data yet)
 
 - "Embrace... annihilation...": the real damage and the meter level that triggers it. The sim fires one more strike
   shot per 24 meter, as [R]'s engine guesses.
 - What Deflect Melee / Deflect Range send back.
-- The Void Rift and Void Augmenter "empower" buff.
-- Whether phase 3's quadrant destruction is timed or HP-driven. The sim times it and holds his HP at the 75 / 50 / 25%
-  floors until each quadrant falls.
-- Which hit disables protection prayers. The footage shows the message during Untether; the sim puts it on the
-  Untether hits.
+- The Void Rift's "empower" buff.
+- How long "You've been injured and can't use protection prayers!" locks your overheads (the sim: 8 ticks).
+- The censers: [W] reads the Bandosian and Armadylean ones as style-specific max hits; the sim gives any style one.

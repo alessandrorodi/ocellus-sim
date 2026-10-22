@@ -44,6 +44,8 @@ export class Phase1 implements PhaseScript {
   private nextCorner: Quadrant | null = null;
   private lines: Line[] = [];
   private blastFrom: Body | null = null;
+  /** Damage taken blocking the current set of lines. */
+  private chipTaken = 0;
   private busy = false;
   private ending = false;
   private epoch = 0;
@@ -291,7 +293,7 @@ export class Phase1 implements PhaseScript {
     line.tiles.forEach((tile, i) => fight.spot(tile, pieces.end, { delay: line.tiles.length - 1 - i, maxTicks: 4 }));
     const blocked = line.tiles.some((t) => t.x === fight.playerTile.x && t.z === fight.playerTile.z);
     if (blocked) {
-      fight.hit({ amount: () => fight.rng.roll(P1.lineChip) });
+      fight.hit({ amount: () => fight.rng.roll(P1.lineChip), onLand: (applied) => (this.chipTaken += applied) });
       return;
     }
     this.meterValue = Math.min(P1.meterMax, this.meterValue + P1.meterPerLine);
@@ -299,7 +301,18 @@ export class Phase1 implements PhaseScript {
     fight.playCrackSound();
   }
 
+  /**
+   * Blocking costs 3-5 a line [R], given back once the last line is in: the tendrils shouldn't hurt in the end.
+   * [W] Strategies, phase 1 [owner]
+   */
+  private returnChip(atLeast = 0): void {
+    const amount = Math.max(atLeast, this.chipTaken);
+    this.chipTaken = 0;
+    this.fight.healPlayer(amount);
+  }
+
   private explode(): void {
+    this.returnChip();
     const boss = this.boss;
     boss.playAnimation(SEQ.p1Explode);
     boss.addSpotAnim({ id: SPOT.p1ExplodeOnBoss, channel: "explode" });
@@ -383,7 +396,7 @@ export class Phase1 implements PhaseScript {
     fight.say(shots > 1 ? "Embrace... annihilation..." : "Death... awaits...", 4);
     this.meterValue = 0;
     fight.setOverhead("protect-melee");
-    this.later(1, () => fight.healPlayer(fight.rng.roll(P1.strikeHeal)));
+    this.later(1, () => this.returnChip(fight.rng.roll(P1.strikeHeal)));
     this.later(2, () => {
       boss.playAnimation(SEQ.p1Expend);
       boss.face(fight.player);

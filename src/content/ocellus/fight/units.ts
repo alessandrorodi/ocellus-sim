@@ -1,8 +1,8 @@
 /// <reference path="../../../images.d.ts" />
 import { CacheRenderModel, CacheRenderReferences, EmptyModel, ImageLoader, MagicWeapon, MeleeWeapon, Mob, Player, Random } from "osrs-sdk";
-import type { Location, Model, Projectile, Region, Unit, UnitBonuses } from "osrs-sdk";
+import type { Location, Model, Projectile, Region, Unit, UnitBonuses, UnitStats } from "osrs-sdk";
 import type { BossOverhead } from "./data";
-import { NPC, P1, P2, P3, SEQ, SPOT } from "./data";
+import { LOWEST_DEFENCE_FRACTION, NPC, P1, P2, P3, SEQ, SPOT } from "./data";
 import type { ATile } from "./geometry";
 import { fromSdk, toSdk } from "./geometry";
 import SoulSplitIcon from "../../../assets/overheads/Soul_Split_overhead.png";
@@ -51,6 +51,20 @@ function seedStats(unit: Mob): void {
   if (unit.stats !== undefined) return;
   unit.stats = { attack: 1, strength: 1, defence: 1, range: 1, magic: 1, hitpoint: 1 };
   unit.currentStats = { ...unit.stats };
+}
+
+/** Current stats whose Defence can't be drained below `lowest` (special attacks set it directly). */
+function withDefenceFloor(stats: UnitStats, lowest: number): UnitStats {
+  let defence = Math.max(lowest, stats.defence);
+  return {
+    ...stats,
+    get defence() {
+      return defence;
+    },
+    set defence(value: number) {
+      defence = Math.max(lowest, value);
+    },
+  };
 }
 
 const ICON_SIZE = 25;
@@ -141,7 +155,9 @@ export class BossForm extends Mob {
         return unhandled;
       }
     }
-    this.currentStats = { ...this.stats, hitpoint: this.currentStats.hitpoint };
+    // The hotfix's floor is Ocellus's own; The Blade can be drained to 0. [W] Out Today news
+    const lowest = this.form === "p1" || this.form === "p3" ? Math.ceil(this.stats.defence * LOWEST_DEFENCE_FRACTION) : 0;
+    this.currentStats = withDefenceFloor({ ...this.stats, hitpoint: this.currentStats.hitpoint }, lowest);
   }
 
   override setStats(): void {
@@ -265,11 +281,12 @@ export class BossForm extends Mob {
 
 export type AddKind = "vine" | "rift-basic" | "rift-heal" | "rift-buff";
 
-const ADD: Readonly<Record<AddKind, Readonly<{ npc: number; name: string; level: number }>>> = {
-  vine: { npc: NPC.vine, name: "Void Vine", level: 0 },
-  "rift-basic": { npc: NPC.riftBasic, name: "Void Rift", level: 138 },
-  "rift-heal": { npc: NPC.riftHeal, name: "Healing Rift", level: 138 },
-  "rift-buff": { npc: NPC.riftBuff, name: "Void Augmenter", level: 138 },
+/** [W] Void Vine, Void Rift, Void Siphon and Void Augmenter infoboxes (2026-10-22): stab/slash/crush defence. */
+const ADD: Readonly<Record<AddKind, Readonly<{ npc: number; name: string; level: number; meleeDefence: number }>>> = {
+  vine: { npc: NPC.vine, name: "Void Vine", level: 0, meleeDefence: 0 },
+  "rift-basic": { npc: NPC.riftBasic, name: "Void Rift", level: 138, meleeDefence: 0 },
+  "rift-heal": { npc: NPC.riftHeal, name: "Void Siphon", level: 138, meleeDefence: 50 },
+  "rift-buff": { npc: NPC.riftBuff, name: "Void Augmenter", level: 138, meleeDefence: 0 },
 };
 
 /** Phase 3 and 4's small targets: the Void Vine and the three kinds of rift. 44 HP each. */
@@ -305,9 +322,10 @@ export class VoidAdd extends Mob {
   }
 
   override get bonuses(): UnitBonuses {
+    const melee = ADD[this.kind].meleeDefence;
     return {
       attack: { stab: 0, slash: 0, crush: 0, magic: 0, range: 0 },
-      defence: { stab: 0, slash: 0, crush: 0, magic: 0, range: 0 },
+      defence: { stab: melee, slash: melee, crush: melee, magic: 0, range: 0 },
       other: { meleeStrength: 0, rangedStrength: 0, magicDamage: 0, prayer: 0 },
     };
   }

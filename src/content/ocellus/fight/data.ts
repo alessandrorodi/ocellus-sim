@@ -78,6 +78,17 @@ export const PORTAL = {
   idle: 14830,
 } as const;
 
+/**
+ * [G] ObjectID phase 3's floor hazards, read from cache 2746 (each a 1x1 loc with a type 10 and a type 22 model):
+ * tfa_ocellus_void_degen_bomb "Void" (62701), _void_degen_aoe "Debris" (62702), _aoe_insolence_1 "Cracks" (62703).
+ */
+export const VOID_LOC = {
+  bomb: { models: [62507, 62508], idle: 14891 },
+  aoe: { models: [62687, 62688], idle: 14936 },
+  insolence: { models: [62682, 62683], idle: 14930 },
+} as const;
+export type VoidLocKind = keyof typeof VOID_LOC;
+
 /** [G] SpotanimID */
 export const SPOT = {
   fireOnBoss: 4231,
@@ -177,6 +188,13 @@ export const SOUND = {
   magicWindUp: 12554,
 } as const;
 
+/**
+ * The 21 October hotfix: Defence reduction stops at 60% of his level (phase 1: 129 of 215, phase 3: 150 of 250);
+ * The Blade has no floor. [W] Out Today news and The Fractured Archive/Strategies, via ArchiveOcellusTrainer #17;
+ * rounding up is inferred.
+ */
+export const LOWEST_DEFENCE_FRACTION = 0.6;
+
 /** [R] RAID_PLAN.md: HP = base x multiplier, rounded to 10. Solo uses the duo scale. */
 export const PARTY_SCALE: Readonly<Record<number, number>> = { 1: 1, 2: 1, 3: 1.45, 4: 1.87, 5: 2.29 };
 export const scaledHp = (base: number, party: number): number => Math.round((base * (PARTY_SCALE[party] ?? 1)) / 10) * 10;
@@ -253,6 +271,13 @@ export const P2 = {
   safePortalUntil: 39,
   allFireAt: 40,
   lineDamage: range(19, 25),
+  /**
+   * A volley lands on the tile d out from its portal at speed x d - speed client cycles (30 to a tick): 6 for the
+   * lit portals, 5 for the all-twelve volley. [R] Each tile is judged as the volley reaches it, so running through
+   * the wave skips it, as with the Wardens' skulls in Tombs of Amascut. [owner, from the reference VOD]
+   */
+  lineCyclesPerTile: 6,
+  crossfireCyclesPerTile: 5,
   poolDamage: range(3, 5),
 } as const;
 
@@ -261,7 +286,10 @@ export const P3 = {
   defence: 250,
   defenceBonuses: { stab: 150, slash: 100, crush: 30, magic: 200, range: 250 },
   jumpToCornerAfter: 6,
-  /** Segment timelines from the segment start S. [R] */
+  /**
+   * Segment timelines from the segment start S. [R] `volleys` are the recorded casts of "Your panic... is futile...";
+   * the wiki explains them as his answer to a tank out of his reach, which is how the script fires them now.
+   */
   first: {
     triples: [4, 14, 33, 43],
     spins: [24],
@@ -304,6 +332,8 @@ export const P3 = {
   insolenceDebrisLasts: 16,
   riftHp: 44,
   riftLasts: 12,
+  /** Killing a Void Augmenter: Attack and Strength to 116, Magic and Ranged to 112, from 99s. [W] Void Augmenter */
+  augmenterBoost: { melee: 17, rangedMagic: 13 },
   healRiftEvery: 4,
   healRiftHeal: [12, 14],
   /** Untether, from U. [R] [W] */

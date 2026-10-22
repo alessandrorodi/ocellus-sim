@@ -1,5 +1,5 @@
 import type { CacheAssets } from "osrs-sdk/asset-manifest";
-import { NPC, PORTAL, SEQ, SOUND, SPOT } from "./data";
+import { NPC, PORTAL, SEQ, SOUND, SPOT, VOID_LOC } from "./data";
 
 const p1Seqs = {
   idle: SEQ.p1Idle,
@@ -72,8 +72,15 @@ export const FIGHT_ASSETS = {
   sounds: sounds(),
 } satisfies CacheAssets;
 
-/** Phase 2's portals are scenery, not NPCs, so they come in as bare cache models with their looping idle. */
+function voidLocModels(): Record<string, { id: number; animations: { idle: number } }> {
+  const out: Record<string, { id: number; animations: { idle: number } }> = {};
+  for (const [kind, loc] of Object.entries(VOID_LOC)) loc.models.forEach((id, i) => (out[`fightVoid_${kind}_${i}`] = { id, animations: { idle: loc.idle } }));
+  return out;
+}
+
+/** Scenery is not NPCs, so the portals and the void hazards come in as bare cache models with their looping idle. */
 export const FIGHT_MODELS = {
   fightPortalInactive: { id: PORTAL.inactiveModel, animations: { idle: PORTAL.idle } },
   fightPortalActive: { id: PORTAL.activeModel, animations: { idle: PORTAL.idle } },
+  ...voidLocModels(),
 };

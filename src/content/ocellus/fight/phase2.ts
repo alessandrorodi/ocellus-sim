@@ -34,17 +34,27 @@ function portalTiles(arm: Arm, index: number): readonly [ATile, ATile] {
   return [at(dx * n, dz * n), at(dx * (n + 1), dz * (n + 1))];
 }
 
-/** Tiles a portal fires across: its two rows (N/S arms) or columns (E/W arms), into the quadrant. */
-function firedTiles(portal: Portal, q: Quadrant): ATile[] {
+/** One row (N/S arms) or column (E/W arms) a portal fires across, nearest first: the tile d out is line[d - 1]. */
+function lineFrom(portal: Portal, origin: ATile, q: Quadrant): ATile[] {
   const { sx, sz } = QUADRANT_SIGN[q];
   const tiles: ATile[] = [];
-  for (const origin of portal.tiles) {
-    for (let k = 1; k <= 13; k++) {
-      const t = portal.arm === "N" || portal.arm === "S" ? at(origin.x + sx * k, origin.z) : at(origin.x, origin.z + sz * k);
-      if (inRoom(t)) tiles.push(t);
-    }
+  for (let d = 1; d <= 13; d++) {
+    const t = portal.arm === "N" || portal.arm === "S" ? at(origin.x + sx * d, origin.z) : at(origin.x, origin.z + sz * d);
+    if (inRoom(t)) tiles.push(t);
   }
   return tiles;
+}
+
+/** Tiles a portal fires across: its two rows or columns, into the quadrant. */
+function firedTiles(portal: Portal, q: Quadrant): ATile[] {
+  return portal.tiles.flatMap((origin) => lineFrom(portal, origin, q));
+}
+
+const CYCLES_PER_TICK = 30;
+
+/** Ticks after firing until a volley at `cyclesPerTile` reaches the tile d out. */
+function reachTick(d: number, cyclesPerTile: number): number {
+  return Math.ceil((cyclesPerTile * d - cyclesPerTile) / CYCLES_PER_TICK);
 }
 
 export class Phase2 implements PhaseScript {
@@ -181,24 +191,39 @@ export class Phase2 implements PhaseScript {
     return this.portals.filter((p) => (p.arm === a || p.arm === b) && (round.allLit || round.gaps.get(p.arm) !== p.index));
   }
 
+  /**
+   * Each fired row is a wave: it reaches the tile d out on tick reachTick(d) and is judged there, against where you
+   * stand at that tick, once per row. Run through it, from a tile it has yet to reach to one it has passed, and it
+   * misses you: the skip.
+   */
   private fire(round: Round, crossfire: boolean): void {
     if (this.round !== round || !round.lit) return;
     const { fight } = this;
-    const lit = this.litPortals(round);
-    const here = fight.playerTile;
-    let lines = 0;
-    for (const portal of lit) {
-      const tiles = firedTiles(portal, round.q);
+    const speed = crossfire ? P2.crossfireCyclesPerTile : P2.lineCyclesPerTile;
+    const waves: { line: ATile[]; spent: boolean }[] = [];
+    for (const portal of this.litPortals(round)) {
       for (const origin of portal.tiles) {
-        const far = tiles.filter((t) => (portal.arm === "N" || portal.arm === "S" ? t.z === origin.z : t.x === origin.x)).pop();
-        if (far) fight.shoot(portal.emitter, far, 2, { spotAnim: { id: SPOT.portalProjectile }, startCycleOffset: 0, endCycleOffset: 6 * 12, verticalOffset: 0.2 });
-      }
-      for (const origin of portal.tiles) {
-        const onRow = portal.arm === "N" || portal.arm === "S" ? here.z === origin.z : here.x === origin.x;
-        if (onRow && tiles.some((t) => same(t, here))) lines++;
+        const line = lineFrom(portal, origin, round.q);
+        const far = line[line.length - 1];
+        if (!far) continue;
+        fight.shoot(portal.emitter, far, reachTick(line.length, speed) + 1, { spotAnim: { id: SPOT.portalProjectile }, startCycleOffset: 0, endCycleOffset: speed * line.length - speed, verticalOffset: 0.2 });
+        waves.push({ line, spent: false });
       }
     }
-    for (let i = 0; i < lines; i++) fight.hit({ amount: () => fight.rng.roll(P2.lineDamage) });
+    const last = Math.max(0, ...waves.map((wave) => reachTick(wave.line.length, speed)));
+    for (let k = 0; k <= last; k++) {
+      const judge = () => {
+        const here = fight.playerTile;
+        for (const wave of waves) {
+          const d = wave.line.findIndex((t) => same(t, here)) + 1;
+          if (wave.spent || d === 0 || reachTick(d, speed) !== k) continue;
+          wave.spent = true;
+          fight.hit({ amount: () => fight.rng.roll(P2.lineDamage) });
+        }
+      };
+      if (k === 0) judge();
+      else fight.after(k, judge);
+    }
     round.lit = false;
     if (crossfire) {
       this.round = null;

@@ -377,7 +377,7 @@ function Sidebar({ params, fight }: Readonly<{ params: Params; fight: Fight | nu
       <label>
         Setup
         <select value={draft.setup} onChange={(event) => set({ setup: event.target.value === "melee" ? "melee" : "ranged" })}>
-          <option value="ranged">Ranged (Twisted bow, void)</option>
+          <option value="ranged">Ranged (Twisted bow, Masori)</option>
           <option value="melee">Melee (Scythe, Inquisitor's)</option>
         </select>
       </label>

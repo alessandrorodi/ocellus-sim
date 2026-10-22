@@ -2,7 +2,10 @@ import type { Unit } from "osrs-sdk";
 import type { TileMark } from "./effects";
 import type { Fight, PhaseScript } from "./Fight";
 import { CHAT } from "./Fight";
-import { P3, SEQ, SPOT } from "./data";
+import type { VoidLocKind } from "./data";
+import { P3, SEQ, SPOT, VOID_LOC } from "./data";
+import { LocField } from "./locs";
+import type { LocView } from "./locs";
 import type { ATile, Arm, Body, Quadrant } from "./geometry";
 import {
   ARMS,
@@ -28,7 +31,7 @@ import {
 import type { AddKind, Style } from "./units";
 import { VoidAdd } from "./units";
 
-type Patch = { tile: ATile; until: number; placed: number };
+type Patch = { tile: ATile; until: number; placed: number; kind: VoidLocKind };
 type Telegraph = { tiles: ATile[]; landsAt: number; colour: number };
 type Crossing = { arm: Arm; from: Quadrant; to: Quadrant; bank: ATile; hops: ATile[]; hopping: boolean };
 
@@ -74,6 +77,10 @@ export class Phase3 implements PhaseScript {
   private lastFlyingMessage = -10;
   private floorFraction: number = P3.hpFloors[0];
   private finished = false;
+  /** A quadrant waiting on his HP to fall, after an Untether that came too early. */
+  private awaiting: Quadrant | null = null;
+  /** Bumped to cancel the rest of a segment's scheduled attacks. */
+  private rotation = 0;
 
   constructor(private readonly fight: Fight) {}
 
@@ -93,6 +100,7 @@ export class Phase3 implements PhaseScript {
     fight.barColour = "#00d900";
     if (direct) fight.message("Challenge started: Ocellus.", CHAT.game);
     this.breakArena();
+    fight.region.addEntity(new LocField(fight.region, () => this.patchViews()));
     fight.after(P3.jumpToCornerAfter, () => this.startSegment(fight.quadrantOfPlayer() ?? "SE"));
   }
 
@@ -134,7 +142,6 @@ export class Phase3 implements PhaseScript {
     const plan = this.segment === 0 ? P3.first : P3.later;
     for (const t of plan.triples) this.at(t, () => this.triple());
     for (const t of plan.spins) this.at(t, () => this.spin());
-    for (const t of plan.volleys) this.at(t, () => this.panic());
     for (const t of plan.bombs) this.at(t, () => this.bombs());
     for (const t of plan.rifts) this.at(t, () => this.spawnRift());
     this.at(plan.vine, () => this.spawnVine());
@@ -149,10 +156,13 @@ export class Phase3 implements PhaseScript {
     this.at(plan.untether, () => this.startUntether());
   }
 
-  /** Schedule relative to the segment's start. */
+  /** Schedule relative to the segment's start; dropped if the rotation is cut short by the quadrant falling. */
   private at(offset: number, run: () => void): void {
     const delay = this.segmentStart + offset - this.fight.tick;
-    this.fight.after(Math.max(1, delay), run);
+    const rotation = this.rotation;
+    this.fight.after(Math.max(1, delay), () => {
+      if (rotation === this.rotation) run();
+    });
   }
 
   private body(): Body {
@@ -175,9 +185,10 @@ export class Phase3 implements PhaseScript {
     const boss = this.boss;
     const swing = () => {
       if (this.levitating) return;
+      // Out of his reach, the tank gets the spread void shot instead. [W] Strategies, phase 3
+      if (!this.inMelee()) return this.panic();
       boss.playAnimation(SEQ.p3MeleeBasic);
       boss.face(fight.player);
-      if (!this.inMelee()) return;
       fight.hit({ style: "melee", amount: (prayer) => fight.rng.roll(prayer === "melee" ? P3.basicHitProtected : P3.basicHitUnprotected) });
     };
     swing();
@@ -258,7 +269,7 @@ export class Phase3 implements PhaseScript {
       visuals: { spotAnim: { id: SPOT.magicProjectile }, startCycleOffset: 45, endCycleOffset: 60, verticalOffset: 1 },
       onLand: () => {
         fight.player.addSpotAnim({ id: SPOT.magicImpact, channel: "impact" });
-        this.addPatch(fight.playerTile, fight.rng.roll(P3.patchLasts));
+        this.addPatch(fight.playerTile, fight.rng.roll(P3.patchLasts), "aoe");
       },
     });
   }
@@ -278,19 +289,21 @@ export class Phase3 implements PhaseScript {
         fight.spot(tile, SPOT.bombDrop, { maxTicks: 3 });
         fight.spot(tile, SPOT.bombImpact, { maxTicks: 3 });
         if (same(fight.playerTile, tile)) fight.hit({ amount: () => fight.rng.roll(P3.bombDamage) });
-        this.addPatch(tile, 30);
+        this.addPatch(tile, 30, "bomb");
       });
     }
   }
 
-  private addPatch(tile: ATile, lasts: number): void {
+  private addPatch(tile: ATile, lasts: number, kind: VoidLocKind): void {
     if (!this.fight.isFloor(tile)) return;
-    this.patches.push({ tile, until: this.fight.tick + lasts, placed: this.fight.tick });
-    this.syncPatches();
+    this.patches = this.patches.filter((p) => !same(p.tile, tile));
+    this.patches.push({ tile, until: this.fight.tick + lasts, placed: this.fight.tick, kind });
   }
 
-  private syncPatches(): void {
-    this.fight.setVoidLayer("patches", this.patches.map((p) => p.tile));
+  /** The patches as the game draws them, each kind its own loc. */
+  private patchViews(): LocView[] {
+    if (this.finished) return [];
+    return this.patches.map((p) => ({ key: `${p.kind}:${p.placed}:${p.tile.x},${p.tile.z}`, tile: p.tile, models: VOID_LOC[p.kind].models }));
   }
 
   private spawnVine(): void {
@@ -306,7 +319,7 @@ export class Phase3 implements PhaseScript {
     fight.player.freeze(P3.vineBreakWithin + 1);
     fight.player.addSpotAnim({ id: SPOT.entangleStart, channel: "vine" });
     fight.after(1, () => fight.player.addSpotAnim({ id: SPOT.entangleIdle, channel: "vine" }));
-    fight.message("A void vine entangles you!", CHAT.purple);
+    fight.message("You've been rooted in place!", CHAT.red);
     fight.after(P3.vineBreakWithin, () => {
       if (this.vine !== vine || vine.killed) return;
       fight.hit({ amount: () => fight.rng.roll(P3.vineDamage) });
@@ -361,7 +374,7 @@ export class Phase3 implements PhaseScript {
       const sorted = [...band].sort((a, b) => reach(a, this.boss.tile) - reach(b, this.boss.tile));
       [0.2, 0.5, 0.85].forEach((f) => {
         const t = sorted[Math.floor(f * (sorted.length - 1))];
-        if (t) this.addPatch(t, P3.insolenceDebrisLasts);
+        if (t) this.addPatch(t, P3.insolenceDebrisLasts, "insolence");
       });
     });
   }
@@ -399,7 +412,16 @@ export class Phase3 implements PhaseScript {
     const name = add.kind === "rift-buff" ? "void augmenter" : "void rift";
     fight.message(`Destroying the ${name} empowers you!`, CHAT.purple);
     fight.player.addSpotAnim({ id: add.kind === "rift-buff" ? SPOT.glowZaros : SPOT.glowArmadyl, channel: "empower" });
-    this.boss.grantMaxDamageRollsOnNextIncomingAttack();
+    if (add.kind === "rift-buff") {
+      // Attack and Strength to 116, Magic and Ranged to 112 from 99s. [W] Void Augmenter
+      const { stats, currentStats } = fight.player;
+      currentStats.attack = Math.max(currentStats.attack, stats.attack + P3.augmenterBoost.melee);
+      currentStats.strength = Math.max(currentStats.strength, stats.strength + P3.augmenterBoost.melee);
+      currentStats.range = Math.max(currentStats.range, stats.range + P3.augmenterBoost.rangedMagic);
+      currentStats.magic = Math.max(currentStats.magic, stats.magic + P3.augmenterBoost.rangedMagic);
+    } else {
+      this.boss.grantMaxDamageRollsOnNextIncomingAttack();
+    }
   }
 
   // ---- Untether and the quadrant's end ------------------------------------------------------------------------------
@@ -443,7 +465,28 @@ export class Phase3 implements PhaseScript {
       }
       this.zone = null;
     });
-    fight.after(u.obliteration, () => this.obliterate(q));
+    fight.after(u.obliteration, () => this.obliterateWhenDue(q));
+  }
+
+  private atThreshold(): boolean {
+    return this.boss.currentStats.hitpoint <= this.hpFloor();
+  }
+
+  /**
+   * The quadrant falls only once his HP is down to this segment's threshold. [W] [owner] Straight after Untether if it
+   * already is (both recorded fights); otherwise he lands and runs the quadrant's rotation again, and it falls the
+   * moment the threshold is reached (see onBossHit).
+   */
+  private obliterateWhenDue(q: Quadrant): void {
+    if (this.atThreshold()) {
+      this.awaiting = null;
+      this.obliterate(q);
+      return;
+    }
+    this.awaiting = q;
+    this.levitating = false;
+    this.boss.pose = null;
+    this.startSegment(q);
   }
 
   private untetherPools(): void {
@@ -488,7 +531,6 @@ export class Phase3 implements PhaseScript {
       fight.destroyed.add(q);
       fight.setCrumbling([]);
       this.patches = this.patches.filter((p) => quadrantOf(p.tile) !== q);
-      this.syncPatches();
       boss.pose = null;
       boss.hidden = true;
       boss.attackable = false;
@@ -525,9 +567,7 @@ export class Phase3 implements PhaseScript {
   step(): void {
     const { fight } = this;
     this.telegraphs = this.telegraphs.filter((t) => t.landsAt >= fight.tick);
-    const before = this.patches.length;
     this.patches = this.patches.filter((p) => p.until > fight.tick);
-    if (this.patches.length !== before) this.syncPatches();
     const here = fight.playerTile;
     const patch = this.patches.find((p) => same(p.tile, here));
     if (patch && (fight.tick - patch.placed) % 2 === 0) fight.hit({ amount: () => fight.rng.roll(P3.patchDamage) });
@@ -704,7 +744,13 @@ export class Phase3 implements PhaseScript {
     return null;
   }
 
-  onBossHit(): void {}
+  onBossHit(): void {
+    if (this.awaiting === null || this.levitating || this.zone !== null || !this.atThreshold()) return;
+    const q = this.awaiting;
+    this.awaiting = null;
+    this.rotation++;
+    this.obliterate(q);
+  }
 
   marks(): readonly TileMark[] {
     const marks: TileMark[] = [];
