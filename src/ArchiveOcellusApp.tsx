@@ -1,10 +1,14 @@
 import React, { useState } from "react";
 import { CacheRender, ControlPanelController, Settings, TrainerInstance, TrainerLoadingState, Viewport } from "osrs-sdk";
+import type { Item } from "osrs-sdk";
 import { GameOverlay, TrainerApp, TrainerLoadingSplash } from "osrs-sdk-react";
 import { OcellusRegion } from "./content/ocellus/js/OcellusRegion";
 import type { DrillConfig } from "./content/ocellus/js/OcellusTimings";
 import { OCELLUS_P4, parseDrillRequest } from "./content/ocellus/js/OcellusTimings";
 import type { FightLog, FightSnapshot } from "./content/ocellus/js/P4Types";
+import { keepHoverTextOnCanvas } from "./hoverText";
+
+keepHoverTextOnCanvas();
 
 export const CREDIT_LINE =
   "Created using intellectual property belonging to Jagex Limited under the terms of Jagex's Fan Content Policy. This content is not endorsed by or affiliated with Jagex.";
@@ -24,7 +28,18 @@ type VerificationProbeSnapshot = Readonly<{
   rejected: readonly string[];
   panel: Readonly<{ tab: string | null; keys: Readonly<Record<"inventory" | "spellbook" | "prayer" | "equipment" | "combat", string>> }>;
   menu: readonly string[] | null;
+  icons: Readonly<Record<string, Readonly<{ path: string; size: string }>>>;
 }>;
+
+function drawnIcons(items: readonly (Item | null | undefined)[]): VerificationProbeSnapshot["icons"] {
+  return Object.fromEntries(
+    items.flatMap((item) => {
+      if (!item || typeof item.cacheItemId !== "number" || !(item.inventorySprite instanceof HTMLImageElement)) return [];
+      const { src, naturalWidth, naturalHeight } = item.inventorySprite;
+      return [[item.cacheItemId, { path: new URL(src).pathname, size: `${naturalWidth}x${naturalHeight}` }]];
+    }),
+  );
+}
 
 function exposeVerificationProbe(trainer: TrainerInstance, region: OcellusRegion, rejected: readonly string[]) {
   window.__archiveOcellusProbe = Object.freeze({
@@ -43,6 +58,7 @@ function exposeVerificationProbe(trainer: TrainerInstance, region: OcellusRegion
           keys: { inventory: Settings.inventory_key, spellbook: Settings.spellbook_key, prayer: Settings.prayer_key, equipment: Settings.equipment_key, combat: Settings.combat_key },
         },
         menu: contextMenu.isActive ? contextMenu.menuOptions.map((option) => option.text.map((block) => `${block.text}`).join("")) : null,
+        icons: player ? drawnIcons([...player.inventory, ...Object.values(player.equipment)]) : {},
       };
     },
     log: () => region.fightLog(),

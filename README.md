@@ -17,11 +17,11 @@ npm run assets -- --cache-dir <openrs2 cache dir> --reader-path <osrscachereader
 npm start                       # http://127.0.0.1:8002
 ```
 
-`npm run assets` extracts models from OpenRS2 cache 2746 into `public/osrs-assets/`, which is never committed.
+`npm run assets` extracts models from OpenRS2 cache 2746 into `public/osrs-assets/`, which is never committed. It then draws an inventory icon for each of the trainer's own items from the item's model in the same cache, the way the game client draws it, into `public/osrs-assets/item-icons/`. `npm run item-icons` with the same two options redraws only the icons. The icon renderer in `src/itemIcons/` is ported from RuneLite's cache tool under its BSD 2-clause licence.
 
 ## Deploy
 
-`netlify.toml` tells Netlify to run `scripts/netlify-build.sh` on Node 22 and publish `dist`. The script installs the dependencies and the beta SDK, installs the cache reader at a pinned commit, extracts the models from OpenRS2 cache 2746, and builds the app. The models are published with the app under `dist/osrs-assets/`. The cache and the reader go in Netlify's build cache directory, `/opt/build/cache`. That Netlify restores this directory after a successful build is inferred, not documented. The source is a 2019 answer from Netlify staff on the Netlify support forum. Confirm it in the logs of the first two deploys. The second deploy logs `reusing cache reader` and `Using cached OpenRS2 cache 2746` when the directory was restored.
+`netlify.toml` tells Netlify to run `scripts/netlify-build.sh` on Node 22 and publish `dist`. The script installs the dependencies and the beta SDK, installs the cache reader at a pinned commit, extracts the models and draws the item icons from OpenRS2 cache 2746, and builds the app. The models and icons are published with the app under `dist/osrs-assets/`. The cache and the reader go in Netlify's build cache directory, `/opt/build/cache`. That Netlify restores this directory after a successful build is inferred, not documented. The source is a 2019 answer from Netlify staff on the Netlify support forum. Confirm it in the logs of the first two deploys. The second deploy logs `reusing cache reader` and `Using cached OpenRS2 cache 2746` when the directory was restored.
 
 Production deploys from the `release` branch, because each production deploy costs 15 of the 300 credits that Netlify's free plan gives each month. Merges to `main` do not reach production. To ship a release, fast-forward `release` to a tested `main` commit. The first push creates the branch, so push once before you connect the repository:
 
@@ -46,7 +46,7 @@ NETLIFY_CACHE_DIR=/tmp/netlify-cache scripts/netlify-build.sh
 
 Created using intellectual property belonging to Jagex Limited under the terms of Jagex's Fan Content Policy. This content is not endorsed by or affiliated with Jagex.
 
-Game models are extracted from the game cache at build time and are not stored in this repository.
+Game models are extracted, and item icons drawn, from the game cache at build time. Neither is stored in this repository.
 
 ## Licence
 

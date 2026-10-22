@@ -46,12 +46,16 @@ LOADOUT_SPECIAL_ORB_Y=157
 LOADOUT_BOSS_CLICK_RIGHT_PX=-10
 LOADOUT_BOSS_CLICK_DOWN_PX=-160
 LOADOUT_DIVISION_DRAIN=37
+LOADOUT_EQUIPMENT_TAB_X=1197
+LOADOUT_EQUIPMENT_TAB_Y=745
+LOADOUT_TRAINER_ICONS='{"8842":"30x26","11664":"30x28","13072":"30x22","13073":"18x30","24419":"27x30","24420":"32x24","24421":"16x31","28922":"31x28"}'
 SUPPLY_QUERY="?seed=1&setup=ranged"
 SUPPLY_INVENTORY='[28922,22325,24419,24420,24421,22981,21295,29801,25485,12695,22461,6685,3024,12695,22461,6685,3024,6685,6685,6685,3024,6685,6685,6685,3024,6685,6685,3024]'
 SUPPLY_NAMED_SLOT=0
 SUPPLY_NAMED_MENU='["Equip Tonalztics of Ralos","Drop Tonalztics of Ralos","Examine Tonalztics of Ralos"]'
 SUPPLY_BREW_SLOT=11
 SUPPLY_HP_AFTER_BREW=115
+SUPPLY_HOVER_NAME_PIXEL="#ff911f"
 KEYBIND_INVENTORY_BUTTON_X=1130
 KEYBIND_INVENTORY_BUTTON_Y=650
 KEYBIND_DEFAULT_KEY=F4
@@ -171,11 +175,13 @@ stage_test() {
 }
 
 stage_assets() {
+  local flags=(--cache-dir "$OSRS_CACHE_DIR" --reader-path "$OSRS_CACHE_READER")
   if manifest_ready; then
-    log "assets: manifest already has npc-${BOSS_NPC} and every configured item, spotanim and sound from openrs2:2746, skipping rebuild" | tee "$VERIFY_DIR/assets.log"
-    return 0
+    log "assets: manifest already has npc-${BOSS_NPC} and every configured item, spotanim and sound from openrs2:2746, skipping the model rebuild" | tee "$VERIFY_DIR/assets.log"
+    npm run item-icons -- "${flags[@]}" >>"$VERIFY_DIR/assets.log" 2>&1
+    return
   fi
-  npm run assets -- --cache-dir "$OSRS_CACHE_DIR" --reader-path "$OSRS_CACHE_READER" >"$VERIFY_DIR/assets.log" 2>&1 && manifest_ready
+  npm run assets -- "${flags[@]}" >"$VERIFY_DIR/assets.log" 2>&1 && manifest_ready
 }
 
 port_listener() {
@@ -486,6 +492,7 @@ drive_loadouts() {
   click_at "$LOADOUT_INVENTORY_TAB_X" "$LOADOUT_INVENTORY_TAB_Y" || return 1
   ab wait 600 >/dev/null
   ab screenshot "$VERIFY_DIR/loadout-ranged.png" >/dev/null || { log "ranged setup screenshot failed"; return 1; }
+  probe "snapshot().icons" >"$VERIFY_DIR/icons.json"
 
   for slot in $(seq $((LOADOUT_SPECIAL_SLOT + 1)) "$LOADOUT_SWITCHES"); do
     click_inventory_slot "$slot" || return 1
@@ -507,6 +514,9 @@ drive_loadouts() {
   probe "snapshot().fight" >"$VERIFY_DIR/loadout-spec.json"
   ab wait 1200 >/dev/null
   ab screenshot "$VERIFY_DIR/loadout-spec.png" >/dev/null || { log "special attack screenshot failed"; return 1; }
+  click_at "$LOADOUT_EQUIPMENT_TAB_X" "$LOADOUT_EQUIPMENT_TAB_Y" || return 1
+  ab wait 600 >/dev/null
+  ab screenshot "$VERIFY_DIR/equipment-melee.png" >/dev/null || { log "equipment tab screenshot failed"; return 1; }
   ab console >"$VERIFY_DIR/loadout-console.log" 2>&1 || { log "console capture failed"; return 1; }
   ab --json errors | json data.errors >"$VERIFY_DIR/loadout-page-errors.json" || { log "page error capture failed"; return 1; }
 
@@ -689,7 +699,7 @@ drive() {
     orb-hit.png $(seq -f "orb-dormant-%g.png" 1 "$ORB_FRAMES") $(seq -f "orb-glow-%g.png" 1 "$ORB_FRAMES") orb-click.json orb.json orb-console.log orb-page-errors.json orb-skip.png orb-skip.json orb-skip-console.log orb-skip-page-errors.json \
     explosion-left.png explosion-standing.png explosions.json explosion-audio.json explosion-console.log explosion-page-errors.json explosion-under.png explosions-under.json explosion-under-console.log explosion-under-page-errors.json \
     special-before.png special-vortex.png special-spike-disk.png special-semicircle.png special-black-disk.png special.json special-console.log special-page-errors.json special-late.json special-audio.json special-late-console.log special-late-page-errors.json \
-    loadout-before.json loadout-ranged.png loadout-after.json loadout-melee.png loadout-spec.json loadout-spec.png \
+    loadout-before.json loadout-ranged.png icons.json loadout-after.json loadout-melee.png loadout-spec.json loadout-spec.png equipment-melee.png \
     loadout-console.log loadout-page-errors.json loadout-selector.json loadout-selector-page-errors.json \
     supplies-inventory.json item-menu.json item-menu.png item-menu-closed.json brew-click.json brew-hp.json brew-heal.png supplies-console.log supplies-page-errors.json \
     keybinds-open.json keybinds.png keybinds-bound.json keybinds-saved.json keybinds-old-key.json keybinds-reloaded.json keybinds-reloaded.png keybinds-restored.json keybinds-console.log keybinds-page-errors.json; do
@@ -700,7 +710,7 @@ drive() {
     const [dir, spawn, target, edgeOrder, edgeStop, holdTicks, bossNpc, lastHiddenTick, lastTick, stages, overheads, specials, focusKey, focusBeats, square, floodDamage, floodLast, voidHits, voidEnd, voidPixel, rangedWorn, meleeWorn, drain, orbExpected, orbBox, orbFrames,
       innerMarks, lateMark, explosionPixel, explosionExpected, soundSamples, explosionSounds, centreX, centreY, tellBox, specialExpected,
       tellCentreBox, transitionSamples, landingSounds, landingWindows, styleSounds, styleWindows, soundTolerance,
-      supplyInventory, namedMenu, hpAfterBrew, defaultKey, newKey] = process.argv.slice(1);
+      supplyInventory, namedMenu, hpAfterBrew, defaultKey, newKey, trainerIcons, brewY, hoverNamePixel] = process.argv.slice(1);
     const fs = require("fs");
     const read = (file) => JSON.parse(fs.readFileSync(`${dir}/${file}`, "utf8"));
     const [hidden, before, after, edgeArrived, edge, errors, cycle, snapshot, focus, focusErrors, voidLog, voidErrors, shot, shotErrors] =
@@ -711,6 +721,7 @@ drive() {
     const [explosionLog, explosionAudio, explosionErrors, underLog, underErrors] = ["explosions.json", "explosion-audio.json", "explosion-page-errors.json", "explosions-under.json", "explosion-under-page-errors.json"].map(read);
     const [specialLog, specialErrors, lateLog, lateErrors, transitionAudio] = ["special.json", "special-page-errors.json", "special-late.json", "special-late-page-errors.json", "special-audio.json"].map(read);
     const [carried, itemMenu, itemMenuClosed, brewClick, brewHp, suppliesErrors] = ["supplies-inventory.json", "item-menu.json", "item-menu-closed.json", "brew-click.json", "brew-hp.json", "supplies-page-errors.json"].map(read);
+    const icons = read("icons.json");
     const [keysOpen, keysBound, keysSaved, keysOldKey, keysReloaded, keysRestored, keybindsErrors] = ["keybinds-open.json", "keybinds-bound.json", "keybinds-saved.json", "keybinds-old-key.json", "keybinds-reloaded.json", "keybinds-restored.json", "keybinds-page-errors.json"].map(read);
     const [spawnTile, targetTile, edgeOrderTile, edgeStopTile, nearSquare] = [spawn, target, edgeOrder, edgeStop, square].map((tile) => JSON.parse(tile));
     const same = (a, b) => a?.x === b.x && a?.y === b.y;
@@ -765,6 +776,19 @@ drive() {
       }
       return { share: Math.round((100000 * hits) / ((x1 - x0) * (y1 - y0))) / 1000, dx: hits ? Math.round((1000 * (sumX / hits - (width - 1) / 2)) / width) / 1000 : null };
     }
+    const nameRgb = [1, 3, 5].map((i) => parseInt(hoverNamePixel.slice(i, i + 2), 16));
+    function hoverText(file) {
+      const { width, channels, px } = decode(file);
+      const columns = (rgb) => {
+        const xs = [];
+        for (let y = Number(brewY) + 19; y <= Number(brewY) + 40; y++) {
+          for (let x = 0; x < width; x++) if (rgb.every((v, c) => px[(y * width + x) * channels + c] === v)) xs.push(x);
+        }
+        return xs.length ? [Math.min(...xs), Math.max(...xs)] : null;
+      };
+      return { width, action: columns([255, 255, 255]), name: columns(nameRgb) };
+    }
+    const readsInFull = (text) => text.action !== null && text.name !== null && text.action[1] < text.name[0] && text.name[1] <= text.width - 5;
     const want = [1, 3, 5].map((i) => parseInt(voidPixel.slice(i, i + 2), 16));
     const voidShare = (file) => pixelShare(file, (...rgb) => want.every((v, c) => Math.abs(rgb[c] - v) <= 10));
     const offset = JSON.parse(orbBox);
@@ -871,6 +895,8 @@ drive() {
         itemMenu: [itemMenu, itemMenuClosed],
         brew: { clickedAt: brewClick, hp: brewHp.filter(([tick]) => tick >= brewClick - 1 && tick <= brewClick + 3) },
       },
+      icons: Object.fromEntries(Object.keys(JSON.parse(trainerIcons)).map((id) => [id, icons[id] ?? null])),
+      hoverText: { "brew-heal.png": hoverText("brew-heal.png"), "keybinds.png": hoverText("keybinds.png") },
       keybinds: {
         tabs: [keysOpen.tab, keysBound.tab, keysOldKey.tab, keysReloaded.tab],
         inventoryKey: [keysOpen.keys.inventory, keysBound.keys.inventory, keysSaved.values?.inventory_key ?? null, keysReloaded.keys.inventory, keysRestored.keys.inventory],
@@ -942,6 +968,9 @@ drive() {
       keyBoundAndSaved: keysBound.keys.inventory === newKey && keysSaved.values?.inventory_key === newKey,
       boundKeyOpensTabAfterReload: keysOldKey.tab === "PRAYER" && keysReloaded.tab === "INVENTORY" && keysReloaded.keys.inventory === newKey,
       defaultKeyRestored: keysRestored.keys.inventory === defaultKey,
+      trainerItemsShowCacheIcons: Object.entries(JSON.parse(trainerIcons)).every(([id, size]) => icons[id]?.path === `/osrs-assets/item-icons/${id}.png` && icons[id].size === size),
+      hoverTextOnCanvas: readsInFull(observed.hoverText["brew-heal.png"]) &&
+        (readsInFull(observed.hoverText["keybinds.png"]) || (observed.hoverText["keybinds.png"].action === null && observed.hoverText["keybinds.png"].name === null)),
       noPageErrors: [errors, focusErrors, voidErrors, shotErrors, orbErrors, orbSkipErrors, explosionErrors, underErrors, specialErrors, lateErrors, loadoutErrors, selectorErrors, suppliesErrors, keybindsErrors].every((list) => list.length === 0),
     };
     if (!checks.clickTargetedExpectedTile) {
@@ -954,7 +983,8 @@ drive() {
     "$LOADOUT_RANGED_WORN" "$LOADOUT_MELEE_WORN" "$LOADOUT_DIVISION_DRAIN" "$ORB_EXPECTED" "$ORB_BOX" "$ORB_FRAMES" \
     "[${EXPLOSION_INNER_MARKS// /,}]" "${EXPLOSION_OUTER_MARKS%% *}" "$EXPLOSION_PIXEL" "$EXPLOSION_EXPECTED" "$SOUND_SAMPLES" "$EXPLOSION_SOUNDS" "$CX" "$CY" "$TELL_BOX" "$SPECIAL_EXPECTED" \
     "$TELL_CENTRE_BOX" "$TRANSITION_SOUND_SAMPLES" "$LANDING_SOUNDS" "$LANDING_WINDOWS" "$STYLE_SOUNDS" "$STYLE_WINDOWS" "$SOUND_TOLERANCE_TICKS" \
-    "$SUPPLY_INVENTORY" "$SUPPLY_NAMED_MENU" "$SUPPLY_HP_AFTER_BREW" "$KEYBIND_DEFAULT_KEY" "$KEYBIND_NEW_KEY" >"$VERIFY_DIR/observed.json"
+    "$SUPPLY_INVENTORY" "$SUPPLY_NAMED_MENU" "$SUPPLY_HP_AFTER_BREW" "$KEYBIND_DEFAULT_KEY" "$KEYBIND_NEW_KEY" \
+    "$LOADOUT_TRAINER_ICONS" "$((LOADOUT_SLOT_Y + SUPPLY_BREW_SLOT / 4 * LOADOUT_SLOT_DY))" "$SUPPLY_HOVER_NAME_PIXEL" >"$VERIFY_DIR/observed.json"
   local verdict=$?
   cat "$VERIFY_DIR/observed.json"
   return $verdict

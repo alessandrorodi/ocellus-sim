@@ -323,6 +323,24 @@ fixture_png() {
   ' "$1" "$2" "${3:-0}" "${4:-0}" "$((1280 / 2 + ORB_CLICK_RIGHT_PX))" "$((800 / 2 - ORB_CLICK_UP_PX))" "$ORB_BOX"
 }
 
+fixture_hover_text() {
+  command node -e '
+    const [file, cursorY, clipped] = process.argv.slice(1);
+    const zlib = require("zlib");
+    const crc = (buf) => { let c = ~0; for (const b of buf) { c ^= b; for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xedb88320 : c >>> 1; } return ~c >>> 0; };
+    const chunk = (type, data) => { const head = Buffer.alloc(8), tail = Buffer.alloc(4); head.writeUInt32BE(data.length); head.write(type, 4); tail.writeUInt32BE(crc(Buffer.concat([Buffer.from(type), data]))); return Buffer.concat([head, data, tail]); };
+    const [width, height] = [1280, 800];
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4); ihdr[8] = 8; ihdr[9] = 2;
+    const [WHITE, NAME, FLOOR] = [[0xff, 0xff, 0xff], [0xff, 0x91, 0x1f], [0x68, 0x60, 0x58]];
+    const [action, name] = clipped === "true" ? [[1256, 1279], null] : [[1110, 1140], [1146, 1275]];
+    const inside = (span, x) => span !== null && x >= span[0] && x <= span[1];
+    const colour = (x, y) => (y < Number(cursorY) + 22 || y > Number(cursorY) + 35 ? FLOOR : inside(action, x) ? WHITE : inside(name, x) ? NAME : FLOOR);
+    const raw = Buffer.alloc(height * (1 + width * 3));
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) raw.set(colour(x, y), y * (1 + width * 3) + 1 + x * 3);
+    require("fs").writeFileSync(file, Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]));
+  ' "$1" "$((LOADOUT_SLOT_Y + SUPPLY_BREW_SLOT / 4 * LOADOUT_SLOT_DY))" "$([[ "$FAULT" == clipped-hover-text ]] && echo true || echo false)"
+}
+
 OK_DORMANT_TEAL=(0 2.3 0.4 0 0 0)
 OK_GLOW_TEAL=(2.4 11.1 12.7 12.9 14.4 9.2)
 NOORB_DORMANT_TEAL=(0 0 0 0 0 0.2)
@@ -335,6 +353,7 @@ fake_screenshot() {
   case "$SCREENSHOT:$name" in
     fail:*) return 1 ;;
     empty:*) ;;
+    *:brew-heal.png | *:keybinds.png) fixture_hover_text "$1" ;;
     markerfollows:explosion-left.png | *:explosion-standing.png) fixture_shards "$1" 0.5 ;;
     *:explosion-left.png) fixture_shards "$1" 0.44 ;;
     notell:special-* | *:special-before.png) fixture_tell "$1" 0 ;;
@@ -369,6 +388,16 @@ loadout_snapshot() {
   # agent-browser returns object keys sorted, unlike the literals in verify.sh.
   worn="$(command node -e 'const v = JSON.parse(process.argv[1]); console.log(JSON.stringify(Object.fromEntries(Object.entries(v).sort())))' "$worn")"
   printf '{"data":{"result":{"boss":{"defence":%s},"player":{"equipped":%s,"specialEnergy":%s}}}}\n' "$defence" "$worn" "$energy"
+}
+
+icons_probe() {
+  command node -e '
+    const [sizes, fault] = process.argv.slice(1);
+    const icons = Object.fromEntries(Object.entries(JSON.parse(sizes)).map(([id, size]) => [id, { path: `/osrs-assets/item-icons/${id}.png`, size }]));
+    if (fault === "placeholder-icon") icons["28922"].path = "image/svg+xml,%3Csvg%3E";
+    if (fault === "unloaded-icon") icons["24420"].size = "0x0";
+    console.log(JSON.stringify({ data: { result: { ...icons, 22325: { path: "/670ddc4f152a60d91516.png", size: "30x27" } } } }));
+  ' "$LOADOUT_TRAINER_ICONS" "$FAULT"
 }
 
 supply_probe() {
@@ -440,6 +469,7 @@ fake_browser() {
       "--json eval window.__cueAudio") if [[ -e "$T/special-late" ]]; then cat "$T/special-audio.json"; else cat "$T/explosion-audio.json"; fi ;;
       "--json eval window.__archiveOcellusProbe.snapshot().fight.player.inventory") supply_probe inventory ;;
       "--json eval window.__archiveOcellusProbe.snapshot().menu") supply_probe menu ;;
+      "--json eval window.__archiveOcellusProbe.snapshot().icons") icons_probe ;;
       "--json eval window.__archiveOcellusProbe.snapshot().fight.run.tick") echo '{"data":{"result":3}}' ;;
       "--json eval window.__archiveOcellusProbe.log().rows.map((row) => [row.tick, row.playerAtPostTick.hp])") supply_probe hp ;;
       "--json eval window.__archiveOcellusProbe.snapshot().panel") supply_probe panel ;;
@@ -801,6 +831,27 @@ default_key_not_restored_fails() {
   [[ "$(failed_checks)" == defaultKeyRestored ]] || { echo "expected only defaultKeyRestored to fail, got: $(failed_checks)"; return 1; }
 }
 
+placeholder_icon_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' placeholder-icon
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although Ralos drew its text placeholder"; return 1; fi
+  [[ "$(failed_checks)" == trainerItemsShowCacheIcons ]] || { echo "expected only trainerItemsShowCacheIcons to fail, got: $(failed_checks)"; return 1; }
+}
+
+unloaded_icon_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' unloaded-icon
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the hauberk icon never loaded"; return 1; fi
+  [[ "$(failed_checks)" == trainerItemsShowCacheIcons ]] || { echo "expected only trainerItemsShowCacheIcons to fail, got: $(failed_checks)"; return 1; }
+}
+
+clipped_hover_text_fails() {
+  setup
+  fake_browser '{"x":8,"y":3}' ok 8 "$FOCUS_DRILL" '' '' clipped-hover-text
+  if drive >"$T/drive.log" 2>&1; then echo "drive passed although the hover text ran off the canvas"; return 1; fi
+  [[ "$(failed_checks)" == hoverTextOnCanvas ]] || { echo "expected only hoverTextOnCanvas to fail, got: $(failed_checks)"; return 1; }
+}
+
 failed=0
 for t in \
   refused_serve_does_not_stop_the_recorded_instance \
@@ -851,7 +902,10 @@ for t in \
   brew_without_heal_fails \
   key_binding_lost_on_reload_fails \
   keybinds_button_not_opening_settings_fails \
-  default_key_not_restored_fails; do
+  default_key_not_restored_fails \
+  placeholder_icon_fails \
+  unloaded_icon_fails \
+  clipped_hover_text_fails; do
   if ("$t") >"$WORK/$t.log" 2>&1; then
     echo "PASS $t"
   else

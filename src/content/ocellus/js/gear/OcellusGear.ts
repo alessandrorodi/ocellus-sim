@@ -18,6 +18,7 @@ import {
 import type { AttackBonuses, ProjectileOptions, UnitBonuses, UnitEquipment, Weapon } from "osrs-sdk";
 import type { StanceSpeeds, TrainerItemKey } from "../OcellusTimings";
 import { OCELLUS_P4 } from "../OcellusTimings";
+import { itemIconFile } from "../../../../assets";
 
 // The SDK matches set effects by its closed ItemName enum and Player.attack never applies void, so the trainer's
 // weapons read the worn pieces by class and fold the set bonuses into their own rolls.
@@ -54,25 +55,12 @@ function bonuses(key: TrainerItemKey): UnitBonuses {
   return { attack: { ...attack }, defence: { ...defence }, other: { ...other }, targetSpecific: { undead: 0, slayer: 0 } };
 }
 
-const PLACEHOLDER_LABELS: Readonly<Record<TrainerItemKey, Readonly<{ set: string; piece: string; colour: string }>>> = {
-  voidRangerHelm: { set: "Void", piece: "helm", colour: "#3d6b4f" },
-  eliteVoidTop: { set: "Elite", piece: "top", colour: "#3d6b4f" },
-  eliteVoidRobe: { set: "Elite", piece: "robe", colour: "#3d6b4f" },
-  voidKnightGloves: { set: "Void", piece: "gloves", colour: "#3d6b4f" },
-  inquisitorsGreatHelm: { set: "Inq", piece: "helm", colour: "#5a5f6e" },
-  inquisitorsHauberk: { set: "Inq", piece: "body", colour: "#5a5f6e" },
-  inquisitorsPlateskirt: { set: "Inq", piece: "skirt", colour: "#5a5f6e" },
-  tonalzticsOfRalos: { set: "Ralos", piece: "spec", colour: "#8a5a2b" },
-};
-
-function placeholderLabel(key: TrainerItemKey): HTMLImageElement {
-  const { set, piece, colour } = PLACEHOLDER_LABELS[key];
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect x="1" y="1" width="30" height="30" rx="5" fill="${colour}" stroke="#000"/><g fill="#fff" font-family="sans-serif" font-size="9" text-anchor="middle"><text x="16" y="14">${set}</text><text x="16" y="25">${piece}</text></g></svg>`;
-  return ImageLoader.createImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+function inventoryIcon(key: TrainerItemKey): HTMLImageElement {
+  return ImageLoader.createImage(`osrs-assets/${itemIconFile(gear.items[key].itemId.value)}`);
 }
 
 export class VoidRangerHelm extends Helmet {
-  override inventorySprite = placeholderLabel("voidRangerHelm");
+  override inventorySprite = inventoryIcon("voidRangerHelm");
   override get itemName(): ItemName {
     return ItemName.VOID_RANGER_HELM;
   }
@@ -85,7 +73,7 @@ export class VoidRangerHelm extends Helmet {
 }
 
 export class EliteVoidTop extends Chest {
-  override inventorySprite = placeholderLabel("eliteVoidTop");
+  override inventorySprite = inventoryIcon("eliteVoidTop");
   override get itemName(): ItemName {
     return ItemName.ELITE_VOID_TOP;
   }
@@ -98,7 +86,7 @@ export class EliteVoidTop extends Chest {
 }
 
 export class EliteVoidRobe extends Legs {
-  override inventorySprite = placeholderLabel("eliteVoidRobe");
+  override inventorySprite = inventoryIcon("eliteVoidRobe");
   override get itemName(): ItemName {
     return ItemName.ELITE_VOID_ROBE;
   }
@@ -111,7 +99,7 @@ export class EliteVoidRobe extends Legs {
 }
 
 export class VoidKnightGloves extends Gloves {
-  override inventorySprite = placeholderLabel("voidKnightGloves");
+  override inventorySprite = inventoryIcon("voidKnightGloves");
   override get itemName(): ItemName {
     return ItemName.VOID_KNIGHT_GLOVES;
   }
@@ -124,7 +112,7 @@ export class VoidKnightGloves extends Gloves {
 }
 
 export class InquisitorsGreatHelm extends Helmet {
-  override inventorySprite = placeholderLabel("inquisitorsGreatHelm");
+  override inventorySprite = inventoryIcon("inquisitorsGreatHelm");
   override get itemName(): ItemName {
     return ItemName.INQUISITORS_GREAT_HELM;
   }
@@ -137,7 +125,7 @@ export class InquisitorsGreatHelm extends Helmet {
 }
 
 export class InquisitorsHauberk extends Chest {
-  override inventorySprite = placeholderLabel("inquisitorsHauberk");
+  override inventorySprite = inventoryIcon("inquisitorsHauberk");
   override get itemName(): ItemName {
     return ItemName.INQUISITORS_HAUBERK;
   }
@@ -150,7 +138,7 @@ export class InquisitorsHauberk extends Chest {
 }
 
 export class InquisitorsPlateskirt extends Legs {
-  override inventorySprite = placeholderLabel("inquisitorsPlateskirt");
+  override inventorySprite = inventoryIcon("inquisitorsPlateskirt");
   override get itemName(): ItemName {
     return ItemName.INQUISITORS_PLATESKIRT;
   }
@@ -261,7 +249,7 @@ class DivisionGlaive extends Projectile {
 }
 
 export class TonalzticsOfRalos extends RangedWeapon {
-  override inventorySprite = placeholderLabel("tonalzticsOfRalos");
+  override inventorySprite = inventoryIcon("tonalzticsOfRalos");
   override get itemName(): ItemName {
     return ItemName.TONALZTICS_OF_RALOS;
   }
