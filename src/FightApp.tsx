@@ -360,6 +360,56 @@ function TileIndicators() {
   );
 }
 
+type TabKey = "combat_key" | "spellbook_key" | "prayer_key" | "inventory_key" | "equipment_key";
+
+/** The side-panel tabs the SDK lets you bind, in the game's tab order, with its defaults. */
+const TAB_KEYS: readonly Readonly<{ setting: TabKey; label: string; fallback: string }>[] = [
+  { setting: "combat_key", label: "Combat", fallback: "F5" },
+  { setting: "inventory_key", label: "Inventory", fallback: "F4" },
+  { setting: "equipment_key", label: "Equipment", fallback: "F1" },
+  { setting: "prayer_key", label: "Prayer", fallback: "F3" },
+  { setting: "spellbook_key", label: "Spellbook", fallback: "F2" },
+];
+const KEY_CHOICES = ["", ...Array.from({ length: 12 }, (_, i) => `F${i + 1}`), "Escape"];
+
+/** OSRS-style F-key bindings for the side-panel tabs. A key goes to one tab: taking it unbinds the other. */
+function TabKeys() {
+  const settings = useSettingsSnapshot();
+  const bind = (setting: TabKey, key: string) => {
+    const patch: Partial<Record<TabKey, string>> = { [setting]: key };
+    if (key) for (const other of TAB_KEYS) if (other.setting !== setting && settings[other.setting] === key) patch[other.setting] = "";
+    Settings.set(patch);
+    Settings.notifyChanged();
+  };
+  return (
+    <div className="fight-indicators">
+      <div className="fight-tips-title">Tab keys</div>
+      {TAB_KEYS.map(({ setting, label }) => (
+        <label key={setting} className="fight-key">
+          {label}
+          <select value={settings[setting] ?? ""} onChange={(event) => bind(setting, event.target.value)}>
+            {KEY_CHOICES.map((key) => (
+              <option key={key || "none"} value={key}>
+                {key === "" ? "None" : key === "Escape" ? "Esc" : key}
+              </option>
+            ))}
+          </select>
+        </label>
+      ))}
+      <button
+        type="button"
+        className="fight-keys-reset"
+        onClick={() => {
+          Settings.set(Object.fromEntries(TAB_KEYS.map(({ setting, fallback }) => [setting, fallback])));
+          Settings.notifyChanged();
+        }}
+      >
+        Reset keys
+      </button>
+    </div>
+  );
+}
+
 function Sidebar({ params, fight, region }: Readonly<{ params: Params; fight: Fight | null; region: FightRegion }>) {
   const [draft, setDraft] = useState<Params>(params);
   const [credits, setCredits] = useState(false);
@@ -439,12 +489,14 @@ function Sidebar({ params, fight, region }: Readonly<{ params: Params; fight: Fi
       <hr />
       <TileIndicators />
       <hr />
+      <TabKeys />
+      <hr />
       <div className="fight-tips">
         <div className="fight-tips-title">{`Phase ${phaseNow}`}</div>
         <ul>{TIPS[phaseNow].map((tip) => <li key={tip}>{tip}</li>)}</ul>
       </div>
       <hr />
-      <RuneScapeButton type="button" style={{ width: "100%" }} onClick={() => ControlPanelController.controller.setActiveControl("SETTINGS")}>Keybinds</RuneScapeButton>
+      <RuneScapeButton type="button" style={{ width: "100%" }} onClick={() => ControlPanelController.controller.setActiveControl("SETTINGS")}>Game settings</RuneScapeButton>
       <RuneScapeButton type="button" style={{ width: "100%" }} onClick={() => window.location.assign(`${window.location.pathname}?mode=p4drill`)}>Phase 4 drills</RuneScapeButton>
       <RuneScapeButton type="button" style={{ width: "100%" }} onClick={() => setCredits((open) => !open)}>Credits & sources</RuneScapeButton>
       <RuneScapeButton type="button" style={{ width: "100%" }} onClick={() => window.open(FOLLOW_URL, "_blank", "noopener")}>Follow @alrodi on X</RuneScapeButton>

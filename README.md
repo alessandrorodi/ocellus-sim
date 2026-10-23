@@ -29,7 +29,8 @@ fight.
 - **Prayer that matters**: shots are checked against your overhead when they land, his own overheads block your
   style, and turning on a protection prayer as he starts to spin gets you "injured".
 - **Practice tools**: danger-tile highlighting, community tile markers, phase 2 skip tiles, a no-death practice mode,
-  HP scaling for 1-5 raiders, ranged and melee setups, and seeds you can replay.
+  HP scaling for 1-5 raiders, ranged and melee setups, seeds you can replay, and F-key bindings for the side-panel
+  tabs (saved in your browser).
 - **Phase 4 drills**: Julian-Dasilva's original phase 4 trainer, kept as `?mode=p4drill`.
 
 ## The fight
