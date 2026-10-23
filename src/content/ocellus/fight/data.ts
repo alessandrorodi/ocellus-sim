@@ -7,6 +7,8 @@
  *  [W] OSRS Wiki, Ocellus and The Fractured Archive/Strategies (2026-10-21)
  *  [G] RuneLite gameval AnimationID / SpotanimID / NpcID (cache 241)
  *  [V] ShadowStalkerTM, "Duo The Fractured Archive | OSRS Raid 4", youtube.com/watch?v=HAgq_qg0OIY (12:17 kill)
+ *  [K] a RuneLite fight log of a spectated 8-raider kill, 2026-10-23: every anim, floor
+ *      spotanim and projectile, every raider's hitsplats with their overhead, and positions around Untether, by tick
  * Ticks are 600 ms game ticks unless marked cc (20 ms client cycles).
  */
 
@@ -292,51 +294,58 @@ export const P2 = {
   poolDamage: range(3, 5),
 } as const;
 
+/** Phase 3's specials, in the order a quadrant runs them. */
+export type P3Special = "spin" | "insolence" | "untether";
+const FIRST_SPECIALS: readonly P3Special[] = ["spin", "untether"];
+const LATER_SPECIALS: readonly P3Special[] = ["spin", "insolence", "spin", "untether"];
+const NO_TICKS: readonly number[] = [];
+
 export const P3 = {
   combatLevel: 1601,
   defence: 250,
   defenceBonuses: { stab: 150, slash: 100, crush: 30, magic: 200, range: 250 },
   jumpToCornerAfter: 6,
   /**
-   * Segment timelines from the segment start S. [R] `volleys` are the recorded casts of "Your panic... is futile...";
-   * the wiki explains them as his answer to a tank out of his reach, which is how the script fires them now.
+   * His attacks are a chain, each move timed from the one before, not a clock from the segment start. Two swings 3
+   * ticks apart, the shadow slash 3 after the second, and his next move 4 after the slash. After two such sets comes the
+   * quadrant's next special. "Your panic... is futile..." (nobody in his reach) takes a swing's place, and the next move
+   * comes 6 ticks after it, so the rest of the chain runs 3 ticks late. [K], which reproduces [R]'s fixed segment
+   * timelines (first quadrant: specials at 24 and 53; later ones at 24, 59, 99 and 134 with a panic after each spin).
    */
-  first: {
-    triples: [4, 14, 33, 43],
-    spins: [24],
-    volleys: [] as readonly number[],
-    vine: 36,
-    insolence: null as number | null,
-    rifts: [] as readonly number[],
-    bombs: [6, 9],
-    untether: 53,
-  },
-  later: {
-    triples: [4, 14, 39, 49, 79, 89, 114, 124],
-    spins: [24, 99],
-    volleys: [36, 111],
-    vine: 39,
-    insolence: 59 as number | null,
-    rifts: [3, 51, 111],
-    bombs: [6],
-    untether: 134,
-  },
+  firstMove: 4,
+  swingGap: 3,
+  afterPanic: 6,
+  afterSlash: 4,
+  setsPerSpecial: 2,
+  /** On the segment's own clock from its start S: void bombs (when they drop), the vine and the rifts. [R] [K] */
+  first: { specials: FIRST_SPECIALS, bombs: [6, 9], vine: 36, rifts: NO_TICKS },
+  later: { specials: LATER_SPECIALS, bombs: [6], vine: 39, rifts: [3, 51, 111] },
+  /** Swings hit everyone near him on the animation tick: 1-7 through Protect from Melee. [R] [K] */
   basicHitProtected: range(1, 7),
   basicHitUnprotected: range(12, 19),
-  slashAfter: 6,
+  /** The shadow slash lands the tick after its animation. [K] */
+  slashLands: 1,
   slashDamage: range(25, 28),
   /** The shadow slash and Insolence: 3 tiles wide, to the platform edge. [V] duo 20:24, Bubba OSRS guide 4:56 [W] */
   waveWidth: 3,
-  spinLoopEvery: 3,
+  /**
+   * The spin: saw i cuts 5 + 3i ticks in, on the tick its loop animation (the last saw's: the end animation) plays; an
+   * overhead up on the tick before is severed. His next move comes 4 ticks after the last cut. [K] [V]
+   */
+  sawFirstCut: 5,
+  sawEvery: 3,
+  afterSpin: 4,
   spinDamage: range(15, 27),
   /** "Severing your prayer!" locks protection prayers this long: back on 3 ticks later in [V] duo 18:53-18:55. */
   severTicks: 3,
+  panicLands: 2,
   volleyDamage: range(20, 26),
   patchDamage: range(6, 7),
   patchLasts: range(21, 51),
   /**
    * Void bombs fall on every raider but the tank (solo: you), and on the same tile turned into each other standing
    * quadrant. Their voids stay until the quadrant falls, so the last quadrant's carry into phase 4. [R] [M] 8:55
+   * Each shows (spotanim 4299) 2 ticks before it drops. [K]
    */
   bombDropAfter: 2,
   bombDamage: range(6, 11),
@@ -350,9 +359,16 @@ export const P3 = {
   vineHp: 44,
   vineBreakWithin: 14,
   vineDamage: range(50, 55),
+  /**
+   * "Insolence...": superior slashes animate 2, 7 and 12 ticks on, each landing 3 after its animation, and his swings
+   * resume 20 ticks after the shout. [K] Damage: [R] 39-41, [K] 38, 43 and 46.
+   */
+  insolenceFirst: 2,
   insolenceSlashes: 3,
   insolenceEvery: 5,
-  insolenceDamage: range(39, 41),
+  insolenceLands: 3,
+  afterInsolence: 20,
+  insolenceDamage: range(38, 46),
   insolenceDebrisLasts: 16,
   riftHp: 44,
   riftLasts: 12,
@@ -360,36 +376,50 @@ export const P3 = {
   augmenterBoost: { melee: 17, rangedMagic: 13 },
   healRiftEvery: 4,
   healRiftHeal: [12, 14],
-  /** Untether, from U. [R] [W] */
+  /** Untether, from U. [R] [W] [K] */
   untether: {
-    /** Each pool wave comes with a magic shot at everyone: "pray mage, he'll mage you constantly" [M] 4:37; [R]'s 39 zeros there. */
     pools: [6, 10, 14, 18],
+    /**
+     * Magic at everyone lands with each pool wave after the first: "pray mage, he'll mage you constantly" [M] 4:37;
+     * zeros through Protect from Magic on every raider in [K] and [R].
+     */
+    magic: [10, 14, 18, 22],
+    magicFlight: 2,
     magicDamage: range(20, 28),
     unleashVfx: 18,
-    /** Outside his zone from the eruption until the slam: one hit. So step in early, but out on the last tick. [M] 5:00 */
+    /** The arena flares under him. No hit comes with it. [K] */
     erupt: 25,
-    eruptDamage: range(40, 45),
+    /**
+     * The slam hits whoever is not under his 3x3 at the end of the tick before it; the aftershock a tick later hits
+     * whoever is still under him. So be under him by the end of U+28 and one tile out at the end of U+29. [K]: 36 on the
+     * one raider outside, then 21 and 41 on the two still under. [M] 5:00: "step out is tick perfect".
+     */
     slam: 29,
     slamDamage: range(34, 39),
-    slamAfterDamage: range(18, 19),
-    /** The purple-bordered zone under him: his 3x3 plus two tiles. [W] */
-    zoneRing: 2,
+    aftershock: 30,
+    aftershockDamage: range(18, 41),
     obliteration: 31,
     escapeLine: 42,
     gone: 44,
     nextSegment: 48,
   },
+  /**
+   * The quadrant falls once his whole-number HP% is down to 75 / 50 / 25 (the sim holds him there), as soon as he is
+   * between moves: [K]'s second and third quadrants fell 1 tick after a set's slash, his HP held at the floor, with no
+   * Untether. During Untether it waits for U+31. [W] [O] [V] [K]
+   */
   hpFloors: [0.75, 0.5, 0.25],
-  /** A threshold reached between attacks still collapses the quadrant within this many ticks. [V] duo 18:20-18:26 */
-  collapseWithin: 10,
   jumpTicks: 2,
 } as const;
 
 export const P4 = {
-  /** "End..." lead-in, then a 60-tick cycle from D. [R] [T] */
-  hiddenFor: 4,
-  shoutAt: 5,
-  firstCycleAt: 8,
+  /**
+   * "End..." 1 tick into the phase, then a 60-tick cycle from his first Deflect, 4 ticks in. He takes hits from 3 ticks
+   * in, so he is back with the shout. [K] (was 5 and 8 from [R] [T])
+   */
+  hiddenFor: 1,
+  shoutAt: 1,
+  firstCycleAt: 4,
   cycle: 60,
   innerVoid: { from: 0, until: 22 },
   outerVoid: { from: 31, until: 51 },

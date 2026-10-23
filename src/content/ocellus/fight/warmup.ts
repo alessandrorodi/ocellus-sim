@@ -16,7 +16,7 @@ const FLOOR_SPOTS: Readonly<Record<StartPhase, readonly number[]>> = {
   ],
   2: [SPOT.swordDrop, SPOT.swordDropExplosion, SPOT.swordRepair, SPOT.p2Pool, SPOT.safePortalSpawn, SPOT.safePortalIdle, SPOT.safePortalDespawn],
   3: [
-    ...SPOT.collapsingExplosion, SPOT.bombSpawn, SPOT.bombIdle, SPOT.bombDrop, SPOT.bombImpact, SPOT.shadowSlash,
+    ...SPOT.collapsingExplosion, SPOT.bombIdle, SPOT.bombDrop, SPOT.bombImpact, SPOT.shadowSlash,
     SPOT.fallingDebris, SPOT.superiorSlash, SPOT.p2Pool, ...SPOT.unleashArena,
   ],
   4: [SPOT.voidChainExplosion, SPOT.soulFragmentSpawn12, SPOT.soulFragmentSpawn6, SPOT.soulFragmentIdle, SPOT.soulFragmentDespawn],

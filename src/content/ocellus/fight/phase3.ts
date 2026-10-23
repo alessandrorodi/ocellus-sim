@@ -2,7 +2,7 @@ import type { Unit } from "osrs-sdk";
 import type { TileMark } from "./effects";
 import type { Fight, PhaseScript } from "./Fight";
 import { CHAT } from "./Fight";
-import type { VoidLocKind } from "./data";
+import type { P3Special, VoidLocKind } from "./data";
 import { P3, SEQ, SPOT, VOID_LOC } from "./data";
 import { LocField } from "./locs";
 import type { LocView } from "./locs";
@@ -37,6 +37,8 @@ type Telegraph = { tiles: ATile[]; landsAt: number; colour: number };
 type Crossing = { arm: Arm; from: Quadrant; to: Quadrant; bank: ATile; hops: ATile[]; hopping: boolean };
 
 const RIFT_ORDER: readonly AddKind[] = ["rift-buff", "rift-basic", "rift-heal"];
+/** The shadow slash's telegraph colour, drawn red. */
+const SLASH_MARK = 0x2a0a3a;
 const GOD_NAME = { bandos: "Bandosian", saradomin: "Saradomin", armadyl: "Armadylean", zaros: "Zarosian" } as const;
 const GOD_GLOW = { bandos: SPOT.glowBandos, saradomin: SPOT.glowSaradomin, armadyl: SPOT.glowArmadyl, zaros: SPOT.glowZaros } as const;
 
@@ -64,9 +66,21 @@ export class Phase3 implements PhaseScript {
   private segment = 0;
   private quadrant: Quadrant = "SE";
   private segmentStart = 0;
-  private untether: number | null = null;
   private levitating = false;
   private stationary = false;
+  /** Between "Obliteration..." and his landing in the next quadrant. */
+  private collapsing = false;
+  /** The chain: sets of swings since the last special, swings (or panics) in this set, specials this rotation. */
+  private sets = 0;
+  private swings = 0;
+  private specials = 0;
+  /**
+   * He is in the middle of a move until this tick (his jump to the first corner included); a quadrant whose floor is
+   * reached falls once he is past it. [K]
+   */
+  private busyUntil = Number.POSITIVE_INFINITY;
+  /** The quadrant's rotation again, after an Untether that came before his HP was low enough: no second Untether. */
+  private repeat = false;
   private patches: Patch[] = [];
   private telegraphs: Telegraph[] = [];
   private zone: Body | null = null;
@@ -78,8 +92,6 @@ export class Phase3 implements PhaseScript {
   private lastFlyingMessage = -10;
   private floorFraction: number = P3.hpFloors[0];
   private finished = false;
-  /** A quadrant waiting on his HP to fall, after an Untether that came too early. */
-  private awaiting: Quadrant | null = null;
   /** Bumped to cancel the rest of a segment's scheduled attacks. */
   private rotation = 0;
 
@@ -125,42 +137,44 @@ export class Phase3 implements PhaseScript {
 
   // ---- segments ---------------------------------------------------------------------------------------------------
 
-  /** `repeat`: the quadrant's rotation again while his HP is above its threshold, without a second Untether. */
+  /**
+   * He lands in a corner and starts the quadrant's chain of moves, its specials from the top of the rotation.
+   * `repeat`: the rotation again while his HP is above its threshold, without a second Untether.
+   */
   private startSegment(q: Quadrant, repeat = false): void {
     const { fight } = this;
     if (this.fight.destroyed.has(q)) q = QUADRANTS.find((other) => !fight.destroyed.has(other)) ?? q;
+    this.rotation++;
     this.quadrant = q;
     this.segmentStart = fight.tick;
     this.floorFraction = P3.hpFloors[this.segment];
     this.levitating = false;
     this.stationary = false;
+    this.collapsing = false;
     this.zone = null;
+    this.sets = 0;
+    this.swings = 0;
+    this.specials = 0;
+    this.busyUntil = fight.tick;
+    // Untether comes once a quadrant [V]; a slow kill just loops the rest of the rotation.
+    this.repeat = repeat;
     const boss = this.boss;
     boss.teleport(CORNERS[q]);
     boss.attackable = true;
     boss.pose = null;
     fight.setOverhead(null);
     boss.face(fight.player);
-    const plan = this.segment === 0 ? P3.first : P3.later;
-    for (const t of plan.triples) this.at(t, () => this.triple());
-    for (const t of plan.spins) this.at(t, () => this.spin());
-    for (const t of plan.bombs) this.at(t, () => this.bombs());
+    const plan = this.plan();
+    for (const t of plan.bombs) this.at(t - P3.bombDropAfter, () => this.bombs());
     for (const t of plan.rifts) this.at(t, () => this.spawnRift());
     this.at(plan.vine, () => this.spawnVine());
-    if (plan.insolence !== null) {
-      const start = plan.insolence;
-      this.at(start, () => this.fight.say("Insolence...", 3));
-      for (let i = 0; i < P3.insolenceSlashes; i++) this.at(start + i * P3.insolenceEvery, () => this.superiorSlash());
-    }
     if (this.segment > 0 && this.riftKind === null) this.riftKind = fight.rng.pick(RIFT_ORDER);
     else if (this.segment > 1 && this.riftKind !== null) this.riftKind = RIFT_ORDER[(RIFT_ORDER.indexOf(this.riftKind) + 1) % RIFT_ORDER.length];
-    if (repeat) {
-      // Untether comes once a quadrant [V]; a slow kill just loops the rotation.
-      this.at(plan.untether, () => this.startSegment(q, true));
-      return;
-    }
-    this.untether = this.segmentStart + plan.untether;
-    this.at(plan.untether, () => this.startUntether());
+    this.next(P3.firstMove, () => this.swing());
+  }
+
+  private plan(): typeof P3.first | typeof P3.later {
+    return this.segment === 0 ? P3.first : P3.later;
   }
 
   /** Schedule relative to the segment's start; dropped if the rotation is cut short by the quadrant falling. */
@@ -168,10 +182,36 @@ export class Phase3 implements PhaseScript {
     const delay = this.segmentStart + offset - this.fight.tick;
     const rotation = this.rotation;
     this.fight.after(Math.max(1, delay), () => {
-      if (rotation !== this.rotation) return;
-      if (this.collapseDue()) return;
-      run();
+      if (rotation === this.rotation) run();
     });
+  }
+
+  /** His next move in the chain, `ticks` from now. If his HP is at the floor by then, the quadrant falls instead. */
+  private next(ticks: number, move: () => void): void {
+    const rotation = this.rotation;
+    this.fight.after(ticks, () => {
+      if (rotation !== this.rotation || this.collapseDue()) return;
+      move();
+    });
+  }
+
+  /** After two sets of swings, the quadrant's next special. */
+  private special(): void {
+    const rotation = this.plan().specials.filter((s) => !(this.repeat && s === "untether"));
+    const special: P3Special = rotation[this.specials % rotation.length];
+    this.specials++;
+    switch (special) {
+      case "spin":
+        return this.spin();
+      case "insolence":
+        return this.insolence();
+      case "untether":
+        return this.startUntether();
+      default: {
+        const unhandled: never = special;
+        return unhandled;
+      }
+    }
   }
 
   private body(): Body {
@@ -188,34 +228,58 @@ export class Phase3 implements PhaseScript {
     return insideX || insideZ;
   }
 
-  private triple(): void {
-    if (this.levitating) return;
+  /**
+   * One of a set's two swings: melee at everyone near him, landing on its animation (solo, that's you). With nobody
+   * in his reach, "Your panic... is futile..." takes the swing's place and the chain runs 3 ticks late. [K] [W]
+   */
+  private swing(): void {
     const { fight } = this;
     const boss = this.boss;
-    const swing = () => {
-      if (this.levitating) return;
-      // Out of his reach, the tank gets the spread void shot instead. [W] Strategies, phase 3
-      if (!this.inMelee()) return this.panic();
+    let gap: number = P3.swingGap;
+    if (this.inMelee()) {
       boss.playAnimation(SEQ.p3MeleeBasic);
       boss.face(fight.player);
       fight.hit({ style: "melee", amount: (prayer) => fight.rng.roll(prayer === "melee" ? P3.basicHitProtected : P3.basicHitUnprotected) });
-    };
-    swing();
-    fight.after(3, swing);
-    fight.after(P3.slashAfter - 2, () => {
-      if (this.levitating) return;
-      const line = this.slashLine();
-      this.telegraphs.push({ tiles: line, landsAt: fight.tick + 2, colour: 0x2a0a3a });
+    } else {
+      this.panic();
+      gap = P3.afterPanic;
+    }
+    this.swings++;
+    this.busyUntil = fight.tick + gap;
+    if (this.swings < 2) {
+      this.next(gap, () => this.swing());
+      return;
+    }
+    // The slash's band shows a tick before his animation: the last tick you can click out of it.
+    const rotation = this.rotation;
+    fight.after(gap - 1, () => {
+      if (rotation !== this.rotation) return;
+      this.telegraphs.push({ tiles: this.slashLine(), landsAt: fight.tick + 1 + P3.slashLands, colour: SLASH_MARK });
     });
-    fight.after(P3.slashAfter, () => {
-      if (this.levitating) return;
-      const pending = this.telegraphs.find((t) => t.landsAt === fight.tick && t.colour === 0x2a0a3a);
-      const line = pending?.tiles ?? this.slashLine();
-      this.telegraphs = this.telegraphs.filter((t) => t !== pending);
-      boss.playAnimation(SEQ.p3MeleeSlash);
-      line.forEach((tile, i) => fight.spot(tile, SPOT.shadowSlash, { delay: Math.floor(i / 3) * 2, maxTicks: 3 }));
-      if (line.some((t) => same(t, fight.playerTile))) fight.hit({ amount: () => fight.rng.roll(P3.slashDamage) });
+    this.next(gap, () => this.slash());
+  }
+
+  /** The shadow slash ends a set, landing the tick after its animation; his next move comes 4 ticks after it. [K] */
+  private slash(): void {
+    const { fight } = this;
+    const boss = this.boss;
+    const pending = this.telegraphs.find((t) => t.colour === SLASH_MARK && t.landsAt === fight.tick + P3.slashLands);
+    const band = pending?.tiles ?? this.slashLine();
+    boss.playAnimation(SEQ.p3MeleeSlash);
+    boss.face(fight.player);
+    fight.after(P3.slashLands, () => {
+      band.forEach((tile, i) => fight.spot(tile, SPOT.shadowSlash, { delay: Math.floor(i / 3) * 2, maxTicks: 3 }));
+      if (band.some((t) => same(t, fight.playerTile))) fight.hit({ amount: () => fight.rng.roll(P3.slashDamage) });
     });
+    this.swings = 0;
+    this.sets++;
+    this.busyUntil = fight.tick;
+    if (this.sets < P3.setsPerSpecial) {
+      this.next(P3.afterSlash, () => this.swing());
+      return;
+    }
+    this.sets = 0;
+    this.next(P3.afterSlash, () => this.special());
   }
 
   /** The shadow slash: a wave P3.waveWidth tiles wide from his body toward his target, to the platform edge. */
@@ -248,13 +312,12 @@ export class Phase3 implements PhaseScript {
   }
 
   /**
-   * The charged blade: one saw per quadrant he has destroyed, plus one. Each saw forms (black portal, then the cog) a
-   * tick before it cuts. An overhead up as it forms is severed and locked for P3.severTicks; Protect from Melee up as
-   * it cuts blocks it. So prayer off as it forms, on for the cut, off again before the next. [V] duo 18:52-18:56 and
-   * 21:33-21:36, Love's melee flick guide [W]
+   * The charged blade: one saw per quadrant he has destroyed, plus one. Saw i cuts at P+5+3i, on the tick his loop
+   * animation (the last saw's: the end animation) plays [K]. An overhead up on the tick before is severed and locked
+   * for P3.severTicks; Protect from Melee up as it cuts blocks it. So prayer off on P+4+3i, on for the cut, off again
+   * before the next. [K] [V] duo 18:52-18:56 and 21:33-21:36, Love's melee flick guide [W]
    */
   private spin(): void {
-    if (this.levitating) return;
     const { fight } = this;
     const boss = this.boss;
     this.stationary = true;
@@ -264,27 +327,28 @@ export class Phase3 implements PhaseScript {
     const loops = this.fight.destroyed.size;
     for (let i = 0; i <= loops; i++) {
       const last = i === loops;
-      fight.after(3 + 3 * i, () => {
-        boss.playAnimation(last ? SEQ.p3PrayerOut : SEQ.p3PrayerLoop);
-        boss.addSpotAnim({ id: last ? SPOT.meleePrayerOut : SPOT.meleePrayer, channel: "spin" });
-      });
-      fight.after(4 + 3 * i, () => {
+      const cut = P3.sawFirstCut + P3.sawEvery * i;
+      fight.after(cut - 1, () => {
         if (fight.player.protection === null) return;
         fight.player.prayerController.disableProtectionPrayersForTicks(P3.severTicks);
         fight.message("Ocellus disrupts your concentration, severing your prayer!", CHAT.red);
         fight.message("You've been injured and can't use protection prayers!", CHAT.red);
       });
-      fight.after(5 + 3 * i, () => {
+      fight.after(cut, () => {
+        boss.playAnimation(last ? SEQ.p3PrayerOut : SEQ.p3PrayerLoop);
+        boss.addSpotAnim({ id: last ? SPOT.meleePrayerOut : SPOT.meleePrayer, channel: "spin" });
+        if (last) this.stationary = false;
         if (reach(fight.playerTile, this.boss.tile) > 8) return;
         fight.hit({ style: "melee", amount: (prayer) => (prayer === "melee" ? 0 : fight.rng.roll(P3.spinDamage)) });
-        if (last) this.stationary = false;
       });
     }
+    const lastCut = P3.sawFirstCut + P3.sawEvery * loops;
+    this.busyUntil = fight.tick + lastCut;
+    this.next(lastCut + P3.afterSpin, () => this.swing());
   }
 
-  /** "Your panic... is futile...": a magic shot that leaves a void patch where it lands. */
+  /** "Your panic... is futile...": a magic shot at everyone, landing 2 ticks on, that leaves a void patch. [R] [K] */
   private panic(): void {
-    if (this.levitating) return;
     const { fight } = this;
     const boss = this.boss;
     fight.say("Your panic... is futile...", 3);
@@ -293,7 +357,7 @@ export class Phase3 implements PhaseScript {
     fight.hit({
       from: boss,
       style: "magic",
-      delay: 2,
+      delay: P3.panicLands,
       amount: fight.prayable("magic", P3.volleyDamage),
       visuals: { spotAnim: { id: SPOT.magicProjectile }, startCycleOffset: 45, endCycleOffset: 60, verticalOffset: 1 },
       onLand: () => {
@@ -305,8 +369,9 @@ export class Phase3 implements PhaseScript {
 
   /**
    * Void bombs: one over you (in a team, over everyone but the tank) and one on the same tile turned into each other
-   * standing quadrant. Each drops two ticks later and leaves a void that stays until its quadrant falls, so where you
-   * stand now decides where the last quadrant's voids sit in phase 4: the edge, not the middle. [R] [M]
+   * standing quadrant. Each shows (4299) two ticks before it drops and leaves a void that stays until its quadrant
+   * falls, so where you stand now decides where the last quadrant's voids sit in phase 4: the edge, not the middle.
+   * [R] [M] [K]
    */
   private bombs(): void {
     const { fight } = this;
@@ -316,8 +381,7 @@ export class Phase3 implements PhaseScript {
       if (fight.destroyed.has(q)) continue;
       const tile = turnInto(here, from, q);
       if (!fight.isWalkable(tile) || covers(this.body(), tile)) continue;
-      fight.spot(tile, SPOT.bombSpawn, { height: 2, maxTicks: 2 });
-      fight.spot(tile, SPOT.bombIdle, { height: 2, loopTicks: 1, maxTicks: 2 });
+      fight.spot(tile, SPOT.bombIdle, { height: 2, loopTicks: 1, maxTicks: P3.bombDropAfter });
       this.telegraphs.push({ tiles: [tile], landsAt: fight.tick + P3.bombDropAfter, colour: 0x8a2be2 });
       fight.after(P3.bombDropAfter, () => {
         fight.spot(tile, SPOT.bombDrop, { maxTicks: 3 });
@@ -394,15 +458,24 @@ export class Phase3 implements PhaseScript {
     this.fight.player.addSpotAnim({ id: SPOT.entangleEnd, channel: "vine" });
   }
 
-  /** "Insolence...": three 4-wide bands, each toward where you stand when he winds up. */
+  /** "Insolence...": three superior slashes, then his swings again 20 ticks after the shout. [K] */
+  private insolence(): void {
+    const { fight } = this;
+    fight.say("Insolence...", 3);
+    for (let i = 0; i < P3.insolenceSlashes; i++) fight.after(P3.insolenceFirst + i * P3.insolenceEvery, () => this.superiorSlash());
+    this.busyUntil = fight.tick + P3.insolenceFirst + (P3.insolenceSlashes - 1) * P3.insolenceEvery + P3.insolenceLands;
+    this.next(P3.afterInsolence, () => this.swing());
+  }
+
+  /** A band toward where you stand when he winds up, landing 3 ticks after his animation. [K] */
   private superiorSlash(): void {
     const { fight } = this;
     const boss = this.boss;
     const band = this.bandTowardsPlayer(P3.waveWidth);
     boss.playAnimation(SEQ.p3SuperiorSlash);
     boss.face(fight.player);
-    this.telegraphs.push({ tiles: band, landsAt: fight.tick + 2, colour: 0x5a0a0a });
-    fight.after(2, () => {
+    this.telegraphs.push({ tiles: band, landsAt: fight.tick + P3.insolenceLands, colour: 0x5a0a0a });
+    fight.after(P3.insolenceLands, () => {
       const middle = band.filter((t, i) => i % 3 === 0);
       middle.forEach((t, i) => fight.spot(t, SPOT.superiorSlash, { delay: i, maxTicks: 3 }));
       if (band.some((t) => same(t, fight.playerTile))) fight.hit({ amount: () => fight.rng.roll(P3.insolenceDamage) });
@@ -474,44 +547,30 @@ export class Phase3 implements PhaseScript {
     boss.faceTile(at(0, 0));
     boss.playAnimation(SEQ.p3UnleashIn);
     fight.setOverhead("protect-melee");
-    this.zone = { sw: { x: CORNERS[q].x - 1, z: CORNERS[q].z - 1 }, size: 5 };
+    // His 3x3: be under it for the slam, then one tile out for the aftershock.
+    this.zone = this.body();
     const u = P3.untether;
     fight.after(2, () => (boss.pose = SEQ.p3UnleashLoop));
-    for (const t of u.pools) {
-      fight.after(t, () => {
-        this.untetherPools();
-        this.untetherShot();
-      });
-    }
+    for (const t of u.pools) fight.after(t, () => this.untetherPools());
+    for (const t of u.magic) fight.after(t - u.magicFlight, () => this.untetherShot());
     fight.after(u.unleashVfx, () => boss.addSpotAnim({ id: SPOT.unleashOnBoss, channel: "unleash" }));
-    fight.after(u.erupt - 2, () => (this.zoneGlow = 1));
     fight.after(u.erupt, () => {
+      this.zoneGlow = 1;
       const rotation = { NE: 2, NW: 1, SW: 0, SE: 3 }[q];
       fight.spot(bodyCentreTile(this.body()), SPOT.unleashArena[rotation], { maxTicks: 6 });
     });
-    // The eruption holds until the slam: out of the zone on any of those ticks is one hit, so you step out on the last.
-    let erupted = false;
-    for (let t = u.erupt; t < u.slam; t++) {
-      fight.after(t, () => {
-        const here = fight.playerTile;
-        if (erupted || quadrantOf(here) !== q || !this.zone || covers(this.zone, here)) return;
-        erupted = true;
-        fight.hit({ amount: () => fight.rng.roll(u.eruptDamage) });
-      });
-    }
-    fight.after(u.slam - 2, () => (this.zoneGlow = 2));
+    // Brightest on the tick to click out: you leave his 3x3 on the slam's tick, after it has judged you.
+    fight.after(u.slam - 1, () => (this.zoneGlow = 2));
+    // Each is judged on where you stood at the end of the tick before. [K]
     fight.after(u.slam, () => {
       boss.pose = null;
       boss.playAnimation(SEQ.p3UnleashOut);
       this.zoneGlow = 0;
-      const zone = this.zone;
-      if (zone && covers(zone, fight.playerTile)) {
-        fight.hit({ amount: () => fight.rng.roll(u.slamDamage) });
-        fight.after(1, () => {
-          if (covers(zone, fight.playerTile)) fight.hit({ amount: () => fight.rng.roll(u.slamAfterDamage) });
-        });
-      }
       this.zone = null;
+      if (!covers(this.body(), fight.playerTile)) fight.hit({ amount: () => fight.rng.roll(u.slamDamage) });
+    });
+    fight.after(u.aftershock, () => {
+      if (covers(this.body(), fight.playerTile)) fight.hit({ amount: () => fight.rng.roll(u.aftershockDamage) });
     });
     fight.after(u.obliteration, () => this.obliterateWhenDue(q));
   }
@@ -522,28 +581,26 @@ export class Phase3 implements PhaseScript {
     return shown <= Math.round(this.floorFraction * 100);
   }
 
-  /** At an attack decision while a quadrant waits on his HP: if it is low enough, the quadrant falls instead. */
+  /**
+   * His HP is down to the quadrant's floor and he is past his current move (a set's slash, the last saw, the last
+   * superior slash): the quadrant falls now. [K]: 1 tick after a set's slash, and 1 tick after the floor was reached
+   * between moves. During Untether it waits for U+31 (obliterateWhenDue).
+   */
   private collapseDue(): boolean {
-    const q = this.awaiting;
-    if (q === null || this.levitating || this.zone !== null || !this.atThreshold()) return false;
-    this.awaiting = null;
-    this.rotation++;
-    this.obliterate(q);
+    if (this.finished || this.collapsing || this.levitating || this.fight.tick <= this.busyUntil || !this.atThreshold()) return false;
+    this.obliterate(this.quadrant);
     return true;
   }
 
   /**
-   * The quadrant falls only once his HP is down to this segment's threshold. [W] [O] [V] Straight after Untether if
-   * it already is (both recorded fights, fast teams); otherwise he lands and keeps cycling the quadrant's attacks, and
-   * it falls at his first attack decision after the threshold (see collapseDue).
+   * After Untether the quadrant falls if his HP is already down to its threshold (both of [R]'s fights, and [K]'s
+   * first quadrant). Otherwise he lands and runs the rotation again, and it falls once he gets there (collapseDue).
    */
   private obliterateWhenDue(q: Quadrant): void {
     if (this.atThreshold()) {
-      this.awaiting = null;
       this.obliterate(q);
       return;
     }
-    this.awaiting = q;
     this.levitating = false;
     this.boss.pose = null;
     this.startSegment(q, true);
@@ -560,13 +617,13 @@ export class Phase3 implements PhaseScript {
     });
   }
 
-  /** Magic from the air with each pool wave, so Untether is prayed with Protect from Magic. [M] [R] */
+  /** Magic from the air with each pool wave after the first, so Untether is prayed with Protect from Magic. [M] [R] [K] */
   private untetherShot(): void {
     const { fight } = this;
     fight.hit({
       from: this.boss,
       style: "magic",
-      delay: 2,
+      delay: P3.untether.magicFlight,
       amount: fight.prayable("magic", P3.untether.magicDamage),
       visuals: { spotAnim: { id: SPOT.magicProjectile }, startCycleOffset: 45, endCycleOffset: 60, verticalOffset: 1 },
       onLand: () => fight.player.addSpotAnim({ id: SPOT.magicImpact, channel: "impact" }),
@@ -577,6 +634,9 @@ export class Phase3 implements PhaseScript {
     const { fight } = this;
     const boss = this.boss;
     const u = P3.untether;
+    this.rotation++;
+    this.collapsing = true;
+    this.stationary = true;
     fight.say(fight.rng.chance(0.5) ? "Obliteration..." : "Run... It matters not...", 4);
     boss.playAnimation(SEQ.p3QuadrantDestroyIn);
     boss.addSpotAnim({ id: SPOT.collapseIn, channel: "collapse" });
@@ -593,7 +653,7 @@ export class Phase3 implements PhaseScript {
       });
     }
     fight.after(u.escapeLine - u.obliteration, () => {
-      fight.say(fight.rng.chance(0.5) ? "You can't... escape... the end..." : "This end... comes...", 3);
+      fight.say(fight.rng.pick(["You can't... escape... the end...", "This end... comes...", "Everything... ends..."]), 3);
       boss.playAnimation(SEQ.p3UnleashOut90);
       boss.addSpotAnim({ id: SPOT.collapseOut1, channel: "collapse" });
     });
@@ -646,6 +706,7 @@ export class Phase3 implements PhaseScript {
     const patch = this.patches.find((p) => same(p.tile, here));
     if (patch && (fight.tick - patch.placed) % 2 === 0) fight.hit({ amount: () => fight.rng.roll(P3.patchDamage) });
     this.stepCrossing();
+    if (this.collapseDue()) return;
     if (!this.levitating && !this.stationary) this.chase();
   }
 
@@ -818,15 +879,12 @@ export class Phase3 implements PhaseScript {
     return null;
   }
 
-  /** Once the threshold is hit, the quadrant falls at his next attack decision, or within P3.collapseWithin ticks. [V] */
-  onBossHit(): void {
-    if (this.awaiting === null || !this.atThreshold()) return;
-    this.fight.after(P3.collapseWithin, () => this.collapseDue());
-  }
+  /** A threshold reached is picked up on the next tick he is free (step, collapseDue). */
+  onBossHit(): void {}
 
   marks(): readonly TileMark[] {
     const marks: TileMark[] = [];
-    for (const t of this.telegraphs) for (const tile of t.tiles) marks.push({ tile, colour: t.colour === 0x2a0a3a ? 0xb01030 : t.colour, opacity: 0.35, inset: 0.06 });
+    for (const t of this.telegraphs) for (const tile of t.tiles) marks.push({ tile, colour: t.colour === SLASH_MARK ? 0xb01030 : t.colour, opacity: 0.35, inset: 0.06 });
     if (this.zone) {
       for (let x = 0; x < this.zone.size; x++) {
         for (let z = 0; z < this.zone.size; z++) {
