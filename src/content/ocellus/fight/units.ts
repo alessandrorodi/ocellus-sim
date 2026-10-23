@@ -445,6 +445,17 @@ export class FightPlayer extends Player {
     return "ranged";
   }
 
+  /**
+   * The vine roots you on its own tile, and the SDK (like the game) won't let you attack what you stand under. Solo,
+   * with "attack your own vine" on, you cut it from there; in a team a teammate does.
+   */
+  override setHasLOS(): void {
+    super.setHasLOS();
+    const target = this.aggro;
+    if (this.hasLOS || !(target instanceof VoidAdd) || target.kind !== "vine" || !target.attackable) return;
+    if (target.location.x === this.location.x && target.location.y === this.location.y) this.hasLOS = true;
+  }
+
   override moveTo(x: number, y: number): void {
     if (this.hooks?.interceptWalk(fromSdk({ x, y }))) {
       this.interruptCombat();

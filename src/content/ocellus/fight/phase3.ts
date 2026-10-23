@@ -370,6 +370,9 @@ export class Phase3 implements PhaseScript {
     fight.player.addSpotAnim({ id: SPOT.entangleStart, channel: "vine" });
     fight.after(1, () => fight.player.addSpotAnim({ id: SPOT.entangleIdle, channel: "vine" }));
     fight.message("You've been rooted in place!", CHAT.red);
+    // Solo, the vine sits on your own tile behind his body, where a click finds him first: your attack goes to it, as a
+    // teammate's would in a team. Clicking him switches back.
+    if (vine.attackable) fight.player.setAggro(vine);
     fight.after(P3.vineBreakWithin, () => {
       if (this.vine !== vine || vine.killed) return;
       fight.hit({ amount: () => fight.rng.roll(P3.vineDamage) });

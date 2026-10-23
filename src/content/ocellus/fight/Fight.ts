@@ -118,8 +118,9 @@ export class Fight implements BossHooks, PlayerHooks {
   destroyed = new Set<Quadrant>();
   /** Phase 3's void bombs on the last quadrant: they stay through phase 4. */
   lingeringVoids: readonly Readonly<{ tile: ATile; placed: number }>[] = [];
-  /** Practice mode (hits never kill), from the options but switchable mid-fight from the sidebar. */
+  /** Practice mode (hits never kill, prayer never runs out), from the options but switchable from the sidebar. */
   practice: boolean;
+  private prayerLeft = 1;
   private readonly makePhase: (n: StartPhase, fight: Fight) => PhaseScript;
   private markerEntities: Entity[] = [];
   private skipEntities: Entity[] = [];
@@ -164,7 +165,13 @@ export class Fight implements BossHooks, PlayerHooks {
     this.scheduled = this.scheduled.filter((s) => s.at > this.tick);
     for (const s of due) if (s.generation === this.generation || s.generation === ALWAYS) s.run();
     this.phase?.step();
-    if (this.practice && this.player.currentStats.hitpoint < 30) this.player.currentStats.hitpoint = this.player.stats.hitpoint;
+    const stats = this.player.currentStats;
+    if (this.practice && stats.hitpoint < 30) stats.hitpoint = this.player.stats.hitpoint;
+    // Practice keeps prayer up too; otherwise say why the prayers just went out, as the game does.
+    const prayer = stats.prayer ?? 0;
+    if (this.practice && prayer < 10) stats.prayer = this.player.stats.prayer ?? 99;
+    if (prayer <= 0 && this.prayerLeft > 0 && !this.practice) this.message("You have run out of Prayer points. Drink a super restore.", CHAT.game);
+    this.prayerLeft = stats.prayer ?? 0;
     this.changed();
   }
 

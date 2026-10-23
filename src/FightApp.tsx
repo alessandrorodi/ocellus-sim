@@ -296,7 +296,7 @@ const TIPS: Readonly<Record<StartPhase, readonly string[]>> = {
     "When he starts to spin, turn your overhead OFF (or be injured), then Protect from Melee for the saw blades.",
     "He does six attacks between specials. Spin rubble falls over you slowly: one step clears it.",
     "Void bombs drop where you stand and on the same tile of every quadrant, and stay. Stand at the edge when they come or they'll be under you in phase 4.",
-    "Break the void vine within 14 ticks. Kill rifts. Untether: pray Magic, be inside the purple zone by the eruption, and step out on the tick before the slam (the border at its brightest).",
+    "Break the void vine within 14 ticks (solo, your attack switches to it when it roots you). Kill rifts. Untether: pray Magic, be inside the purple zone by the eruption, and step out on the tick before the slam (the border at its brightest).",
     "After Obliteration, cross the stones (click a stone or the next quadrant) before the quadrant falls. Right-click a censer to light it.",
   ],
   4: [
@@ -481,7 +481,7 @@ function Sidebar({ params, fight, region }: Readonly<{ params: Params; fight: Fi
             rememberFlag("practice", on);
           }}
         />
-        Practice (can't die)
+        Practice (can't die, prayer stays up)
       </label>
       <SoundToggle />
       <RuneScapeButton type="button" style={{ width: "100%" }} onClick={() => writeParams(draft)}>Start fight</RuneScapeButton>
@@ -541,6 +541,7 @@ export function FightApp() {
         outcome: region.fight?.outcome.kind ?? "running",
         chat: region.fight?.chat.slice(-6).map((line) => line.text) ?? [],
         menu: Viewport.viewport?.contextMenu.isActive ?? false,
+        menuOptions: Viewport.viewport?.contextMenu.menuOptions.map((option) => option.text.map((block) => block.text).join("")) ?? [],
       };
     };
     // A small console API for testing and for the curious: __ocellus.pray("magic"), __ocellus.walk(3, -5), ...
