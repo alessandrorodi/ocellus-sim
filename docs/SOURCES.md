@@ -37,6 +37,10 @@ Where every timing, damage number and id in the full-fight simulator comes from.
   concentration, severing your prayer!") and locked for 3 ticks ([V] duo 18:53-18:55). Flick: off as it forms, on
   for the cut. One saw per quadrant destroyed, plus one.
 - **Shadow slash and Insolence.** A band 3 tiles wide to the platform edge ([V] duo 20:24, Bubba OSRS guide 4:56).
+- **Corner cracks.** [R]'s three tendrils, in turn, every 2 ticks, 5 open. Lines run 9 tiles: the duo VOD at 13:09 has
+  one from the north-east corner across the middle markers ([V]). Up to three are open at once, so neighbours lie side
+  by side (the guide at 0:36 shows two straight ones a tile apart, [M]) and the x-face diagonal and the corner's line
+  along his inner row share their first tile, as [R]'s roots put both beside his inner corner.
 - **Tendrils.** Blocking a closing crack heals you: +16, +9, +13 on the blocker in [V] (13:31-13:35), and Bubba
   OSRS's guide ("it'll heal all of the chip damage"). [R]'s 3-5 every 2 ticks on blockers matches a burn left over
   from the room before ("You have been set alight!"), not the cracks. The sim heals 9-16 a blocked crack.
