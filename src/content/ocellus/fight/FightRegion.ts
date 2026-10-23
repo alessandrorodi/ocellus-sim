@@ -102,6 +102,12 @@ export class FightRegion extends Region {
     this.options = options;
   }
 
+  /** The sidebar's practice toggle: it takes effect now, in the running fight, and in every restart. */
+  setPractice(on: boolean): void {
+    this.options = { ...this.options, invincible: on };
+    if (this.fight) this.fight.practice = on;
+  }
+
   initialiseRegion(): { player: Player } {
     const spawn = this.options.startPhase === 1 ? at(0, -9) : this.options.startPhase === 4 ? at(4, -2) : at(5, -3);
     const player = new FightPlayer(this, spawn);

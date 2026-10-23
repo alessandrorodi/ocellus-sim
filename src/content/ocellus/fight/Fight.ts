@@ -116,6 +116,8 @@ export class Fight implements BossHooks, PlayerHooks {
   destroyed = new Set<Quadrant>();
   /** Phase 3's void bombs on the last quadrant: they stay through phase 4. */
   lingeringVoids: readonly Readonly<{ tile: ATile; placed: number }>[] = [];
+  /** Practice mode (hits never kill), from the options but switchable mid-fight from the sidebar. */
+  practice: boolean;
   private readonly makePhase: (n: StartPhase, fight: Fight) => PhaseScript;
   private markerEntities: Entity[] = [];
   private voidLayers = new Map<string, readonly ATile[]>();
@@ -126,6 +128,7 @@ export class Fight implements BossHooks, PlayerHooks {
     this.rng = new Rng(options.seed);
     this.player = player;
     this.poolMax = scaledHp(P2.hp, options.party);
+    this.practice = options.invincible;
     this.makePhase = makePhase;
     player.hooks = this;
     for (const q of QUADRANTS) this.censers.set(q, { tile: CENSERS[q].tile, god: CENSERS[q].god, lit: false });
@@ -155,7 +158,7 @@ export class Fight implements BossHooks, PlayerHooks {
     this.scheduled = this.scheduled.filter((s) => s.at > this.tick);
     for (const s of due) if (s.generation === this.generation || s.generation === ALWAYS) s.run();
     this.phase?.step();
-    if (this.options.invincible && this.player.currentStats.hitpoint < 30) this.player.currentStats.hitpoint = this.player.stats.hitpoint;
+    if (this.practice && this.player.currentStats.hitpoint < 30) this.player.currentStats.hitpoint = this.player.stats.hitpoint;
     this.changed();
   }
 
@@ -225,7 +228,7 @@ export class Fight implements BossHooks, PlayerHooks {
       if (hp <= 0) return 0;
       let amount = spec.amount(this.player.protection);
       // Practice mode: the hit still shows, but never kills.
-      if (this.options.invincible && amount >= hp) amount = hp - 1;
+      if (this.practice && amount >= hp) amount = hp - 1;
       spec.onLand?.(amount);
       return amount;
     }, spec.visuals ?? { hidden: true });

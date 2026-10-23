@@ -60,6 +60,13 @@ function readParams(): Params {
   };
 }
 
+/** A setting that applies live, kept in the URL so a reload keeps it too. */
+function rememberFlag(name: string, on: boolean): void {
+  const url = new URL(window.location.href);
+  url.searchParams.set(name, on ? "1" : "0");
+  window.history.replaceState(window.history.state, "", url.href);
+}
+
 function writeParams(params: Params, fresh = true): void {
   const url = new URL(window.location.href);
   url.searchParams.set("phase", String(params.startPhase));
@@ -259,8 +266,8 @@ function Result({ fight, params }: Readonly<{ fight: Fight; params: Params }>) {
         {outcome.kind === "won" ? "Challenge complete" : "You fell"} after <b>{formatTicks(outcome.ticks)}</b> ({outcome.ticks} ticks), in {fight.label().toLowerCase()}.
       </p>
       <div className="fight-result-buttons">
-        <RuneScapeButton type="button" onClick={() => writeParams(params)}>Try again</RuneScapeButton>
-        <RuneScapeButton type="button" onClick={() => writeParams(params, false)}>Same seed</RuneScapeButton>
+        <RuneScapeButton type="button" onClick={() => writeParams({ ...params, invincible: fight.practice })}>Try again</RuneScapeButton>
+        <RuneScapeButton type="button" onClick={() => writeParams({ ...params, invincible: fight.practice }, false)}>Same seed</RuneScapeButton>
       </div>
       <p className="fight-result-follow">
         Updates and new sims: <a href={FOLLOW_URL} target="_blank" rel="noreferrer">@alrodi on X</a>
@@ -349,7 +356,7 @@ function TileIndicators() {
   );
 }
 
-function Sidebar({ params, fight }: Readonly<{ params: Params; fight: Fight | null }>) {
+function Sidebar({ params, fight, region }: Readonly<{ params: Params; fight: Fight | null; region: FightRegion }>) {
   const [draft, setDraft] = useState<Params>(params);
   const [credits, setCredits] = useState(false);
   const set = (patch: Partial<Params>) => setDraft((current) => ({ ...current, ...patch }));
@@ -397,7 +404,16 @@ function Sidebar({ params, fight }: Readonly<{ params: Params; fight: Fight | nu
         Solo: attack your own vine
       </label>
       <label className="fight-check">
-        <input type="checkbox" checked={draft.invincible} onChange={(event) => set({ invincible: event.target.checked })} />
+        <input
+          type="checkbox"
+          checked={draft.invincible}
+          onChange={(event) => {
+            const on = event.target.checked;
+            set({ invincible: on });
+            region.setPractice(on);
+            rememberFlag("practice", on);
+          }}
+        />
         Practice (can't die)
       </label>
       <SoundToggle />
@@ -507,7 +523,7 @@ export function FightApp() {
         <p id="credit_line">{CREDIT_LINE}</p>
       </GameOverlay>
       <DefaultSidebar>
-        <Sidebar params={params} fight={fight} />
+        <Sidebar params={params} fight={fight} region={region} />
       </DefaultSidebar>
     </TrainerApp>
   );
