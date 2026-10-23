@@ -284,6 +284,11 @@ export const P2 = {
    */
   lineCyclesPerTile: 6,
   crossfireCyclesPerTile: 5,
+  /** The skip's tiles, out along each quadrant's diagonal. A deeper pink than the RuneLite markers' #F5B1F7, which an
+   * outline alone loses on the pale floor. */
+  skipStandOut: 6,
+  skipRunOut: 4,
+  skipMarkerColour: "#FF3DE0",
   poolDamage: range(3, 5),
 } as const;
 

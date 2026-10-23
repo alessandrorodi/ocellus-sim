@@ -19,7 +19,8 @@ class LocFieldModel implements Model {
       wanted.add(view.key);
       let models = this.shown.get(view.key);
       if (!models) {
-        models = view.models.map((id) => CacheRenderModel.forRenderable(this.field, CacheRenderReferences.model(id)));
+        // Scenery: no effects attach to it, so skip building a mesh for every spotanim in the bundle.
+        models = view.models.map((id) => CacheRenderModel.forRenderable(this.field, CacheRenderReferences.model(id), { spotAnims: [] }));
         this.shown.set(view.key, models);
       }
       const s = toSdk(view.tile);

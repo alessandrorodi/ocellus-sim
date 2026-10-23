@@ -6,7 +6,7 @@ import { P1, P2, SOUND, scaledHp } from "./data";
 import type { SpotOptions, TileMark } from "./effects";
 import { GroundSpot } from "./effects";
 import type { ATile, Quadrant } from "./geometry";
-import { CENSERS, GRID, QUADRANTS, TileSet, at, fromSdk, inRoom, key, quadrantOf, toSdk } from "./geometry";
+import { CENSERS, GRID, QUADRANTS, QUADRANT_SIGN, TileSet, at, fromSdk, inRoom, key, quadrantOf, toSdk } from "./geometry";
 import { Rng } from "./rng";
 import type { BossHooks, Form, PlayerHooks, Style } from "./units";
 import { BossForm, FightPlayer } from "./units";
@@ -19,6 +19,8 @@ export type FightOptions = Readonly<{
   startPhase: StartPhase;
   hazardTiles: boolean;
   videoMarkers: boolean;
+  /** Mark J R V's phase 2 skip tiles. */
+  skipMarkers: boolean;
   soloVine: boolean;
   invincible: boolean;
 }>;
@@ -120,6 +122,8 @@ export class Fight implements BossHooks, PlayerHooks {
   practice: boolean;
   private readonly makePhase: (n: StartPhase, fight: Fight) => PhaseScript;
   private markerEntities: Entity[] = [];
+  private skipEntities: Entity[] = [];
+  private skipTiles: boolean;
   private voidLayers = new Map<string, readonly ATile[]>();
   private voidVersion = 0;
   private voidCache: Readonly<{ key: string; tiles: readonly ATile[] }> = { key: "0", tiles: [] };
@@ -129,6 +133,7 @@ export class Fight implements BossHooks, PlayerHooks {
     this.player = player;
     this.poolMax = scaledHp(P2.hp, options.party);
     this.practice = options.invincible;
+    this.skipTiles = options.skipMarkers;
     this.makePhase = makePhase;
     player.hooks = this;
     for (const q of QUADRANTS) this.censers.set(q, { tile: CENSERS[q].tile, god: CENSERS[q].god, lit: false });
@@ -147,6 +152,7 @@ export class Fight implements BossHooks, PlayerHooks {
     this.generation++;
     this.phase = this.makePhase(n, this);
     this.phase.begin();
+    this.refreshSkipMarkers();
     this.changed();
   }
 
@@ -431,6 +437,32 @@ export class Fight implements BossHooks, PlayerHooks {
   changed(): void {
     this.version++;
     this.listeners.forEach((listener) => listener());
+  }
+
+  get skipMarkers(): boolean {
+    return this.skipTiles;
+  }
+
+  /** The sidebar's phase 2 skip tiles: switchable mid-fight, shown while phase 2 runs. */
+  setSkipMarkers(on: boolean): void {
+    this.skipTiles = on;
+    this.refreshSkipMarkers();
+  }
+
+  /** J R V's skip in each quadrant: stand P2.skipStandOut out diagonally, run to P2.skipRunOut a tick before a volley. */
+  private refreshSkipMarkers(): void {
+    const show = this.skipTiles && this.phase?.label === "Phase 2";
+    if (show === this.skipEntities.length > 0) return;
+    this.skipEntities.forEach((marker) => this.region.removeEntity(marker));
+    this.skipEntities = [];
+    if (!show) return;
+    for (const { sx, sz } of Object.values(QUADRANT_SIGN)) {
+      for (const out of [P2.skipStandOut, P2.skipRunOut]) {
+        const marker = new TileMarker(this.region, toSdk(at(out * sx, out * sz)), P2.skipMarkerColour, 1, false);
+        this.skipEntities.push(marker);
+        this.region.addEntity(marker);
+      }
+    }
   }
 
   /** The reference video's tile markers (ShadowStalkerTM), converted from region 16472 local tiles to arena offsets. */

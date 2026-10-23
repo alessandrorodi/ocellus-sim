@@ -121,6 +121,18 @@ export function overheadIcon(kind: BossOverhead, player: Player): CanvasImageSou
   }
 }
 
+/**
+ * Every spotanim the scripts attach to Ocellus. His models build meshes for these only; by default each actor model
+ * builds one for every spotanim in the bundle. Add an id here when a phase starts attaching it.
+ */
+export const BOSS_SPOTS: readonly number[] = [
+  SPOT.fireOnBoss, SPOT.waterOnBoss, SPOT.p1Charge, SPOT.p1ExplodeOnBoss, SPOT.p1TeleportOut, SPOT.p1TeleportIn, SPOT.p1ToP2,
+  SPOT.swordIdle, SPOT.swordDischarge, SPOT.p2ToP3ArmGlow, SPOT.p2ToP3Arm,
+  SPOT.meleePrayerIn, SPOT.meleePrayer, SPOT.meleePrayerOut, SPOT.magicOnBoss, SPOT.unleashOnBoss,
+  SPOT.collapseIn, SPOT.collapseLoop, SPOT.collapseOut1,
+  SPOT.levitating, SPOT.hybridMagic, SPOT.hybridRanged, SPOT.hybridMelee, SPOT.death, SPOT.deathSkirt, SPOT.deathCrack,
+];
+
 /** One of Ocellus's bodies. The fight script moves and animates it; it never acts on its own. */
 export class BossForm extends Mob {
   overhead: BossOverhead | null = null;
@@ -193,7 +205,7 @@ export class BossForm extends Mob {
 
   override create3dModel(): Model {
     const spotAnims = this.form === "blade" ? [{ id: SPOT.swordIdle, channel: "blade" }] : undefined;
-    return CacheRenderModel.forRenderable(this, CacheRenderReferences.npc(FORM[this.form].npc, spotAnims));
+    return CacheRenderModel.forRenderable(this, CacheRenderReferences.npc(FORM[this.form].npc, spotAnims), { spotAnims: BOSS_SPOTS });
   }
 
   override visible(): boolean {
@@ -331,7 +343,8 @@ export class VoidAdd extends Mob {
   }
 
   override create3dModel(): Model {
-    return CacheRenderModel.forRenderable(this, CacheRenderReferences.npc(ADD[this.kind].npc));
+    // Nothing attaches effects to a vine or rift.
+    return CacheRenderModel.forRenderable(this, CacheRenderReferences.npc(ADD[this.kind].npc), { spotAnims: [] });
   }
 
   override movementStep(): void {}

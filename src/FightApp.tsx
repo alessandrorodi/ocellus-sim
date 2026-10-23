@@ -10,6 +10,7 @@ import type { ChatLine, Fight, FightOptions, StartPhase } from "./content/ocellu
 import { formatTicks } from "./content/ocellus/fight/Fight";
 import { FightRegion, START_NPC } from "./content/ocellus/fight/FightRegion";
 import { fromSdk } from "./content/ocellus/fight/geometry";
+import { warmLaterPhases } from "./content/ocellus/fight/warmup";
 import { keepHoverTextOnCanvas } from "./hoverText";
 
 keepHoverTextOnCanvas();
@@ -54,6 +55,7 @@ function readParams(): Params {
     startPhase: phase === 2 || phase === 3 || phase === 4 ? phase : 1,
     hazardTiles: flag("tiles", true),
     videoMarkers: flag("markers", false),
+    skipMarkers: flag("skip", false),
     soloVine: flag("vine", true),
     invincible: flag("practice", false),
     setup: get("setup") === "melee" ? "melee" : "ranged",
@@ -74,6 +76,7 @@ function writeParams(params: Params, fresh = true): void {
   url.searchParams.set("setup", params.setup);
   url.searchParams.set("tiles", params.hazardTiles ? "1" : "0");
   url.searchParams.set("markers", params.videoMarkers ? "1" : "0");
+  url.searchParams.set("skip", params.skipMarkers ? "1" : "0");
   url.searchParams.set("vine", params.soloVine ? "1" : "0");
   url.searchParams.set("practice", params.invincible ? "1" : "0");
   if (fresh) url.searchParams.delete("seed");
@@ -266,8 +269,8 @@ function Result({ fight, params }: Readonly<{ fight: Fight; params: Params }>) {
         {outcome.kind === "won" ? "Challenge complete" : "You fell"} after <b>{formatTicks(outcome.ticks)}</b> ({outcome.ticks} ticks), in {fight.label().toLowerCase()}.
       </p>
       <div className="fight-result-buttons">
-        <RuneScapeButton type="button" onClick={() => writeParams({ ...params, invincible: fight.practice })}>Try again</RuneScapeButton>
-        <RuneScapeButton type="button" onClick={() => writeParams({ ...params, invincible: fight.practice }, false)}>Same seed</RuneScapeButton>
+        <RuneScapeButton type="button" onClick={() => writeParams({ ...params, invincible: fight.practice, skipMarkers: fight.skipMarkers })}>Try again</RuneScapeButton>
+        <RuneScapeButton type="button" onClick={() => writeParams({ ...params, invincible: fight.practice, skipMarkers: fight.skipMarkers }, false)}>Same seed</RuneScapeButton>
       </div>
       <p className="fight-result-follow">
         Updates and new sims: <a href={FOLLOW_URL} target="_blank" rel="noreferrer">@alrodi on X</a>
@@ -286,6 +289,7 @@ const TIPS: Readonly<Record<StartPhase, readonly string[]>> = {
   2: [
     "Attack The Blade. Purple portals fire across their rows 4 ticks after lighting; stand where the two orange gaps cross (green tiles).",
     "When pools appear, step on the orange floor portal before all twelve fire.",
+    "The skip (\"Phase 2 skip tiles\"): wait on the outer pink tile, 6 out diagonally, and click the inner one, 4 out, one tick before each volley. Running through the wave dodges it.",
   ],
   3: [
     "Pray Melee for his two swings, then step out of the shadow slash line.",
@@ -400,6 +404,19 @@ function Sidebar({ params, fight, region }: Readonly<{ params: Params; fight: Fi
         Community tile markers
       </label>
       <label className="fight-check">
+        <input
+          type="checkbox"
+          checked={draft.skipMarkers}
+          onChange={(event) => {
+            const on = event.target.checked;
+            set({ skipMarkers: on });
+            region.setSkipMarkers(on);
+            rememberFlag("skip", on);
+          }}
+        />
+        Phase 2 skip tiles
+      </label>
+      <label className="fight-check">
         <input type="checkbox" checked={draft.soloVine} onChange={(event) => set({ soloVine: event.target.checked })} />
         Solo: attack your own vine
       </label>
@@ -454,8 +471,11 @@ export function FightApp() {
   const download = useFirstDownload(params.startPhase, !ready);
 
   useEffect(() => {
-    if (ready) prefetchLaterPhases(params.startPhase);
-  }, [ready, params.startPhase]);
+    if (!ready) return;
+    prefetchLaterPhases(params.startPhase);
+    const anchor = region.entities[0];
+    if (anchor) warmLaterPhases(anchor, params.startPhase);
+  }, [ready, params.startPhase, region]);
 
   useEffect(() => {
     const probe = () => {

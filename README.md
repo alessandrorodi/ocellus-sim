@@ -28,8 +28,8 @@ fight.
   spells, and the sounds each animation plays.
 - **Prayer that matters**: shots are checked against your overhead when they land, his own overheads block your
   style, and turning on a protection prayer as he starts to spin gets you "injured".
-- **Practice tools**: danger-tile highlighting, community tile markers, a no-death practice mode, HP scaling for
-  1-5 raiders, ranged and melee setups, and seeds you can replay.
+- **Practice tools**: danger-tile highlighting, community tile markers, phase 2 skip tiles, a no-death practice mode,
+  HP scaling for 1-5 raiders, ranged and melee setups, and seeds you can replay.
 - **Phase 4 drills**: Julian-Dasilva's original phase 4 trainer, kept as `?mode=p4drill`.
 
 ## The fight
@@ -99,6 +99,7 @@ Everything is in the sidebar, and each option is also a URL parameter, so a setu
 | `setup` | `ranged`, `melee` | your gear |
 | `tiles` | `0`, `1` | highlight danger and safe tiles |
 | `markers` | `0`, `1` | community tile markers |
+| `skip` | `0`, `1` | mark phase 2's skip tiles (stand 6 out diagonally, run to 4 out) |
 | `vine` | `0`, `1` | solo rule: attack your own vine |
 | `practice` | `0`, `1` | you can't die |
 | `seed` | a number | replay the same fight |

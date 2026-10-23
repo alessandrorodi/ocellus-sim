@@ -18,6 +18,12 @@ else
   git init --quiet "${work}/osrs-sdk"
   git -C "${work}/osrs-sdk" fetch --quiet --depth 1 "${OSRS_SDK_REPO}" "${OSRS_SDK_COMMIT}"
   git -C "${work}/osrs-sdk" checkout --quiet FETCH_HEAD
+  # Local fixes to the pinned SDK (patches/README.md says what each one does).
+  for patch in patches/osrs-sdk-*.patch; do
+    [[ -f "${patch}" ]] || continue
+    echo "install-beta-sdk: applying ${patch}"
+    git -C "${work}/osrs-sdk" apply --whitespace=nowarn "${PWD}/${patch}"
+  done
   (
     cd "${work}/osrs-sdk"
     npm ci --no-audit --no-fund

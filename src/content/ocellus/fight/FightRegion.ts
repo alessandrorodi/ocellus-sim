@@ -1,8 +1,9 @@
-import { CacheRenderModel, CacheRenderReferences, CardinalDirection, CollisionType, Entity, LineOfSightMask, Region, SoundCache, cacheSound } from "osrs-sdk";
+import { CacheRenderModel, CacheRenderReferences, CardinalDirection, CollisionType, Entity, LineOfSightMask, Region } from "osrs-sdk";
 import type { Model, Player } from "osrs-sdk";
 import { EmptyModel } from "osrs-sdk";
 import { ArenaFloor } from "./arena";
-import { NPC, SOUND } from "./data";
+import { NPC } from "./data";
+import { warmStartPhase } from "./warmup";
 import { TileMarks, VoidFloor } from "./effects";
 import type { FightOptions, PhaseScript, StartPhase } from "./Fight";
 import { Fight } from "./Fight";
@@ -11,7 +12,7 @@ import { Phase1 } from "./phase1";
 import { Phase2 } from "./phase2";
 import { Phase3 } from "./phase3";
 import { Phase4 } from "./phase4";
-import { FightPlayer } from "./units";
+import { BOSS_SPOTS, FightPlayer } from "./units";
 
 /** Steps the fight at the very start of each game tick, before NPCs act, as the server's scripts do. */
 class FightClock extends Entity {
@@ -108,6 +109,12 @@ export class FightRegion extends Region {
     if (this.fight) this.fight.practice = on;
   }
 
+  /** The sidebar's phase 2 skip tiles, the same way. */
+  setSkipMarkers(on: boolean): void {
+    this.options = { ...this.options, skipMarkers: on };
+    this.fight?.setSkipMarkers(on);
+  }
+
   initialiseRegion(): { player: Player } {
     const spawn = this.options.startPhase === 1 ? at(0, -9) : this.options.startPhase === 4 ? at(4, -2) : at(5, -3);
     const player = new FightPlayer(this, spawn);
@@ -119,19 +126,22 @@ export class FightRegion extends Region {
     this.addEntity(new TileMarks(this, () => fight.marks()));
     this.addEntity(new FightClock(this, fight));
     this.addPlayer(player);
-    Object.values(SOUND).flat().forEach((id) => SoundCache.preload(cacheSound(id)));
     this.listeners.forEach((listener) => listener());
     return { player };
   }
 
   /**
    * He only spawns when the fight starts, after the loading splash, so load his first body with the arena: otherwise
-   * the splash clears onto an empty room and he downloads in front of the player.
+   * the splash clears onto an empty room and he downloads in front of the player. The start phase's floor effects
+   * build here too, rather than stalling its first attacks.
    */
   override async preload(): Promise<void> {
     const anchor = this.entities[0];
-    const boss = anchor ? CacheRenderModel.forRenderable(anchor, CacheRenderReferences.npc(START_NPC[this.options.startPhase])).preload() : Promise.resolve();
-    await Promise.all([super.preload(), boss]);
+    const boss = anchor
+      ? CacheRenderModel.forRenderable(anchor, CacheRenderReferences.npc(START_NPC[this.options.startPhase]), { spotAnims: BOSS_SPOTS }).preload()
+      : Promise.resolve();
+    const spots = anchor ? warmStartPhase(anchor, this.options.startPhase) : Promise.resolve();
+    await Promise.all([super.preload(), boss, spots]);
   }
 
   override onGameOver(): void {
