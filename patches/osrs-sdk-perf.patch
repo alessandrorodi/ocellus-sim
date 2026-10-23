@@ -1,8 +1,8 @@
 diff --git a/src/sdk/rendering/CacheRenderInstancedModel.ts b/src/sdk/rendering/CacheRenderInstancedModel.ts
-index 637e62d..e9a01ad 100644
+index 637e62d..53b2800 100644
 --- a/src/sdk/rendering/CacheRenderInstancedModel.ts
 +++ b/src/sdk/rendering/CacheRenderInstancedModel.ts
-@@ -18,6 +18,12 @@ const DEFAULT_MAX_INSTANCES = 256;
+@@ -18,10 +18,16 @@ const DEFAULT_MAX_INSTANCES = 256;
  let hiddenMatrixValue: THREE.Matrix4 | undefined;
  const hiddenMatrix = () => hiddenMatrixValue ??= new THREE.Matrix4().makeScale(0, 0, 0);
  
@@ -15,7 +15,31 @@ index 637e62d..e9a01ad 100644
  type AnimationFrameMesh = { mesh: THREE.InstancedMesh; active: Set<number> };
  type Pool = {
    ready: Promise<void>; capacity: number; next: number; free: number[]; active: Set<number>;
-@@ -153,15 +159,23 @@ export class CacheRenderInstancedModel implements Model {
+-  frames: AnimationFrameMesh[]; scaleX: number; scaleY: number;
++  frames: AnimationFrameMesh[]; scaleX: number; scaleY: number; rotation: number;
+   animationId: number; animation?: CacheRenderAnimation; animationTotal: number; loopElapsed: number;
+   frameSoundPlayer: AnimationFrameSoundPlayer; frameSoundsReady: Promise<void>;
+ };
+@@ -107,7 +113,7 @@ export class CacheRenderInstancedModel implements Model {
+       const placement = this.reference.kind === "spotAnim" ? this.reference.spotAnims[0] : undefined;
+       pool = {
+         ready: Promise.resolve(), capacity: this.maxInstances, next: 0, free: [], active: new Set(), frames: [],
+-        scaleX: 1, scaleY: 1, animationId: -1, animationTotal: 0, loopElapsed: 0,
++        scaleX: 1, scaleY: 1, rotation: 0, animationId: -1, animationTotal: 0, loopElapsed: 0,
+         frameSoundPlayer: new AnimationFrameSoundPlayer(), frameSoundsReady: Promise.resolve(),
+       };
+       pool.ready = Promise.all(ids.map((id) => cachedPayload(bundle, id))).then((payloads) => {
+@@ -116,6 +122,9 @@ export class CacheRenderInstancedModel implements Model {
+         const metadata = spotPayload?.spotAnim ?? payload.spotAnim ?? {};
+         pool!.scaleX = (payload.scale ?? 1) * (metadata.resizeX ?? 128) / 128;
+         pool!.scaleY = (payload.scale ?? 1) * (metadata.resizeY ?? 128) / 128;
++        // A spotanim definition's rotation, in degrees clockwise seen from above: its _90 / _180 / _270 variants are one
++        // model turned (a crack piece growing east is the north piece turned 90). North is -z here, hence the sign.
++        pool!.rotation = -((metadata.rotation ?? 0) * Math.PI) / 180;
+         const groups = payload.vertexGroups ?? [];
+         const sources = payload.sourceVertices ?? [];
+         const baseAlphas = new Float32Array(
+@@ -153,15 +162,23 @@ export class CacheRenderInstancedModel implements Model {
            payload.animayaScales ?? [],
            animation,
          );
@@ -45,6 +69,15 @@ index 637e62d..e9a01ad 100644
            const mesh = new THREE.InstancedMesh(geometry, material, pool!.capacity);
            mesh.frustumCulled = false;
            mesh.count = 0;
+@@ -251,7 +268,7 @@ export class CacheRenderInstancedModel implements Model {
+       this.transform.position.y += placement?.height ?? 0;
+       this.transform.rotation.order = "YXZ";
+       const basisRotation = oneShot ? 0 : Math.PI / 2;
+-      this.transform.rotation.set(pitch, rotation + basisRotation + (placement?.rotation ?? 0) * Math.PI / 1024, 0);
++      this.transform.rotation.set(pitch, rotation + basisRotation + pool.rotation + (placement?.rotation ?? 0) * Math.PI / 1024, 0);
+       this.transform.scale.set(pool.scaleX, pool.scaleY, pool.scaleX);
+       this.transform.updateMatrix();
+ 
 diff --git a/src/sdk/rendering/CacheRenderModel.ts b/src/sdk/rendering/CacheRenderModel.ts
 index dec613d..5a84fd2 100644
 --- a/src/sdk/rendering/CacheRenderModel.ts
