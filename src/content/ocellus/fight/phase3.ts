@@ -2,7 +2,7 @@ import type { Unit } from "osrs-sdk";
 import type { TileMark } from "./effects";
 import type { Fight, PhaseScript } from "./Fight";
 import { CHAT } from "./Fight";
-import type { P3Special, VoidLocKind } from "./data";
+import type { VoidLocKind } from "./data";
 import { P3, SEQ, SPOT, VOID_LOC } from "./data";
 import { LocField } from "./locs";
 import type { LocView } from "./locs";
@@ -32,6 +32,7 @@ import {
 import type { AddKind, Style } from "./units";
 import { VoidAdd } from "./units";
 
+type Special = "spin" | "insolence" | "untether";
 type Patch = { tile: ATile; until: number; placed: number; kind: VoidLocKind };
 type Telegraph = { tiles: ATile[]; landsAt: number; colour: number };
 type Crossing = { arm: Arm; from: Quadrant; to: Quadrant; bank: ATile; hops: ATile[]; hopping: boolean };
@@ -70,17 +71,19 @@ export class Phase3 implements PhaseScript {
   private stationary = false;
   /** Between "Obliteration..." and his landing in the next quadrant. */
   private collapsing = false;
-  /** The chain: sets of swings since the last special, swings (or panics) in this set, specials this rotation. */
+  /** The chain: sets of swings since the last special, swings (or panics) in this set. */
   private sets = 0;
   private swings = 0;
+  /** Specials through the whole phase (they alternate spin, other, spin...), and in this segment. */
   private specials = 0;
+  private segmentSpecials = 0;
+  /** Untether comes once a quadrant [V]. */
+  private untethered = false;
   /**
    * He is in the middle of a move until this tick (his jump to the first corner included); a quadrant whose floor is
    * reached falls once he is past it. [K]
    */
   private busyUntil = Number.POSITIVE_INFINITY;
-  /** The quadrant's rotation again, after an Untether that came before his HP was low enough: no second Untether. */
-  private repeat = false;
   private patches: Patch[] = [];
   private telegraphs: Telegraph[] = [];
   private zone: Body | null = null;
@@ -138,10 +141,10 @@ export class Phase3 implements PhaseScript {
   // ---- segments ---------------------------------------------------------------------------------------------------
 
   /**
-   * He lands in a corner and starts the quadrant's chain of moves, its specials from the top of the rotation.
-   * `repeat`: the rotation again while his HP is above its threshold, without a second Untether.
+   * He lands in a corner and starts the quadrant's chain of moves; his specials carry on from the last quadrant.
+   * `again`: he lands back in the same quadrant after an Untether that came before his HP was low enough.
    */
-  private startSegment(q: Quadrant, repeat = false): void {
+  private startSegment(q: Quadrant, again = false): void {
     const { fight } = this;
     if (this.fight.destroyed.has(q)) q = QUADRANTS.find((other) => !fight.destroyed.has(other)) ?? q;
     this.rotation++;
@@ -154,27 +157,21 @@ export class Phase3 implements PhaseScript {
     this.zone = null;
     this.sets = 0;
     this.swings = 0;
-    this.specials = 0;
+    this.segmentSpecials = 0;
     this.busyUntil = fight.tick;
-    // Untether comes once a quadrant [V]; a slow kill just loops the rest of the rotation.
-    this.repeat = repeat;
+    if (!again) this.untethered = false;
     const boss = this.boss;
     boss.teleport(CORNERS[q]);
     boss.attackable = true;
     boss.pose = null;
     fight.setOverhead(null);
     boss.face(fight.player);
-    const plan = this.plan();
+    const plan = this.segment === 0 ? P3.first : P3.later;
     for (const t of plan.bombs) this.at(t - P3.bombDropAfter, () => this.bombs());
     for (const t of plan.rifts) this.at(t, () => this.spawnRift());
-    this.at(plan.vine, () => this.spawnVine());
     if (this.segment > 0 && this.riftKind === null) this.riftKind = fight.rng.pick(RIFT_ORDER);
     else if (this.segment > 1 && this.riftKind !== null) this.riftKind = RIFT_ORDER[(RIFT_ORDER.indexOf(this.riftKind) + 1) % RIFT_ORDER.length];
     this.next(P3.firstMove, () => this.swing());
-  }
-
-  private plan(): typeof P3.first | typeof P3.later {
-    return this.segment === 0 ? P3.first : P3.later;
   }
 
   /** Schedule relative to the segment's start; dropped if the rotation is cut short by the quadrant falling. */
@@ -195,11 +192,14 @@ export class Phase3 implements PhaseScript {
     });
   }
 
-  /** After two sets of swings, the quadrant's next special. */
+  /**
+   * After two sets of swings, his next special. They alternate through the whole phase: the spin, then Untether if his
+   * HP is near the quadrant's floor (and he has not untethered here yet), otherwise Insolence. [K]
+   */
   private special(): void {
-    const rotation = this.plan().specials.filter((s) => !(this.repeat && s === "untether"));
-    const special: P3Special = rotation[this.specials % rotation.length];
+    const special: Special = this.specials % 2 === 0 ? "spin" : this.nearFloor() && !this.untethered ? "untether" : "insolence";
     this.specials++;
+    this.segmentSpecials++;
     switch (special) {
       case "spin":
         return this.spin();
@@ -342,9 +342,15 @@ export class Phase3 implements PhaseScript {
         fight.hit({ style: "melee", amount: (prayer) => (prayer === "melee" ? 0 : fight.rng.roll(P3.spinDamage)) });
       });
     }
+    // Busy until the last saw cuts: a quadrant whose floor he reached mid-spin falls on that cut. [K] kill 2, t457
     const lastCut = P3.sawFirstCut + P3.sawEvery * loops;
-    this.busyUntil = fight.tick + lastCut;
-    this.next(lastCut + P3.afterSpin, () => this.swing());
+    this.busyUntil = fight.tick + lastCut - 1;
+    // A spin that opens a segment brings the vine with his next move. [K]
+    const opening = this.segmentSpecials === 1;
+    this.next(lastCut + P3.afterSpin, () => {
+      if (opening) this.spawnVine();
+      this.swing();
+    });
   }
 
   /** "Your panic... is futile...": a magic shot at everyone, landing 2 ticks on, that leaves a void patch. [R] [K] */
@@ -420,10 +426,18 @@ export class Phase3 implements PhaseScript {
     return this.patches.map((p) => ({ key: `${p.kind}:${p.placed}:${p.tile.x},${p.tile.z}`, tile: p.tile, models: VOID_LOC[p.kind].models }));
   }
 
+  /** "The void... will take you...", and 3 ticks later a vine roots you where you stand then. [K] */
   private spawnVine(): void {
-    if (this.levitating) return;
     const { fight } = this;
     fight.say(fight.rng.chance(0.5) ? "The void... will take you..." : "Await... the void...", 4);
+    const rotation = this.rotation;
+    fight.after(P3.vineRootsAfter, () => {
+      if (rotation === this.rotation && !this.levitating) this.rootInVine();
+    });
+  }
+
+  private rootInVine(): void {
+    const { fight } = this;
     const tile = fight.playerTile;
     const vine = new VoidAdd(fight.region, tile, "vine", () => this.vineBroken());
     vine.currentStats.hitpoint = P3.vineHp;
@@ -463,7 +477,7 @@ export class Phase3 implements PhaseScript {
     const { fight } = this;
     fight.say("Insolence...", 3);
     for (let i = 0; i < P3.insolenceSlashes; i++) fight.after(P3.insolenceFirst + i * P3.insolenceEvery, () => this.superiorSlash());
-    this.busyUntil = fight.tick + P3.insolenceFirst + (P3.insolenceSlashes - 1) * P3.insolenceEvery + P3.insolenceLands;
+    this.busyUntil = fight.tick + P3.insolenceFirst + (P3.insolenceSlashes - 1) * P3.insolenceEvery + P3.insolenceLands - 1;
     this.next(P3.afterInsolence, () => this.swing());
   }
 
@@ -540,6 +554,7 @@ export class Phase3 implements PhaseScript {
     const q = this.quadrant;
     this.levitating = true;
     this.stationary = true;
+    this.untethered = true;
     if (this.vine) this.releaseVine();
     fight.say("Untether...", 3);
     boss.teleport(CORNERS[q]);
@@ -577,14 +592,22 @@ export class Phase3 implements PhaseScript {
 
   /** His HP shown as a whole percentage is down to this quadrant's 75 / 50 / 25: under 76% and so on. [V] duo HUD */
   private atThreshold(): boolean {
-    const shown = Math.floor((100 * this.boss.currentStats.hitpoint) / this.fight.poolMax);
-    return shown <= Math.round(this.floorFraction * 100);
+    return this.shownHp() <= Math.round(this.floorFraction * 100);
+  }
+
+  /** Within P3.untetherNearFloor of it: his next "other" special is Untether. [K] */
+  private nearFloor(): boolean {
+    return this.shownHp() <= Math.round(this.floorFraction * 100) + P3.untetherNearFloor;
+  }
+
+  private shownHp(): number {
+    return Math.floor((100 * this.boss.currentStats.hitpoint) / this.fight.poolMax);
   }
 
   /**
-   * His HP is down to the quadrant's floor and he is past his current move (a set's slash, the last saw, the last
-   * superior slash): the quadrant falls now. [K]: 1 tick after a set's slash, and 1 tick after the floor was reached
-   * between moves. During Untether it waits for U+31 (obliterateWhenDue).
+   * His HP is down to the quadrant's floor and his current move has landed (a set's slash, the last saw, the last
+   * superior slash): the quadrant falls now. [K]: as the slash landed (kill 1, t674), on the spin's last cut (kill 2,
+   * t457), and the tick after the floor between moves (kill 1, t789). During Untether it waits for U+31.
    */
   private collapseDue(): boolean {
     if (this.finished || this.collapsing || this.levitating || this.fight.tick <= this.busyUntil || !this.atThreshold()) return false;
@@ -593,8 +616,8 @@ export class Phase3 implements PhaseScript {
   }
 
   /**
-   * After Untether the quadrant falls if his HP is already down to its threshold (both of [R]'s fights, and [K]'s
-   * first quadrant). Otherwise he lands and runs the rotation again, and it falls once he gets there (collapseDue).
+   * After Untether the quadrant falls if his HP is already down to its threshold (both of [R]'s fights, and every
+   * Untether in [K]). Otherwise he lands back in the quadrant and carries on, and it falls once he gets there.
    */
   private obliterateWhenDue(q: Quadrant): void {
     if (this.atThreshold()) {

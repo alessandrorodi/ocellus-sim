@@ -241,6 +241,10 @@ export const P1 = {
   beatEvery: 8,
   beats: 4,
   beatLineLength: 6,
+  /**
+   * A beat's two lines appear together on the beat tick; the first in turn order closes after 4, the other after 6
+   * ([K] second kill: 4258 and 4252 at +36, closing at +40 and +42). Corner cracks close after 5.
+   */
   beatLineCloses: [4, 6],
   beatExplodeAfter: 6,
   strikeShoutAfterLastExplode: 2,
@@ -294,10 +298,6 @@ export const P2 = {
   poolDamage: range(3, 5),
 } as const;
 
-/** Phase 3's specials, in the order a quadrant runs them. */
-export type P3Special = "spin" | "insolence" | "untether";
-const FIRST_SPECIALS: readonly P3Special[] = ["spin", "untether"];
-const LATER_SPECIALS: readonly P3Special[] = ["spin", "insolence", "spin", "untether"];
 const NO_TICKS: readonly number[] = [];
 
 export const P3 = {
@@ -307,19 +307,24 @@ export const P3 = {
   jumpToCornerAfter: 6,
   /**
    * His attacks are a chain, each move timed from the one before, not a clock from the segment start. Two swings 3
-   * ticks apart, the shadow slash 3 after the second, and his next move 4 after the slash. After two such sets comes the
-   * quadrant's next special. "Your panic... is futile..." (nobody in his reach) takes a swing's place, and the next move
-   * comes 6 ticks after it, so the rest of the chain runs 3 ticks late. [K], which reproduces [R]'s fixed segment
-   * timelines (first quadrant: specials at 24 and 53; later ones at 24, 59, 99 and 134 with a panic after each spin).
+   * ticks apart, the shadow slash 3 after the second, and his next move 4 after the slash. After two such sets comes a
+   * special. "Your panic... is futile..." (nobody in his reach) takes a swing's place, and the next move comes 6 ticks
+   * after it, so the rest of the chain runs 3 ticks late. [K], which reproduces [R]'s fixed segment timelines.
    */
   firstMove: 4,
   swingGap: 3,
   afterPanic: 6,
   afterSlash: 4,
   setsPerSpecial: 2,
-  /** On the segment's own clock from its start S: void bombs (when they drop), the vine and the rifts. [R] [K] */
-  first: { specials: FIRST_SPECIALS, bombs: [6, 9], vine: 36, rifts: NO_TICKS },
-  later: { specials: LATER_SPECIALS, bombs: [6], vine: 39, rifts: [3, 51, 111] },
+  /**
+   * His specials alternate through the whole phase, carrying on from quadrant to quadrant: the spin, then the other
+   * one, which is Untether when his whole-number HP% is within 2 of the quadrant's floor (76 and 27 in the two kills)
+   * and Insolence otherwise. [K] kill 1: S U | S I | S I; kill 2: S U | S I S | I S U.
+   */
+  untetherNearFloor: 2,
+  /** On the segment's own clock from its start S: void bombs (when they drop) and the rifts. [R] [K] */
+  first: { bombs: [6, 9], rifts: NO_TICKS },
+  later: { bombs: [6], rifts: [3, 51, 111] },
   /** Swings hit everyone near him on the animation tick: 1-7 through Protect from Melee. [R] [K] */
   basicHitProtected: range(1, 7),
   basicHitUnprotected: range(12, 19),
@@ -357,6 +362,11 @@ export const P3 = {
   debrisFalls: 5,
   debrisDamage: range(6, 11),
   vineHp: 44,
+  /**
+   * "The void... will take you..." comes with his first move after a spin that opens a quadrant (4 of 4 vines in the
+   * two kills), and the vine roots its target where they stand 3 ticks later. [K]
+   */
+  vineRootsAfter: 3,
   vineBreakWithin: 14,
   vineDamage: range(50, 55),
   /**
@@ -404,9 +414,9 @@ export const P3 = {
     nextSegment: 48,
   },
   /**
-   * The quadrant falls once his whole-number HP% is down to 75 / 50 / 25 (the sim holds him there), as soon as he is
-   * between moves: [K]'s second and third quadrants fell 1 tick after a set's slash, his HP held at the floor, with no
-   * Untether. During Untether it waits for U+31. [W] [O] [V] [K]
+   * The quadrant falls once his whole-number HP% is down to 75 / 50 / 25 (the sim holds him there) and his current move
+   * has landed, Untether or not: as a set's slash lands, on a spin's last cut, or the tick after the floor between
+   * moves ([K]: t674 and t789 in kill 1, t457 in kill 2). During Untether it waits for U+31. [W] [O] [V] [K]
    */
   hpFloors: [0.75, 0.5, 0.25],
   jumpTicks: 2,
@@ -424,7 +434,8 @@ export const P4 = {
   innerVoid: { from: 0, until: 22 },
   outerVoid: { from: 31, until: 51 },
   winds: [4, 35],
-  orbReadyAfterWind: [12, 6],
+  /** Ready 16 and 42 ticks into the cycle: the first raiders took theirs back then, in both of [K]'s cycles. */
+  orbReadyAfterWind: [12, 7],
   orbExpiresAfterReady: 13,
   orbFirstTickBonus: 8,
   explosionMarks: [

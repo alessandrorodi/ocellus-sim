@@ -1,5 +1,7 @@
 import { Settings, TrainerInstance, Viewport } from "osrs-sdk";
-import { P3, SEQ } from "../fight/data";
+import type { Range } from "../fight/data";
+import { P3, P4, SEQ, SPOT } from "../fight/data";
+import type { SpotOptions } from "../fight/effects";
 import type { FightOptions, HitSpec } from "../fight/Fight";
 import { FightRegion } from "../fight/FightRegion";
 import type { ATile, Body } from "../fight/geometry";
@@ -61,6 +63,12 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
       messages.push([fight.tick, text]);
       message(text, colour);
     });
+    const spots: (readonly [number, number, ATile])[] = [];
+    const spot = fight.spot.bind(fight);
+    jest.spyOn(fight, "spot").mockImplementation((tile: ATile, id: number, options?: SpotOptions) => {
+      spots.push([fight.tick, id, tile]);
+      return spot(tile, id, options);
+    });
 
     const boss = () => {
       if (!fight.boss) throw new Error("no boss");
@@ -85,7 +93,10 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
       if (side) fight.player.hop(side);
     };
     const from = (start: number, kinds: readonly number[]) => anims.filter(([t, id]) => t >= start && kinds.includes(id)).map(([t, id]) => [t - start, id]);
-    return { fight, boss, body, tick, tickTo, stayInReach, anims, shouts, hits, messages, from };
+    /** His HP at a whole-number percentage of the pool. */
+    const bossAt = (percent: number) => (boss().currentStats.hitpoint = Math.ceil((fight.poolMax * percent) / 100));
+    const said = (text: string, start: number) => shouts.filter(([, s]) => s === text).map(([t]) => t - start);
+    return { fight, boss, body, tick, tickTo, stayInReach, anims, shouts, hits, messages, spots, from, bossAt, said };
   }
 
   /** Phase 3 begins on tick 0 and he lands in his first corner P3.jumpToCornerAfter later: the segment start S. */
@@ -93,10 +104,13 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
 
   test("the first quadrant: two sets, the spin, two sets, Untether, and the quadrant falls 31 ticks on", () => {
     const f = recorded(3);
+    f.tickTo(S + 50, f.stayInReach);
+    // 76% as his second special comes, as in both kills (t528 and t304): Untether.
+    f.bossAt(76);
     f.tickTo(S + 52, f.stayInReach);
     // His HP reaches the floor during Untether, as in [K] (75% at t541, U+11).
     f.tickTo(S + 53 + 11);
-    f.boss().currentStats.hitpoint = Math.ceil(f.fight.poolMax * P3.hpFloors[0]);
+    f.bossAt(75);
     f.tickTo(S + 96);
     const kinds = [SWING, SLASH, PANIC, SEQ.p3PrayerIn, SEQ.p3PrayerLoop, SEQ.p3PrayerOut, SEQ.p3UnleashIn, SEQ.p3UnleashOut, SEQ.p3QuadrantDestroyIn, SEQ.p3UnleashOut90];
     // [K] from S = t477: 481 484 487 | 491 494 497 | spin 501, end 506 | 510 513 516 | 520 523 526 | Untether 530,
@@ -109,7 +123,48 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
       [43, SWING], [46, SWING], [49, SLASH],
       [53, SEQ.p3UnleashIn], [82, SEQ.p3UnleashOut], [84, SEQ.p3QuadrantDestroyIn], [95, SEQ.p3UnleashOut90],
     ]);
-    expect(f.shouts.filter(([, text]) => text === "Untether...").map(([t]) => t - S)).toEqual([53]);
+    expect(f.said("Untether...", S)).toEqual([53]);
+  });
+
+  test("far from the floor, his second special is Insolence: bands land 5, 10 and 15 on, swings 20 on", () => {
+    const f = recorded(3);
+    const I = S + 53;
+    const bands: number[] = [];
+    const roll = f.fight.rng.roll.bind(f.fight.rng);
+    jest.spyOn(f.fight.rng, "roll").mockImplementation((damage: Range) => {
+      if (damage === P3.insolenceDamage) bands.push(f.fight.tick - I);
+      return roll(damage);
+    });
+    f.tickTo(I + 21, f.stayInReach);
+    expect(f.said("Insolence...", I)).toEqual([0]);
+    expect(f.from(I, [SEQ.p3SuperiorSlash, SWING, SEQ.p3UnleashIn])).toEqual([[2, SEQ.p3SuperiorSlash], [7, SEQ.p3SuperiorSlash], [12, SEQ.p3SuperiorSlash], [20, SWING]]);
+    // Standing beside him you are in each band toward you.
+    expect(bands).toEqual([5, 10, 15]);
+  });
+
+  test("the specials carry on across quadrants: a floor reached mid-spin drops it on the last cut, and Insolence opens the next", () => {
+    const f = recorded(3);
+    const P = S + 24;
+    f.tickTo(P + 2, f.stayInReach);
+    f.bossAt(75);
+    f.tickTo(P + 6, f.stayInReach);
+    // [K] kill 2: the floor on t452, three ticks into the spin; "Obliteration..." with the last cut on t457.
+    expect(f.from(P, [SEQ.p3PrayerOut, SEQ.p3QuadrantDestroyIn])).toEqual([[5, SEQ.p3PrayerOut], [5, SEQ.p3QuadrantDestroyIn]]);
+    // He lands in the next quadrant 17 ticks after it falls; after a spin comes the other special: Insolence, as
+    // kill 2's third quadrant opened.
+    const S2 = P + 5 + P3.untether.nextSegment - P3.untether.obliteration;
+    f.tickTo(S2 + 26, f.stayInReach);
+    expect(f.said("Insolence...", S2)).toEqual([24]);
+    expect(f.from(S2, [SEQ.p3PrayerIn])).toEqual([]);
+  });
+
+  test("the vine: shouted with his first move after a quadrant's opening spin, rooting you 3 ticks later", () => {
+    const f = recorded(3);
+    f.tickTo(S + 37, f.stayInReach);
+    // [K] kill 2: the shout with the swing on t285 (spin end + 4), the vine on t288.
+    const shout = f.shouts.filter(([, s]) => s === "The void... will take you..." || s === "Await... the void...").map(([t]) => t - S);
+    expect(shout).toEqual([33]);
+    expect(f.messages.filter(([, m]) => m === "You've been rooted in place!").map(([t]) => t - S)).toEqual([36]);
   });
 
   test("swings land on the animation tick, the shadow slash the tick after its own", () => {
@@ -161,6 +216,8 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
     /** Where you end each tick from U+27 to U+29 (and wait until then): under him or one tile out. */
     function untether(plan: Readonly<Record<27 | 28 | 29, "under" | "out">>) {
       const f = recorded(3);
+      f.tickTo(U - 3, f.stayInReach);
+      f.bossAt(76);
       f.tickTo(U - 1, f.stayInReach);
       f.tickTo(U + 1);
       const under = at(f.boss().tile.x + 1, f.boss().tile.z + 2);
@@ -221,5 +278,20 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
     f.tickTo(8);
     expect(f.shouts.filter(([, text]) => text === "End...").map(([t]) => t)).toEqual([1]);
     expect(f.anims.filter(([, id]) => id === SEQ.p3DeflectIn).map(([t]) => t)).toEqual([4]);
+  });
+
+  test("phase 4: the orbs are ready 16 and 42 ticks into the cycle, and taking one heals on that tick", () => {
+    const f = recorded(4);
+    const D = P4.firstCycleAt;
+    // Wait on each orb's tile from the tick it shows.
+    for (const [shows, id] of [[D + P4.winds[0] + 1, SPOT.soulFragmentSpawn12], [D + P4.winds[1] + 1, SPOT.soulFragmentSpawn6]] as const) {
+      f.tickTo(shows);
+      const orb = f.spots.find(([t, spot]) => t === shows && spot === id);
+      if (!orb) throw new Error(`no orb shown on ${shows}`);
+      f.fight.player.hop(orb[2]);
+    }
+    f.tickTo(D + 44);
+    // [K] kill 2, both cycles: the first 4314 (the lifeforce back) on raiders at D+16 and D+42, with the heal.
+    expect(f.messages.filter(([, m]) => m.startsWith("You reclaim your lifeforce")).map(([t]) => t - D)).toEqual([16, 42]);
   });
 });

@@ -294,7 +294,7 @@ const TIPS: Readonly<Record<StartPhase, readonly string[]>> = {
   3: [
     "Pray Melee for his two swings, then step out of the shadow slash line.",
     "When he starts to spin, turn your overhead OFF (or be injured), then Protect from Melee for the saw blades.",
-    "He does six attacks between specials. Spin rubble falls over you slowly: one step clears it.",
+    "He does six attacks between specials, which alternate across the whole phase: the spin, then Untether if his HP is within 2% of the quadrant's 75/50/25, otherwise Insolence. Spin rubble falls over you slowly: one step clears it.",
     "Void bombs drop where you stand and on the same tile of every quadrant, and stay. Stand at the edge when they come or they'll be under you in phase 4.",
     "Break the void vine within 14 ticks (solo, your attack switches to it when it roots you). Kill rifts. Untether: pray Magic, get under his 3x3 (purple) by the eruption, and step one tile out when it glows brightest. The slam hits anyone not under him; the aftershock a tick later hits anyone still under.",
     "After Obliteration, cross the stones (click a stone or the next quadrant) before the quadrant falls. Right-click a censer to light it.",

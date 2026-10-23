@@ -263,12 +263,11 @@ export class Phase4 implements PhaseScript {
         orb.state = "gone";
         orb.spot?.stop();
         fight.spot(orb.tile, SPOT.soulFragmentDespawn, { maxTicks: 3 });
+        // The heal and the regain spotanim come on the pickup tick. [K]
         const amount = orb.credit + bonus;
-        fight.after(1, () => {
-          fight.healPlayer(amount, true);
-          fight.player.addSpotAnim({ id: SPOT.soulFragmentRegain, channel: "fragment" });
-          fight.message(`You reclaim your lifeforce (+${amount}).`, CHAT.green);
-        });
+        fight.healPlayer(amount, true);
+        fight.player.addSpotAnim({ id: SPOT.soulFragmentRegain, channel: "fragment" });
+        fight.message(`You reclaim your lifeforce (+${amount}).`, CHAT.green);
         continue;
       }
       if (fight.tick >= orb.expiresAt) {

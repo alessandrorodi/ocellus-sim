@@ -262,7 +262,7 @@ export class Phase1 implements PhaseScript {
     this.addLine(start, dir, P1.cornerLineLength, P1.lineClosesAfter);
   }
 
-  private addLine(start: ATile, dir: Readonly<{ dx: number; dz: number }>, length: number, closesAfter: number, visualDelay = 0): void {
+  private addLine(start: ATile, dir: Readonly<{ dx: number; dz: number }>, length: number, closesAfter: number): void {
     const tiles: ATile[] = [];
     for (let k = 0; k < length; k++) {
       const t = at(start.x + dir.dx * k, start.z + dir.dz * k);
@@ -274,7 +274,7 @@ export class Phase1 implements PhaseScript {
     const pieces = crackPieces(growth);
     const n = tiles.length;
     const spots = tiles.map((tile, i) =>
-      this.fight.spot(tile, i === n - 1 ? pieces.start : pieces.piece, { delay: visualDelay + 60 + (n - 1 - i), loopTicks: closesAfter, maxTicks: closesAfter + 1 }),
+      this.fight.spot(tile, i === n - 1 ? pieces.start : pieces.piece, { delay: 60 + (n - 1 - i), loopTicks: closesAfter, maxTicks: closesAfter + 1 }),
     );
     const line: Line = { tiles, closesAt: this.fight.tick + closesAfter, spots, growth, closed: false };
     this.lines.push(line);
@@ -358,7 +358,8 @@ export class Phase1 implements PhaseScript {
     boss.playAnimation(SEQ.p1Charge);
     const look: Readonly<Record<Side, ATile>> = { east: at(sw.x + 11, sw.z + 1), south: at(sw.x + 1, sw.z - 10), west: at(sw.x - 10, sw.z + 1), north: at(sw.x + 1, sw.z + 11) };
     boss.faceTile(look[side]);
-    // Two six-long diagonals from one face, the first at once and the second 60 cc later. [R]
+    // Two six-long diagonals from one face, a quarter turn apart, both on the beat tick. The first in turn order
+    // (the crack pieces' 0/90/180/270) closes 4 ticks on, the other 6. [R] [K]
     const ends: Readonly<Record<Side, readonly [[number, number, number, number], [number, number, number, number]]>> = {
       east: [[3, 2, 1, 1], [3, 0, 1, -1]],
       south: [[2, -1, 1, -1], [0, -1, -1, -1]],
@@ -367,7 +368,7 @@ export class Phase1 implements PhaseScript {
     };
     const [first, second] = ends[side];
     this.addLine(at(sw.x + first[0], sw.z + first[1]), { dx: first[2], dz: first[3] }, P1.beatLineLength, P1.beatLineCloses[0]);
-    this.addLine(at(sw.x + second[0], sw.z + second[1]), { dx: second[2], dz: second[3] }, P1.beatLineLength, P1.beatLineCloses[1], 60);
+    this.addLine(at(sw.x + second[0], sw.z + second[1]), { dx: second[2], dz: second[3] }, P1.beatLineLength, P1.beatLineCloses[1]);
     this.later(4, () => boss.addSpotAnim({ id: SPOT.p1Charge, channel: "charge" }));
     this.later(P1.beatExplodeAfter, () => {
       boss.addSpotAnim({ id: SPOT.p1Charge, channel: "charge" });
