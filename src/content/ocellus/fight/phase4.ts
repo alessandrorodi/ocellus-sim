@@ -330,9 +330,16 @@ export class Phase4 implements PhaseScript {
         fight.message("Destroying the void rift empowers you!", CHAT.purple);
         this.boss.grantMaxDamageRollsOnNextIncomingAttack();
       });
-      // It stays until killed. [K]
       fight.region.addMob(rift);
       this.rifts.push(rift);
+      // Left alive, it detonates 30 ticks on and hits you. [K]
+      fight.after(P3.riftDetonatesAfter, () => {
+        if (rift.killed || !this.rifts.includes(rift)) return;
+        this.rifts = this.rifts.filter((r) => r !== rift);
+        rift.remove();
+        fight.spot(tile, SPOT.voidChainExplosion, { maxTicks: 3 });
+        for (const amount of P4.riftDetonationHits) fight.hit({ amount: () => amount });
+      });
     }
   }
 

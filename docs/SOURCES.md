@@ -55,11 +55,22 @@ Where every timing, damage number and id in the full-fight simulator comes from.
   and the vine roots that raider where they stand 3 ticks later (4290, then 4291). Which spins: never an even one in a
   quadrant; 13 of 15 first spins, 5 of 5 third ones, 1 of 4 fifth ones and no later ones over eight fights. The sim
   brings it after a quadrant's 1st and 3rd spins. A panic shout on the same tick can hide the vine's.
-- **Vines and rifts last until killed.** [K]: vines lived 7-32 ticks (median 14) and rifts 6-32 in both phases, and
-  nobody took a hit as a vine passed 14 ticks, so [R]'s 14 ticks to cut it, [W]'s 50 for failing, [R]'s 12-tick rift and
-  [T]'s phase 4 rift charge are gone. [R]'s own notes record all 33 rifts killed (6-27 ticks). [T]'s charge, 14 on the
+- **Vines last until killed.** [K]: vines lived 7-32 ticks (median 14) and nobody took a hit as one passed 14 ticks,
+  so [R]'s 14 ticks to cut it and [W]'s 50 for failing are gone. With "attack your own vine" off, a teammate cuts
+  yours at 14.
+- **Rifts detonate 30 ticks after they appear.** All 3 unkilled rifts in [K] played their detonate animation (14898,
+  14906 for an Augmenter) 30 ticks after spawning, put a flare (4306, 4308) on raiders and hit them that tick: 39
+  (a Void Rift, 20:40) and 40, 40, 41 (an Augmenter, 21:53) in phase 3, 3 twice in phase 4 (21:53); one raider under
+  Protect from Magic took 18. 56 others died to raiders 4-30 ticks in, so "lived 6-32 ticks" was the kills plus these.
+  [R]'s 12-tick rift was its engine's guess (its notes record all 33 rifts killed). [T]'s phase 4 charge, 14 on the
   streamer 11 ticks after the rifts, is the next cycle's first explosion: rifts come at +59 and explosions land from
-  +10 (14 on two raiders at the same tick in 22:28). With "attack your own vine" off, a teammate cuts yours at 14.
+  +10 (14 on two raiders at that tick in 22:28).
+- **ArchiveOcellusTrainer after the fork.** [T] went on past the commit this repo forked from (its #18). Checked
+  against [K] on 2026-10-24: its rifts charge 23 ticks (owner's estimate; [K] says 30), its inner orb lingers to +27
+  (pickups in [K] run to +29), its one-tile explosion dodge cuts the attack delay by 3 and its Deflect reflects 10%
+  (both marked unconfirmed or the owner's wish there). Not taken. Two of its ideas have no [K] data either way: the boss
+  blocking you under him in the outer void (a redditor's report) and standard ranged attacks always max-hitting rifts
+  ([W]; 38 of 93 hits on rifts in [K] were their full 44).
 - **Shadow slash.** [K] 111 bands over six fights: aimed at the quadrant's tank (205 of 205 swings had one; solo,
   you), snapped to the nearest of 8 directions from his middle tile, 3 wide from the ring touching his body to the
   platform's edge. Straight bands are the 3 tiles in line with his body (south: x -1..1, z <= -2); diagonal ones the

@@ -389,8 +389,14 @@ export const P3 = {
   afterInsolence: 20,
   insolenceDamage: range(38, 46),
   insolenceDebrisLasts: 16,
-  /** Rifts stay until killed: 6-32 ticks in [K], all 33 killed in [R]. */
   riftHp: 44,
+  /**
+   * A rift left alive detonates 30 ticks after it appears (its detonate animation, a flare on raiders and a hit on the
+   * same tick; gone 2 later), in all 3 of [K]'s unkilled rifts; 56 others died to raiders 4-30 ticks in. Phase 3's
+   * hits: 39 (a Void Rift) and 40, 40, 41 (a Void Augmenter); one raider took 18 under Protect from Magic. [K]
+   */
+  riftDetonatesAfter: 30,
+  riftDetonationDamage: range(39, 41),
   /** Killing a Void Augmenter: Attack and Strength to 116, Magic and Ranged to 112, from 99s. [W] Void Augmenter */
   augmenterBoost: { melee: 17, rangedMagic: 13 },
   healRiftEvery: 4,
@@ -465,10 +471,12 @@ export const P4 = {
   floorGraceInner: 2,
   floorGraceOuter: 5,
   /**
-   * Rifts stay until killed: 7-32 ticks in [K]. [T]'s charge (14, 11 ticks after they appear) is the next cycle's
-   * first explosion, which lands at +10.
+   * Rifts detonate 30 ticks after they appear unless killed, as in phase 3 (P3.riftDetonatesAfter); [K]'s one
+   * phase 4 detonation hit its raider for 3 twice. [T]'s charge (14, 11 ticks after they appear) is the next cycle's
+   * first explosion, which lands at +10; upstream's later 23 ticks was an estimate.
    */
   riftsAt: 59,
+  riftDetonationHits: [3, 3],
   /** Overheads: Deflect Melee in the inner void, Soul Split around hybrids, Deflect Range in the outer void. */
   overheads: [
     { from: 0, to: 25, overhead: "deflect-melee" },

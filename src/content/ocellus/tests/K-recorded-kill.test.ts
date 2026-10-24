@@ -349,7 +349,7 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
     expect(f.messages.filter(([, m]) => m.startsWith("You reclaim your lifeforce")).map(([t]) => t - D)).toEqual([16, 42]);
   });
 
-  test("phase 4: rifts stay until killed, with no burst of their own", () => {
+  test("phase 4: a rift left alive detonates 30 ticks after it appears, not 11", () => {
     const f = recorded(4);
     const R = P4.firstCycleAt + P4.riftsAt;
     const rifts = () => f.fight.region.mobs.filter((m) => m instanceof VoidAdd);
@@ -357,8 +357,31 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
     f.tickTo(R + 1);
     const spawned = rifts();
     expect(spawned.length).toBeGreaterThan(0);
-    // [K]: they lived 7-32 ticks, until killed; [T]'s 14 eleven ticks on was the next cycle's first explosion.
-    f.tickTo(R + 30);
+    // [T]'s 14 eleven ticks on was the next cycle's first explosion; [K]'s unkilled rifts detonated at +30.
+    f.tickTo(R + 29);
     expect(spawned.every((r) => rifts().includes(r))).toBe(true);
+    f.tickTo(R + 32);
+    expect(spawned.some((r) => rifts().includes(r))).toBe(false);
+    // One burst on each rift's tile, as it goes (the cycle's hybrid lands that tick too).
+    expect(f.spots.filter(([t, id]) => t === R + 30 && id === SPOT.voidChainExplosion).length).toBe(spawned.length);
+    expect(f.hits.filter((h) => h.tick === R + 30).length).toBeGreaterThanOrEqual(spawned.length * P4.riftDetonationHits.length);
+  });
+
+  test("phase 3: a rift left alive detonates 30 ticks after it appears", () => {
+    const f = recorded(3);
+    const detonations: number[] = [];
+    const roll = f.fight.rng.roll.bind(f.fight.rng);
+    jest.spyOn(f.fight.rng, "roll").mockImplementation((damage: Range) => {
+      if (damage === P3.riftDetonationDamage) detonations.push(f.fight.tick);
+      return roll(damage);
+    });
+    // Drop the first quadrant mid-spin; rifts come 3 ticks into the next one.
+    const P = S + 24;
+    f.tickTo(P + 2, f.stayInReach);
+    f.bossAt(75);
+    const S2 = P + 3 + P3.untether.nextSegment - P3.untether.obliteration;
+    f.tickTo(S2 + 3 + P3.riftDetonatesAfter + 1, f.stayInReach);
+    // [K] 20:40: a Void Rift from t4831 detonated on t4861; 21:53: an Augmenter from t12106 on t12136.
+    expect(detonations.map((t) => t - S2)).toEqual([3 + P3.riftDetonatesAfter]);
   });
 });

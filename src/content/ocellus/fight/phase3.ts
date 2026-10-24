@@ -541,7 +541,15 @@ export class Phase3 implements PhaseScript {
     const rift = new VoidAdd(fight.region, tile, kind, (add) => this.riftKilled(add));
     fight.region.addMob(rift);
     this.rifts.push(rift);
-    // It stays until killed [K] [R]; a healing one heals him every 4 ticks until then.
+    // Left alive, it detonates 30 ticks on and hits you. [K]
+    fight.after(P3.riftDetonatesAfter, () => {
+      if (rift.killed || !this.rifts.includes(rift)) return;
+      this.rifts = this.rifts.filter((r) => r !== rift);
+      rift.remove();
+      fight.spot(tile, SPOT.voidChainExplosion, { maxTicks: 3 });
+      fight.hit({ amount: () => fight.rng.roll(P3.riftDetonationDamage) });
+    });
+    // A healing one heals him every 4 ticks until then.
     if (kind !== "rift-heal") return;
     const heal = () => {
       if (rift.killed || !this.rifts.includes(rift)) return;
