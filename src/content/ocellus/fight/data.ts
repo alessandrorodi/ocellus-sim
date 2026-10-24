@@ -317,21 +317,25 @@ export const P3 = {
   afterSlash: 4,
   setsPerSpecial: 2,
   /**
-   * His specials alternate through the whole phase, carrying on from quadrant to quadrant: the spin, then the other
-   * one, which is Untether when his whole-number HP% is within 2 of the quadrant's floor (76 and 27 in the two kills)
-   * and Insolence otherwise. [K] kill 1: S U | S I | S I; kill 2: S U | S I S | I S U.
+   * His specials, the same in eight recorded fights: the spin alternates with another special through the whole phase,
+   * carrying on across quadrant falls. The other one alternates Untether and Insolence within a quadrant, Untether first
+   * in the first quadrant and Insolence first in later ones. His HP plays no part (Untether at 91%, 85%, 63%). [K]
+   * e.g. S U S I S U S I S | fall | I S U S I ... and S U S I | fall | S I S U S | fall | I S U ...
+   * On the segment's own clock from its start S: void bombs (when they drop) and the rifts. [R] [K]
    */
-  untetherNearFloor: 2,
-  /** On the segment's own clock from its start S: void bombs (when they drop) and the rifts. [R] [K] */
-  first: { bombs: [6, 9], rifts: NO_TICKS },
-  later: { bombs: [6], rifts: [3, 51, 111] },
+  first: { firstOther: "untether", bombs: [6, 9], rifts: NO_TICKS },
+  later: { firstOther: "insolence", bombs: [6], rifts: [3, 51, 111] },
   /** Swings hit everyone near him on the animation tick: 1-7 through Protect from Melee. [R] [K] */
   basicHitProtected: range(1, 7),
   basicHitUnprotected: range(12, 19),
-  /** The shadow slash lands the tick after its animation. [K] */
+  /**
+   * The shadow slash lands the tick after its animation, on a band aimed at his tank (solo: you) and snapped to the
+   * nearest of 8 directions from his middle tile: 3 wide from the ring touching his body to the platform's edge. [K]
+   * 111 bands in six fights
+   */
   slashLands: 1,
   slashDamage: range(25, 28),
-  /** The shadow slash and Insolence: 3 tiles wide, to the platform edge. [V] duo 20:24, Bubba OSRS guide 4:56 [W] */
+  /** Insolence's bands: 3 wide, to the platform edge, at any angle. [V] duo 20:24, Bubba OSRS guide 4:56 [W] [K] */
   waveWidth: 3,
   /**
    * The spin: saw i cuts 5 + 3i ticks in, on the tick its loop animation (the last saw's: the end animation) plays; an
@@ -363,12 +367,17 @@ export const P3 = {
   debrisDamage: range(6, 11),
   vineHp: 44,
   /**
-   * "The void... will take you..." comes with his first move after a spin that opens a quadrant (4 of 4 vines in the
-   * two kills), and the vine roots its target where they stand 3 ticks later. [K]
+   * "The void... will take you..." comes with his first move after a quadrant's 1st and 3rd spins (13 of 15 first
+   * spins and 5 of 5 third ones in eight fights; never an even one, rarely a later odd one), and the vine roots its
+   * target where they stand 3 ticks later. [K]
    */
+  vineAfterSpins: [1, 3],
   vineRootsAfter: 3,
-  vineBreakWithin: 14,
-  vineDamage: range(50, 55),
+  /**
+   * It holds its target until it dies: vines lived 7-32 ticks, median 14, and nobody took a hit for leaving one ([K];
+   * [R] and [W] had 14 ticks, then 50). With "attack your own vine" off, a teammate cuts yours at the median.
+   */
+  vineCutByTeammate: 14,
   /**
    * "Insolence...": superior slashes animate 2, 7 and 12 ticks on, each landing 3 after its animation, and his swings
    * resume 20 ticks after the shout. [K] Damage: [R] 39-41, [K] 38, 43 and 46.
@@ -380,8 +389,8 @@ export const P3 = {
   afterInsolence: 20,
   insolenceDamage: range(38, 46),
   insolenceDebrisLasts: 16,
+  /** Rifts stay until killed: 6-32 ticks in [K], all 33 killed in [R]. */
   riftHp: 44,
-  riftLasts: 12,
   /** Killing a Void Augmenter: Attack and Strength to 116, Magic and Ranged to 112, from 99s. [W] Void Augmenter */
   augmenterBoost: { melee: 17, rangedMagic: 13 },
   healRiftEvery: 4,
@@ -409,14 +418,17 @@ export const P3 = {
     aftershock: 30,
     aftershockDamage: range(18, 41),
     obliteration: 31,
+    /** With his HP above the floor the quadrant stands and his swings resume. [K] */
+    swingsAgain: 37,
     escapeLine: 42,
     gone: 44,
     nextSegment: 48,
   },
   /**
-   * The quadrant falls once his whole-number HP% is down to 75 / 50 / 25 (the sim holds him there) and his current move
-   * has landed, Untether or not: as a set's slash lands, on a spin's last cut, or the tick after the floor between
-   * moves ([K]: t674 and t789 in kill 1, t457 in kill 2). During Untether it waits for U+31. [W] [O] [V] [K]
+   * The quadrant falls the tick after his whole-number HP% is down to 75 / 50 / 25 (the sim holds him there), Untether
+   * or not, cutting short whatever he is doing ([K] 23:03: "Obliteration..." on the tick of a set's slash). His bar
+   * reads the same at the floor and just above it, so the tick the floor came is not on the record. During Untether it
+   * waits for U+31. [W] [O] [V] [K]
    */
   hpFloors: [0.75, 0.5, 0.25],
   jumpTicks: 2,
@@ -452,9 +464,11 @@ export const P4 = {
   floorDamage: range(9, 11),
   floorGraceInner: 2,
   floorGraceOuter: 5,
+  /**
+   * Rifts stay until killed: 7-32 ticks in [K]. [T]'s charge (14, 11 ticks after they appear) is the next cycle's
+   * first explosion, which lands at +10.
+   */
   riftsAt: 59,
-  riftCharge: 11,
-  riftDamage: range(13, 15),
   /** Overheads: Deflect Melee in the inner void, Soul Split around hybrids, Deflect Range in the outer void. */
   overheads: [
     { from: 0, to: 25, overhead: "deflect-melee" },

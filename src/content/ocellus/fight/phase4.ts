@@ -330,15 +330,9 @@ export class Phase4 implements PhaseScript {
         fight.message("Destroying the void rift empowers you!", CHAT.purple);
         this.boss.grantMaxDamageRollsOnNextIncomingAttack();
       });
+      // It stays until killed. [K]
       fight.region.addMob(rift);
       this.rifts.push(rift);
-      fight.after(P4.riftCharge, () => {
-        if (rift.killed) return;
-        rift.remove();
-        this.rifts = this.rifts.filter((r) => r !== rift);
-        fight.spot(tile, SPOT.voidChainExplosion, { maxTicks: 3 });
-        fight.hit({ amount: () => fight.rng.roll(P4.riftDamage) });
-      });
     }
   }
 

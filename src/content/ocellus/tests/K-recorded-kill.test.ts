@@ -6,7 +6,7 @@ import type { FightOptions, HitSpec } from "../fight/Fight";
 import { FightRegion } from "../fight/FightRegion";
 import type { ATile, Body } from "../fight/geometry";
 import { at, covers, distanceToBody } from "../fight/geometry";
-import { BossForm } from "../fight/units";
+import { BossForm, VoidAdd } from "../fight/units";
 
 /**
  * Phases 3 and 4 against a RuneLite fight log of a spectated 8-raider kill, 2026-10-23 ([K] in docs/SOURCES.md).
@@ -28,9 +28,9 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
   });
 
   /** A fight that records his animations, shouts, hits on you and chat by tick. */
-  function recorded(startPhase: 3 | 4) {
+  function recorded(startPhase: 3 | 4, overrides: Partial<FightOptions> = {}) {
     Settings.readFromStorage();
-    const options: FightOptions = { seed: 1, party: 1, startPhase, hazardTiles: true, videoMarkers: false, skipMarkers: false, soloVine: true, invincible: true };
+    const options: FightOptions = { seed: 1, party: 1, startPhase, hazardTiles: true, videoMarkers: false, skipMarkers: false, soloVine: true, invincible: true, ...overrides };
     const region = new FightRegion(options, () => undefined);
     const trainer = new TrainerInstance(region, { force2d: true });
     trainer.mount(document.createElement("canvas"), document.createElement("div"));
@@ -104,9 +104,6 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
 
   test("the first quadrant: two sets, the spin, two sets, Untether, and the quadrant falls 31 ticks on", () => {
     const f = recorded(3);
-    f.tickTo(S + 50, f.stayInReach);
-    // 76% as his second special comes, as in both kills (t528 and t304): Untether.
-    f.bossAt(76);
     f.tickTo(S + 52, f.stayInReach);
     // His HP reaches the floor during Untether, as in [K] (75% at t541, U+11).
     f.tickTo(S + 53 + 11);
@@ -126,45 +123,96 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
     expect(f.said("Untether...", S)).toEqual([53]);
   });
 
-  test("far from the floor, his second special is Insolence: bands land 5, 10 and 15 on, swings 20 on", () => {
+  test("above the floor the quadrant stands: swings at U+37, then the spin, Insolence, and the spin again with a vine", () => {
     const f = recorded(3);
-    const I = S + 53;
+    const I = S + 139;
     const bands: number[] = [];
     const roll = f.fight.rng.roll.bind(f.fight.rng);
     jest.spyOn(f.fight.rng, "roll").mockImplementation((damage: Range) => {
       if (damage === P3.insolenceDamage) bands.push(f.fight.tick - I);
       return roll(damage);
     });
-    f.tickTo(I + 21, f.stayInReach);
-    expect(f.said("Insolence...", I)).toEqual([0]);
-    expect(f.from(I, [SEQ.p3SuperiorSlash, SWING, SEQ.p3UnleashIn])).toEqual([[2, SEQ.p3SuperiorSlash], [7, SEQ.p3SuperiorSlash], [12, SEQ.p3SuperiorSlash], [20, SWING]]);
-    // Standing beside him you are in each band toward you.
+    f.tickTo(S + 210, f.stayInReach);
+    // [K] 21:16, quadrant 1 at 91% to 85%: S U S I S U, swings again 37 after each Untether (t7902 -> t7939).
+    expect(f.from(S, [SEQ.p3PrayerIn, SEQ.p3UnleashIn, SEQ.p3SuperiorSlash, SEQ.p3QuadrantDestroyIn])).toEqual([
+      [24, SEQ.p3PrayerIn], [53, SEQ.p3UnleashIn], [110, SEQ.p3PrayerIn],
+      [141, SEQ.p3SuperiorSlash], [146, SEQ.p3SuperiorSlash], [151, SEQ.p3SuperiorSlash],
+      [179, SEQ.p3PrayerIn], [208, SEQ.p3UnleashIn],
+    ]);
+    expect(f.from(S + 53 + 30, [SWING])[0]).toEqual([7, SWING]);
+    expect(f.said("Insolence...", S)).toEqual([139]);
+    // Insolence's bands land 5, 10 and 15 on, his swings 20 on. Standing beside him you are in each band.
     expect(bands).toEqual([5, 10, 15]);
+    expect(f.from(I + 16, [SWING])[0]).toEqual([4, SWING]);
+    // The quadrant's 1st and 3rd spins bring the vine with his next move, not the 2nd.
+    const shouts = f.shouts.filter(([, s]) => s === "The void... will take you..." || s === "Await... the void...").map(([t]) => t - S);
+    expect(shouts).toEqual([33, 188]);
+    expect(f.messages.filter(([, m]) => m === "You've been rooted in place!").map(([t]) => t - S)).toEqual([36, 191]);
   });
 
-  test("the specials carry on across quadrants: a floor reached mid-spin drops it on the last cut, and Insolence opens the next", () => {
+  test("a quadrant falls the tick after his HP reaches its floor, even mid-spin; the next opens with the other special", () => {
     const f = recorded(3);
     const P = S + 24;
     f.tickTo(P + 2, f.stayInReach);
     f.bossAt(75);
     f.tickTo(P + 6, f.stayInReach);
-    // [K] kill 2: the floor on t452, three ticks into the spin; "Obliteration..." with the last cut on t457.
-    expect(f.from(P, [SEQ.p3PrayerOut, SEQ.p3QuadrantDestroyIn])).toEqual([[5, SEQ.p3PrayerOut], [5, SEQ.p3QuadrantDestroyIn]]);
-    // He lands in the next quadrant 17 ticks after it falls; after a spin comes the other special: Insolence, as
-    // kill 2's third quadrant opened.
-    const S2 = P + 5 + P3.untether.nextSegment - P3.untether.obliteration;
+    // The rest of the spin goes with the quadrant.
+    expect(f.from(P, [SEQ.p3PrayerOut, SEQ.p3QuadrantDestroyIn])).toEqual([[3, SEQ.p3QuadrantDestroyIn]]);
+    // He lands in the next quadrant 17 ticks after it falls. A spin came last, so the other special opens it, and in a
+    // later quadrant that is Insolence first, as kill 2's third quadrant and 21:16's second opened.
+    const S2 = P + 3 + P3.untether.nextSegment - P3.untether.obliteration;
     f.tickTo(S2 + 26, f.stayInReach);
     expect(f.said("Insolence...", S2)).toEqual([24]);
     expect(f.from(S2, [SEQ.p3PrayerIn])).toEqual([]);
   });
 
-  test("the vine: shouted with his first move after a quadrant's opening spin, rooting you 3 ticks later", () => {
-    const f = recorded(3);
-    f.tickTo(S + 37, f.stayInReach);
+  test("the vine: shouted with his first move after the quadrant's first spin, rooting you until it dies", () => {
+    const f = recorded(3, { soloVine: false });
+    f.tickTo(S + 49, f.stayInReach);
     // [K] kill 2: the shout with the swing on t285 (spin end + 4), the vine on t288.
     const shout = f.shouts.filter(([, s]) => s === "The void... will take you..." || s === "Await... the void...").map(([t]) => t - S);
     expect(shout).toEqual([33]);
     expect(f.messages.filter(([, m]) => m === "You've been rooted in place!").map(([t]) => t - S)).toEqual([36]);
+    // No timer of its own (vines lived 7-32 ticks); with "attack your own vine" off a teammate cuts it 14 ticks on.
+    expect(f.fight.player.frozen).toBeGreaterThan(0);
+    f.tickTo(S + 50, f.stayInReach);
+    expect(f.messages.filter(([, m]) => m === "You break free of the vine.").map(([t]) => t - S)).toEqual([50]);
+    expect(f.fight.player.frozen).toBeLessThanOrEqual(0);
+  });
+
+  describe("the shadow slash: 3 wide from the ring around his body, snapped to the nearest of 8 directions [K]", () => {
+    /**
+     * The band marked the tick before his slash, with you `east` and `south` of his middle tile when it is aimed; each
+     * tile as [east, south] of that middle.
+     */
+    function band(east: number, south: number): (readonly [number, number])[] {
+      const f = recorded(3);
+      f.tickTo(S + 8, f.stayInReach);
+      const mid = at(f.boss().tile.x + 1, f.boss().tile.z + 1);
+      f.fight.player.hop(at(mid.x + east, mid.z - south));
+      f.tickTo(S + 9);
+      return f.fight.marks().filter((m) => m.colour === 0xb01030).map((m) => [m.tile.x - mid.x, mid.z - m.tile.z] as const);
+    }
+    const has = (tiles: (readonly [number, number])[], e: number, s: number) => tiles.some(([x, z]) => x === e && z === s);
+
+    test("straight: the 3 tiles in line with his body", () => {
+      const south = band(1, 4);
+      expect(south.length).toBeGreaterThan(6);
+      expect(south.every(([e, s]) => Math.abs(e) <= 1 && s >= 2)).toBe(true);
+      expect([-1, 0, 1].every((e) => has(south, e, 2))).toBe(true);
+      // 4 east, 1 south of his middle is still east.
+      const east = band(4, 1);
+      expect(east.every(([e, s]) => Math.abs(s) <= 1 && e >= 2)).toBe(true);
+      expect([-1, 0, 1].every((s) => has(east, 2, s))).toBe(true);
+    });
+
+    test("diagonal: 3 wide from his corner, outside his 3x3", () => {
+      // 4 east, 2 south of his middle snaps to south-east; the room's cut corners end it early.
+      const se = band(4, 2);
+      expect(se.every(([e, s]) => e >= 1 && s >= 1 && Math.abs(e - s) <= 1)).toBe(true);
+      expect(has(se, 2, 2) && has(se, 2, 1) && has(se, 1, 2)).toBe(true);
+      expect(has(se, 1, 1) || has(se, 3, 1)).toBe(false);
+    });
   });
 
   test("swings land on the animation tick, the shadow slash the tick after its own", () => {
@@ -216,8 +264,6 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
     /** Where you end each tick from U+27 to U+29 (and wait until then): under him or one tile out. */
     function untether(plan: Readonly<Record<27 | 28 | 29, "under" | "out">>) {
       const f = recorded(3);
-      f.tickTo(U - 3, f.stayInReach);
-      f.bossAt(76);
       f.tickTo(U - 1, f.stayInReach);
       f.tickTo(U + 1);
       const under = at(f.boss().tile.x + 1, f.boss().tile.z + 2);
@@ -255,19 +301,27 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
     });
   });
 
-  test("a quadrant at its HP floor falls the tick after the set's slash, without Untether", () => {
+  test("a quadrant at its HP floor falls the next tick, cutting his set short", () => {
     const f = recorded(3);
+    const slashes: number[] = [];
+    const roll = f.fight.rng.roll.bind(f.fight.rng);
+    jest.spyOn(f.fight.rng, "roll").mockImplementation((damage: Range) => {
+      if (damage === P3.slashDamage) slashes.push(f.fight.tick - S);
+      return roll(damage);
+    });
     f.tickTo(S + 8, f.stayInReach);
-    f.boss().currentStats.hitpoint = Math.ceil(f.fight.poolMax * P3.hpFloors[0]);
+    f.bossAt(75);
     f.tickTo(S + 14, f.stayInReach);
-    // [K]'s second quadrant: floor reached on t671 between swing 670 and slash 673; "Obliteration..." on 674.
-    expect(f.from(S, [SWING, SLASH, SEQ.p3QuadrantDestroyIn])).toEqual([[4, SWING], [7, SWING], [10, SLASH], [11, SEQ.p3QuadrantDestroyIn]]);
+    // [K] 23:03: swings on t19080 and t19083, then "Obliteration..." on t19086 in place of the slash.
+    expect(f.from(S, [SWING, SLASH, SEQ.p3QuadrantDestroyIn])).toEqual([[4, SWING], [7, SWING], [9, SEQ.p3QuadrantDestroyIn]]);
+    // The slash's band went with it.
+    expect(slashes).toEqual([]);
   });
 
   test("between moves, a quadrant at its HP floor falls the next tick", () => {
     const f = recorded(3);
     f.tickTo(S + 11, f.stayInReach);
-    f.boss().currentStats.hitpoint = Math.ceil(f.fight.poolMax * P3.hpFloors[0]);
+    f.bossAt(75);
     f.tickTo(S + 14, f.stayInReach);
     // [K]'s third quadrant: slash 786, floor 788, "Run..." 789.
     expect(f.from(S, [SWING, SLASH, SEQ.p3QuadrantDestroyIn])).toEqual([[4, SWING], [7, SWING], [10, SLASH], [12, SEQ.p3QuadrantDestroyIn]]);
@@ -293,5 +347,18 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
     f.tickTo(D + 44);
     // [K] kill 2, both cycles: the first 4314 (the lifeforce back) on raiders at D+16 and D+42, with the heal.
     expect(f.messages.filter(([, m]) => m.startsWith("You reclaim your lifeforce")).map(([t]) => t - D)).toEqual([16, 42]);
+  });
+
+  test("phase 4: rifts stay until killed, with no burst of their own", () => {
+    const f = recorded(4);
+    const R = P4.firstCycleAt + P4.riftsAt;
+    const rifts = () => f.fight.region.mobs.filter((m) => m instanceof VoidAdd);
+    // A mob joins the region on the tick after it is added.
+    f.tickTo(R + 1);
+    const spawned = rifts();
+    expect(spawned.length).toBeGreaterThan(0);
+    // [K]: they lived 7-32 ticks, until killed; [T]'s 14 eleven ticks on was the next cycle's first explosion.
+    f.tickTo(R + 30);
+    expect(spawned.every((r) => rifts().includes(r))).toBe(true);
   });
 });

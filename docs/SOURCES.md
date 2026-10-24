@@ -13,7 +13,7 @@ Where every timing, damage number and id in the full-fight simulator comes from.
 | **[V]** | [Duo The Fractured Archive (ShadowStalkerTM)](https://www.youtube.com/watch?v=HAgq_qg0OIY), Ocellus from 12:45 to 25:10 | Visual check of every phase, the teal P1 / green P2+ boss bar, "You've been injured and can't use protection prayers!" during Untether, "Destroying the void rift/augmenter empowers you!", the 12:17 duo kill | Footage, single run |
 | **Cache** | OpenRS2 cache [2746](https://archive.openrs2.org/caches/runescape/2746) (OSRS build 241, 2026-10-20) | Models, animations, effects and sounds, extracted at build time by `osrs-sdk-assets`; nothing from the cache is committed | Confirmed. No XTEA keys yet, so the arena map is drawn by hand |
 | **[O]** | The owner, a player of the fight, checked against [V] | Phase 2's skip, the HP-driven quadrant falls, tendrils that cost nothing in the end | Player knowledge |
-| **[K]** | RuneLite fight logs, spectating two 8-raider kills on 2026-10-23 (kill 1 and kill 2) | Every Ocellus anim, floor spotanim and projectile by tick, every raider's hitsplats with the overhead they had up, and raider positions around the Untether slam. Kill 2 adds spotanims on the boss and every raider, NPC spawns and per-tick overheads through the spin. Confirmed phase 1, phase 2 and phase 4's cycle; corrected phase 1's beat cracks, phase 3's chain and special order, the spin, Untether, bombs, Insolence, the vine, phase 4's start and its orbs | Highest for what it logged. One team; phase 4's orb and explosion tiles never show (no floor graphic) |
+| **[K]** | RuneLite fight logs from 2026-10-23: two spectated 8-raider kills (kill 1 and kill 2), then six raids from 20:40 to 23:43 | Every Ocellus anim, floor spotanim and projectile by tick, every raider's hitsplats with the overhead they had up, and raider positions around the Untether slam. Kill 2 adds spotanims on the boss and every raider, NPC spawns and per-tick overheads through the spin; the raids add his facing. Confirmed phase 1, phase 2 and phase 4's cycle; corrected phase 1's beat cracks, phase 3's chain, special order, slash bands and falls, the spin, Untether, bombs, Insolence, the vine and rifts, phase 4's start and its orbs | Highest for what it logged. Few teams; phase 4's orb and explosion tiles never show (no floor graphic) |
 | **[M]** | [Molgoatkirby's Ocellus guide](https://www.youtube.com/watch?v=GU8_yiucWtk) (narrated, day 3), with the [tile ragging video](https://www.youtube.com/watch?v=hR71l7hzuKM) and [markers](https://pastebin.com/6D7SEWEm) it links | Void bombs that stay into phase 4, the spin's rubble, magic through Untether, the tick-perfect step out, six attacks between specials, phase 4's 2-tick reset and its orb | Player knowledge, footage |
 
 ## Engine
@@ -36,28 +36,43 @@ Where every timing, damage number and id in the full-fight simulator comes from.
   quadrant ran 3 ticks late from its first move. The chain reproduces [R]'s timelines, whose later segments have a
   panic after each spin. Bombs and the rifts stay on the segment's clock (kill 1's bombs came at S+4 through a panic;
   kill 2's rifts at S+3 and S+51, as [R]'s).
-- **Phase 3's special order.** It alternates through the whole phase and carries on from quadrant to quadrant: the
-  spin, then the other special, which is Untether when his whole-number HP% is within 2 of the quadrant's floor (76%
-  and 27% in [K]) and Insolence otherwise (59%, 35%, 61%, 46%). Kill 1 went S U | S I | S I, kill 2 S U | S I S | I S U.
-  [R]'s fixed first and later rotations were fast teams' versions of the same order. The sim keeps [V]'s one Untether
-  a quadrant.
-- **Quadrant falls.** [R]'s two fights and every Untether in [K] collapse 31 ticks after Untether with his HP already
+- **Phase 3's special order.** The same in all eight recorded fights: the spin alternates with another special through
+  the whole phase and carries on across quadrant falls; the other one alternates Untether and Insolence within a
+  quadrant, Untether first in the first quadrant and Insolence first in later ones. So a quadrant that falls right
+  after a spin hands the next one its other special first. His HP plays no part: Untether came at 91%, 85% and 63%
+  (the two kills' 76% and 27% were coincidence). E.g. S U S I S U S I S | fall | I S U S I S U ... (21:16) and
+  S U S I | fall | S I S U S | fall | I S U (21:53, 22:28). [R]'s fixed first and later rotations were fast teams' cuts
+  of the same order.
+- **Untether above the floor.** The quadrant stands: the slam at U+29 as usual, then he swings again at U+37 (or
+  panics there), in every Untether of the long fights ([K] 21:16, 23:03, 23:43). Several come in one quadrant.
+- **Quadrant falls.** [R]'s two fights and kills 1 and 2 in [K] collapse 31 ticks after Untether with his HP already
   at the floor. [W], [O] and the duo's HP bar ([V], 18:20-18:26, 20:42-20:43, 23:21) say the quadrant falls once his
-  whole-number HP% shows 75 / 50 / 25 (under 76% and so on). Three of [K]'s quadrants never reached Untether: his HP
-  held at the floor and the quadrant fell as his current move landed (kill 1: as a set's slash landed, t674, and the
-  tick after the floor between moves, t789; kill 2: on the spin's last cut, t457, the floor reached 5 ticks before).
-  The sim drops the quadrant on the tick his current move lands, or the next tick he is free.
-- **The vine.** [K]: "The void... will take you..." / "Await... the void..." comes with his first move after a spin
-  that opens a quadrant (S+33, S+36, S+39 and S+39 in four quadrants: always the spin's last cut + 4), and the vine
-  roots that raider where they stand 3 ticks later (4290, then 4291). Kill 1's first quadrant had none; [R] records one.
+  whole-number HP% shows 75 / 50 / 25 (under 76% and so on). Away from Untether it falls whatever he is doing: in
+  23:03 "Obliteration..." came on the tick of a set's slash, which never came (swings t19080 and t19083, fall t19086),
+  and in 21:16 a tick before his next move. His bar reads 51% (26%) both at the floor and just above it, so the tick
+  the floor came is not on the record; the sim drops the quadrant the tick after, and attacks already under way land.
+- **The vine.** [K]: "The void... will take you..." / "Await... the void..." comes with his first move after a spin,
+  and the vine roots that raider where they stand 3 ticks later (4290, then 4291). Which spins: never an even one in a
+  quadrant; 13 of 15 first spins, 5 of 5 third ones, 1 of 4 fifth ones and no later ones over eight fights. The sim
+  brings it after a quadrant's 1st and 3rd spins. A panic shout on the same tick can hide the vine's.
+- **Vines and rifts last until killed.** [K]: vines lived 7-32 ticks (median 14) and rifts 6-32 in both phases, and
+  nobody took a hit as a vine passed 14 ticks, so [R]'s 14 ticks to cut it, [W]'s 50 for failing, [R]'s 12-tick rift and
+  [T]'s phase 4 rift charge are gone. [R]'s own notes record all 33 rifts killed (6-27 ticks). [T]'s charge, 14 on the
+  streamer 11 ticks after the rifts, is the next cycle's first explosion: rifts come at +59 and explosions land from
+  +10 (14 on two raiders at the same tick in 22:28). With "attack your own vine" off, a teammate cuts yours at 14.
+- **Shadow slash.** [K] 111 bands over six fights: aimed at the quadrant's tank (205 of 205 swings had one; solo,
+  you), snapped to the nearest of 8 directions from his middle tile, 3 wide from the ring touching his body to the
+  platform's edge. Straight bands are the 3 tiles in line with his body (south: x -1..1, z <= -2); diagonal ones the
+  tiles with dx·ux >= 1, dz·uz >= 1 and |dx·ux - dz·uz| <= 1, outside his 3x3. It lands the tick after its animation.
 - **The spin.** Saw i cuts 5 + 3i ticks after the spin starts, on the tick his loop animation (the last saw's: the end
   animation) plays ([K]: 20 and 25 on raiders with no overhead, zeros through Protect from Melee). An overhead up on the
   tick before is severed ("Ocellus disrupts your concentration, severing your prayer!") and locked for 3 ticks ([V] duo
   18:53-18:55). Flick: off on 4 + 3i, on for the cut; kill 2's per-tick overheads show all 8 raiders doing exactly
   that. One saw per quadrant destroyed, plus one; swings again 4 ticks after the last cut.
-- **Shadow slash and Insolence.** A band 3 tiles wide to the platform edge ([V] duo 20:24, Bubba OSRS guide 4:56).
-  The shadow slash lands the tick after its animation; Insolence's superior slashes animate 2, 7 and 12 ticks after
-  the shout and each lands 3 after its animation, then swings resume 20 after the shout ([K]).
+- **Insolence.** A band 3 tiles wide to the platform edge ([V] duo 20:24, Bubba OSRS guide 4:56). The superior
+  slashes animate 2, 7 and 12 ticks after the shout and each lands 3 after its animation, then swings resume 20 after
+  the shout ([K]). Each is a thick, ragged line at a different raider, at any angle (not snapped); he has no
+  interacting target through it ([K] six fights). Solo, all three come at you.
 - **Void bombs' timing.** [K] logs spotanim 4299 over each bomb tile 2 ticks before it drops (4300 and 4301); 4302
   never appears. [R]'s bomb ticks (6 and 9 into the first segment, 6 into later ones) are the drops.
 - **Corner cracks.** [R]'s three tendrils, in turn, every 2 ticks, 5 open. Lines run 9 tiles: the duo VOD at 13:09 has
@@ -91,7 +106,10 @@ Where every timing, damage number and id in the full-fight simulator comes from.
   hit at +4 and +35, the explosion telegraph (4340) at +6 and +37, then explosions every 2 ticks from +10 and +41
   (no floor graphic), and hybrid tells at +24 and +52 landing 5 later, all as [R] [T] had them. The first raiders took
   their orbs back (4314, with the heal) at +16 and +42 in both cycles, so the sim readies them then and heals on the
-  pickup tick.
+  pickup tick. Three more fights agree: inner void damage (9-11) only on raiders still in his 5x5 ring, raiders back
+  in by +29, explosions on even ticks +10 to +20 and odd ones +41 to +51 (14-16), winds at +4 and +35, orb pickups
+  from +16 to +29 and +42 to +54, hybrid hits at +29 and +57. The voids have no client graphic; the sim draws them
+  anyway, as practice.
 - **Phase 4's 2-tick.** [M]: an explosion a tile from you resets your attack timer ("you can attack every two
   ticks"); move the tick a mark goes down and attack the next. The melee-phase orb forms across his body from where
   you stepped into his ring ([M] 15:40).
@@ -108,5 +126,7 @@ Where every timing, damage number and id in the full-fight simulator comes from.
 - The censers: [W] reads the Bandosian and Armadylean ones as style-specific max hits; the sim gives any style one.
 - [K] shows a hit on every raider 1 tick into each spin, all zeros through Protect from Melee. Its unprotected damage
   is unknown, so the sim leaves it out.
-- Whether he can Untether twice in a quadrant when his HP stays near the floor; the sim allows one ([V]).
 - Where phase 4's orbs and explosion marks sit: no floor graphic in [K]; NPC 16668 is an invisible controller.
+- Why some odd-numbered spins bring no vine (2 first spins, 3 fifth ones).
+- The rifts' clock in a long quadrant: [K] 21:16 has one every 48 ticks, any due during Untether coming at U+32.
+  The sim keeps [R]'s three per segment (S+3, S+51, S+111).
