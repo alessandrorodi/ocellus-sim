@@ -1,4 +1,7 @@
-import { Settings, TrainerInstance, Viewport } from "osrs-sdk";
+import { RangedWeapon, Settings, TrainerInstance, Viewport } from "osrs-sdk";
+import { dress } from "../js/OcellusLoadout";
+import { resolveDrill } from "../js/OcellusTimings";
+import { seed } from "../js/P4Types";
 import type { Range } from "../fight/data";
 import { P3, P4, SEQ, SPOT } from "../fight/data";
 import type { SpotOptions } from "../fight/effects";
@@ -27,11 +30,14 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
     restore = [];
   });
 
-  /** A fight that records his animations, shouts, hits on you and chat by tick. */
-  function recorded(startPhase: 3 | 4, overrides: Partial<FightOptions> = {}) {
+  /** A fight that records his animations, shouts, hits on you and chat by tick; `setup` dresses you as the app does. */
+  function recorded(startPhase: 3 | 4, overrides: Partial<FightOptions> = {}, setup: "ranged" | null = null) {
     Settings.readFromStorage();
     const options: FightOptions = { seed: 1, party: 1, startPhase, hazardTiles: true, videoMarkers: false, skipMarkers: false, soloVine: true, invincible: true, ...overrides };
-    const region = new FightRegion(options, () => undefined);
+    const choices = setup ? resolveDrill({ seed: seed(1), selection: { setup } }).choices : null;
+    const region = new FightRegion(options, (player) => {
+      if (choices) dress(player, choices.setup);
+    });
     const trainer = new TrainerInstance(region, { force2d: true });
     trainer.mount(document.createElement("canvas"), document.createElement("div"));
     region.world.getReadyTimer = 0;
@@ -365,6 +371,28 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
     // One burst on each rift's tile, as it goes (the cycle's hybrid lands that tick too).
     expect(f.spots.filter(([t, id]) => t === R + 30 && id === SPOT.voidChainExplosion).length).toBe(spawned.length);
     expect(f.hits.filter((h) => h.tick === R + 30).length).toBeGreaterThanOrEqual(spawned.length * P4.riftDetonationHits.length);
+  });
+
+  test("phase 4: one standard ranged attack kills a rift (always a max hit), and the kill resets your attack cooldown", () => {
+    const f = recorded(4, {}, "ranged");
+    const R = P4.firstCycleAt + P4.riftsAt;
+    f.tickTo(R + 1);
+    const rift = f.fight.region.mobs.find((m): m is VoidAdd => m instanceof VoidAdd);
+    if (!rift) throw new Error("no rift");
+    const weapon = f.fight.player.equipment.weapon;
+    if (!(weapon instanceof RangedWeapon)) throw new Error("the ranged setup wears no ranged weapon");
+    // A special attack rolls as usual. [W] "standard range attacks"
+    f.fight.player.useSpecialAttack = true;
+    expect(rift.incomingAttackRollModifiers({ attacker: f.fight.player, weapon, bonuses: {} }).maxDamage).toBeFalsy();
+    f.fight.player.useSpecialAttack = false;
+    const attacks = jest.spyOn(weapon, "attack");
+    f.fight.player.setAggro(rift);
+    for (let i = 0; i < 12 && !rift.killed; i++) f.tick();
+    // [W] Ocellus: void crystals always max hit with standard range; [K] all 4 phase 4 hits were 44.
+    expect(rift.killed).toBe(true);
+    expect(attacks).toHaveBeenCalledTimes(1);
+    // [W] Void Rift: "It empowers you, resetting your tick cool down."
+    expect(f.fight.player.attackDelay).toBeLessThanOrEqual(0);
   });
 
   test("phase 3: a rift left alive detonates 30 ticks after it appears", () => {

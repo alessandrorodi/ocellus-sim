@@ -576,7 +576,8 @@ export class Phase3 implements PhaseScript {
       currentStats.range = Math.max(currentStats.range, stats.range + P3.augmenterBoost.rangedMagic);
       currentStats.magic = Math.max(currentStats.magic, stats.magic + P3.augmenterBoost.rangedMagic);
     } else {
-      this.boss.grantMaxDamageRollsOnNextIncomingAttack();
+      // "It empowers you, resetting your tick cool down." [W] Void Rift
+      fight.player.attackDelay = 0;
     }
   }
 

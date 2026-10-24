@@ -68,9 +68,16 @@ Where every timing, damage number and id in the full-fight simulator comes from.
 - **ArchiveOcellusTrainer after the fork.** [T] went on past the commit this repo forked from (its #18). Checked
   against [K] on 2026-10-24: its rifts charge 23 ticks (owner's estimate; [K] says 30), its inner orb lingers to +27
   (pickups in [K] run to +29), its one-tile explosion dodge cuts the attack delay by 3 and its Deflect reflects 10%
-  (both marked unconfirmed or the owner's wish there). Not taken. Two of its ideas have no [K] data either way: the boss
-  blocking you under him in the outer void (a redditor's report) and standard ranged attacks always max-hitting rifts
-  ([W]; 38 of 93 hits on rifts in [K] were their full 44).
+  (both marked unconfirmed or the owner's wish there). Not taken. Its boss blocking you under him in the outer void (a
+  redditor's report) has no [K] data either way. Its standard ranged attacks always max-hitting rifts is taken, for
+  phase 4 only (next item).
+- **Phase 4's void crystals.** [W] Ocellus, enraged phase: "void crystals that the player will always max hit with
+  standard range attacks". [K] agrees and says phase 4 only: all 4 hits on phase 4 rifts were their full 44, against 34
+  of 89 in phase 3 (with 15 zeros). The sim gives phase 4 rifts a guaranteed max hit from any non-special ranged attack,
+  so any ranged setup one-shots them; specials and other styles roll as usual.
+- **Killing a Void Rift.** [W] Void Rift: "It empowers you, resetting your tick cool down." The sim resets your attack
+  cooldown on the kill in both phases, so you can attack again at once, in place of its old guess (a max hit on your
+  next attack).
 - **Shadow slash.** [K] 111 bands over six fights: aimed at the quadrant's tank (205 of 205 swings had one; solo,
   you), snapped to the nearest of 8 directions from his middle tile, 3 wide from the ring touching his body to the
   platform's edge. Straight bands are the 3 tiles in line with his body (south: x -1..1, z <= -2); diagonal ones the
@@ -125,15 +132,13 @@ Where every timing, damage number and id in the full-fight simulator comes from.
   ticks"); move the tick a mark goes down and attack the next. The melee-phase orb forms across his body from where
   you stepped into his ring ([M] 15:40).
 - **Defence floor.** [J]: 60% for Ocellus, none for The Blade.
-- **Void Augmenter.** [W]: Attack and Strength to 116, Magic and Ranged to 112. The Void Rift's buff is still unknown
-  (the sim keeps a max hit on your next attack). NPC 16679 is the Void Siphon ([W]).
+- **Void Augmenter.** [W]: Attack and Strength to 116, Magic and Ranged to 112. NPC 16679 is the Void Siphon ([W]).
 
 ## Open questions (nobody has data yet)
 
 - "Embrace... annihilation...": the real damage and the meter level that triggers it. The sim fires one more strike
   shot per 24 meter, as [R]'s engine guesses.
 - What Deflect Melee / Deflect Range send back.
-- The Void Rift's "empower" buff.
 - The censers: [W] reads the Bandosian and Armadylean ones as style-specific max hits; the sim gives any style one.
 - [K] shows a hit on every raider 1 tick into each spin, all zeros through Protect from Melee. Its unprotected damage
   is unknown, so the sim leaves it out.

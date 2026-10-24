@@ -328,8 +328,11 @@ export class Phase4 implements PhaseScript {
       const rift = new VoidAdd(fight.region, tile, "rift-basic", () => {
         this.rifts = this.rifts.filter((r) => r !== rift);
         fight.message("Destroying the void rift empowers you!", CHAT.purple);
-        this.boss.grantMaxDamageRollsOnNextIncomingAttack();
+        // "It empowers you, resetting your tick cool down." [W] Void Rift
+        fight.player.attackDelay = 0;
       });
+      // Standard ranged attacks always max hit them: one shot. [W] [K]
+      rift.rangedAlwaysMaxHits = true;
       fight.region.addMob(rift);
       this.rifts.push(rift);
       // Left alive, it detonates 30 ticks on and hits you. [K]

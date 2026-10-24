@@ -1,6 +1,6 @@
 /// <reference path="../../../images.d.ts" />
-import { CacheRenderModel, CacheRenderReferences, EmptyModel, ImageLoader, MagicWeapon, MeleeWeapon, Mob, Player, Random } from "osrs-sdk";
-import type { Location, Model, Projectile, Region, Unit, UnitBonuses, UnitStats } from "osrs-sdk";
+import { CacheRenderModel, CacheRenderReferences, EmptyModel, ImageLoader, MagicWeapon, MeleeWeapon, Mob, Player, Random, RangedWeapon } from "osrs-sdk";
+import type { IncomingAttackRoll, IncomingAttackRollModifiers, Location, Model, Projectile, Region, Unit, UnitBonuses, UnitStats } from "osrs-sdk";
 import type { BossOverhead } from "./data";
 import { LOWEST_DEFENCE_FRACTION, NPC, P1, P2, P3, SEQ, SPOT } from "./data";
 import type { ATile } from "./geometry";
@@ -306,6 +306,8 @@ export class VoidAdd extends Mob {
   killed = false;
   /** Solo players may attack their own vine only when the sidebar allows it (in a team only teammates can). */
   attackable = true;
+  /** Phase 4's rifts: standard ranged attacks always max hit them. */
+  rangedAlwaysMaxHits = false;
 
   constructor(region: Region, tile: ATile, readonly kind: AddKind, private readonly onKilled: (add: VoidAdd) => void) {
     super(region, toSdk(tile));
@@ -353,6 +355,16 @@ export class VoidAdd extends Mob {
 
   override canBeAttacked(): boolean {
     return this.attackable && !this.killed;
+  }
+
+  /**
+   * Phase 4's void crystals: every standard ranged attack hits for its max, so they die in one shot. Specials and other
+   * styles roll as usual. [W] Ocellus; [K]: all 4 hits on phase 4 rifts were their full 44, against 34 of 89 in phase 3.
+   */
+  override incomingAttackRollModifiers(attack: IncomingAttackRoll): IncomingAttackRollModifiers {
+    const special = attack.attacker instanceof Player && attack.attacker.useSpecialAttack;
+    if (this.rangedAlwaysMaxHits && attack.weapon instanceof RangedWeapon && !special) return { guaranteedHit: true, maxDamage: true };
+    return super.incomingAttackRollModifiers(attack);
   }
 
   override dead(): void {
