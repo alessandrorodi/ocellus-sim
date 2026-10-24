@@ -1,6 +1,6 @@
 /// <reference path="../../../images.d.ts" />
 import { CacheRenderModel, CacheRenderReferences, EmptyModel, ImageLoader, MagicWeapon, MeleeWeapon, Mob, Player, Random, RangedWeapon } from "osrs-sdk";
-import type { IncomingAttackRoll, IncomingAttackRollModifiers, Location, Model, Projectile, Region, Unit, UnitBonuses, UnitStats } from "osrs-sdk";
+import type { CacheRenderReference, CacheRenderSpotAnim, IncomingAttackRoll, IncomingAttackRollModifiers, Location, Model, Projectile, Region, Unit, UnitBonuses, UnitStats } from "osrs-sdk";
 import type { BossOverhead } from "./data";
 import { LOWEST_DEFENCE_FRACTION, NPC, P1, P2, P3, SEQ, SPOT } from "./data";
 import type { ATile } from "./geometry";
@@ -131,6 +131,17 @@ export const BOSS_SPOTS: readonly number[] = [
   SPOT.meleePrayerIn, SPOT.meleePrayer, SPOT.meleePrayerOut, SPOT.magicOnBoss, SPOT.unleashOnBoss,
   SPOT.collapseIn, SPOT.collapseLoop, SPOT.collapseOut1,
   SPOT.levitating, SPOT.hybridMagic, SPOT.hybridRanged, SPOT.hybridMelee, SPOT.death, SPOT.deathSkirt, SPOT.deathCrack,
+];
+
+/**
+ * Every spotanim the scripts attach to the player. By default the player's model builds a mesh for each of the bundle's
+ * ~120 spotanims and rebuilds them all on every equip, so each gear switch stalled the frame. One missing here is added
+ * the first time it is attached (FightPlayer.addSpotAnim), at the cost of one rebuild.
+ */
+export const PLAYER_SPOTS: readonly number[] = [
+  SPOT.fireImpact, SPOT.waterImpact, SPOT.safePortalDespawn, SPOT.magicImpact, SPOT.entangleStart, SPOT.entangleIdle,
+  SPOT.entangleEnd, SPOT.glowZaros, SPOT.glowBandos, SPOT.glowSaradomin, SPOT.glowArmadyl,
+  SPOT.soulFragmentPlayer, SPOT.soulFragmentRegain, SPOT.deflectWind, SPOT.voidChainTelegraph,
 ];
 
 /** One of Ocellus's bodies. The fight script moves and animates it; it never acts on its own. */
@@ -434,9 +445,27 @@ export interface PlayerHooks {
 
 export class FightPlayer extends Player {
   hooks: PlayerHooks | null = null;
+  /** The spotanims the player's model builds meshes for: PLAYER_SPOTS and any attached since. */
+  private readonly spots = [...PLAYER_SPOTS];
 
   constructor(region: Region, tile: ATile) {
     super(region, toSdk(tile));
+  }
+
+  /** The SDK's model for the worn gear, building only the player's spotanims. */
+  override create3dModel(): Model {
+    const model = super.create3dModel();
+    if (!(model instanceof CacheRenderModel)) return model;
+    // The gear and poses it was built for (private in the SDK, hence the bracket access).
+    const reference: CacheRenderReference = model["reference"];
+    return CacheRenderModel.forRenderable(this, reference, { spotAnims: this.spots });
+  }
+
+  override addSpotAnim(spotAnim: CacheRenderSpotAnim): void {
+    super.addSpotAnim(spotAnim);
+    if (this.spots.includes(spotAnim.id)) return;
+    this.spots.push(spotAnim.id);
+    this.invalidateModel();
   }
 
   get tile(): ATile {
