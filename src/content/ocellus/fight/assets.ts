@@ -1,5 +1,5 @@
 import type { CacheAssets } from "osrs-sdk/asset-manifest";
-import { NPC, PORTAL, SEQ, SOUND, SPOT, VOID_LOC } from "./data";
+import { NPC, PORTAL, PROP, SEQ, SOUND, SPOT, VOID_LOC } from "./data";
 
 const p1Seqs = {
   idle: SEQ.p1Idle,
@@ -78,9 +78,20 @@ function voidLocModels(): Record<string, { id: number; animations: { idle: numbe
   return out;
 }
 
-/** Scenery is not NPCs, so the portals and the void hazards come in as bare cache models with their looping idle. */
+const censerSeqs = { ready: PROP.censer.ready, activate: PROP.censer.activate, spent: PROP.censer.spent };
+
+/** Scenery is not NPCs, so the portals, the void hazards and the room's props come in as bare cache models with their looping idle. */
 export const FIGHT_MODELS = {
   fightPortalInactive: { id: PORTAL.inactiveModel, animations: { idle: PORTAL.idle } },
   fightPortalActive: { id: PORTAL.activeModel, animations: { idle: PORTAL.idle } },
   ...voidLocModels(),
+  propBrazierStand: { id: PROP.brazier.stand, animations: {} },
+  propBrazierFlame: { id: PROP.brazier.flame, animations: { idle: PROP.brazier.flameIdle } },
+  propCenserBandos: { id: PROP.censer.bandos, animations: censerSeqs },
+  propCenserArmadyl: { id: PROP.censer.armadyl, animations: censerSeqs },
+  propCenserZaros: { id: PROP.censer.zaros, animations: censerSeqs },
+  propCenserSaradomin: { id: PROP.censer.saradomin, animations: censerSeqs },
+  propGapMiddle: { id: PROP.gap.middle, animations: {} },
+  propGapNorthSouth: { id: PROP.gap.northSouth, animations: {} },
+  propGapEastWest: { id: PROP.gap.eastWest, animations: {} },
 };

@@ -872,7 +872,7 @@ export class Phase3 implements PhaseScript {
     const { fight } = this;
     const censer = fight.censers.get(q);
     if (!censer) return;
-    if (censer.lit) {
+    if (censer.litAt !== null) {
       fight.message("The censer has already been lit.", CHAT.game);
       return;
     }

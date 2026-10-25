@@ -13,6 +13,7 @@ import { Phase2 } from "./phase2";
 import { Phase3 } from "./phase3";
 import { Phase4 } from "./phase4";
 import { BOSS_SPOTS, FightPlayer } from "./units";
+import { roomProps } from "./props";
 
 /** Steps the fight at the very start of each game tick, before NPCs act, as the server's scripts do. */
 class FightClock extends Entity {
@@ -122,6 +123,7 @@ export class FightRegion extends Region {
     const fight = new Fight(this, this.options, player, makePhase);
     this.fight = fight;
     this.addEntity(new ArenaFloor(this, () => fight.floorState()));
+    for (const prop of roomProps(this, () => fight.floorState(), () => fight.tick)) this.addEntity(prop);
     this.addEntity(new VoidFloor(this, () => fight.voidTiles()));
     this.addEntity(new TileMarks(this, () => fight.marks()));
     this.addEntity(new FightClock(this, fight));

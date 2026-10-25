@@ -91,6 +91,28 @@ export const VOID_LOC = {
 } as const;
 export type VoidLocKind = keyof typeof VOID_LOC;
 
+/**
+ * [G] ObjectID scenery. Map square 16472's locs, read from a 25 October 2026 client cache, place four braziers,
+ * tfa_brazier_guthixian01_final01 (62894, type 22) under _flame01 (62895, type 10, looping seq 10772), on the room's
+ * diagonals at arena (±9, ±9). The fight places the god censers tfa_ocellus_artifact_* (62693..62700; seqs
+ * ornament_censer_ready_idle01 14833, _inactive_idle01 14834, _activate 14835) and the stepping stones
+ * tfa_ocellus_platform_jump_middle / _outer_* "Gap" (62686..62690, type 22) [R]. Lighting a censer plays _activate
+ * on it, and its _inactive loc replaces it 3 ticks later [R].
+ */
+export const PROP = {
+  brazier: { stand: 62357, flame: 62739, flameIdle: 10772 },
+  censer: { bandos: 62438, armadyl: 62437, zaros: 62440, saradomin: 62439, ready: 14833, activate: 14835, spent: 14834, spentAfter: 3 },
+  gap: { middle: 62268, northSouth: 62267, eastWest: 62269 },
+} as const;
+
+/** [map square 16472] Each brazier's arena tile and the quarter-turn rotations of its stand and flame. */
+export const BRAZIERS = [
+  { x: -9, z: -9, stand: 0, flame: 0 },
+  { x: -9, z: 9, stand: 1, flame: 3 },
+  { x: 9, z: -9, stand: 3, flame: 1 },
+  { x: 9, z: 9, stand: 2, flame: 2 },
+] as const;
+
 /** [G] SpotanimID */
 export const SPOT = {
   fireOnBoss: 4231,
