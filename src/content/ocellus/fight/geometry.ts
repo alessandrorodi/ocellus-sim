@@ -223,13 +223,19 @@ export function armsOf(q: Quadrant): readonly [Arm, Arm] {
   }
 }
 
-/** Censers at the quadrants' outer corners, on the diagonal walls. */
+/** [R] Censers at the quadrants' outer corners, 11 out on the diagonals past the braziers; they are lit from range. */
 export const CENSERS: Readonly<Record<Quadrant, Readonly<{ tile: ATile; god: "bandos" | "saradomin" | "armadyl" | "zaros" }>>> = {
-  NE: { tile: at(9, 9), god: "bandos" },
-  SE: { tile: at(9, -9), god: "saradomin" },
-  SW: { tile: at(-9, -9), god: "armadyl" },
-  NW: { tile: at(-9, 9), god: "zaros" },
+  NE: { tile: at(11, 11), god: "bandos" },
+  SE: { tile: at(11, -11), god: "saradomin" },
+  SW: { tile: at(-11, -11), god: "armadyl" },
+  NW: { tile: at(-11, 11), god: "zaros" },
 };
+
+/**
+ * How near a censer's tile a click still uses it. Its lantern hangs off the floor, so a click on it lands a tile or
+ * more behind it; 3 catches most of those, and of the floor only the corner tile in front of it.
+ */
+export const CENSER_REACH = 3;
 
 export function sign(n: number): number {
   return n > 0 ? 1 : n < 0 ? -1 : 0;

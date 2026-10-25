@@ -10,6 +10,7 @@ import type { ATile, Arm, Body, Quadrant } from "./geometry";
 import {
   ARMS,
   ARM_DIR,
+  CENSER_REACH,
   CORNERS,
   QUADRANTS,
   QUADRANT_SIGN,
@@ -807,7 +808,7 @@ export class Phase3 implements PhaseScript {
     const { fight } = this;
     if (this.crossing?.hopping) return true;
     for (const [q, censer] of fight.censers) {
-      if (reach(to, censer.tile) <= 1) {
+      if (reach(to, censer.tile) <= CENSER_REACH) {
         this.useCenser(q);
         return true;
       }
@@ -906,7 +907,7 @@ export class Phase3 implements PhaseScript {
   tileActions(tile: ATile): readonly Readonly<{ label: string; target: string; run: () => void }>[] {
     const actions: { label: string; target: string; run: () => void }[] = [];
     for (const [q, censer] of this.fight.censers) {
-      if (reach(tile, censer.tile) <= 1) actions.push({ label: "Interact", target: `${GOD_NAME[censer.god]} censer`, run: () => this.useCenser(q) });
+      if (reach(tile, censer.tile) <= CENSER_REACH) actions.push({ label: "Interact", target: `${GOD_NAME[censer.god]} censer`, run: () => this.useCenser(q) });
     }
     if (ARMS.some((arm) => stonesOf(arm).some((s) => same(s, tile)))) {
       actions.push({ label: "Jump", target: "Stepping stone", run: () => this.interceptWalk(tile) });
