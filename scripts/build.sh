@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Vercel build: the beta SDK, the pinned cache reader, the cache assets, then the site.
+# Site build: the beta SDK, the pinned cache reader, the cache assets, then the site.
 # The OpenRS2 cache (213 MB) is downloaded on a cold build and reused when the build cache keeps it.
 set -euo pipefail
 
@@ -12,9 +12,9 @@ READER="${CACHE_ROOT}/osrscachereader-${OSRS_CACHE_READER_COMMIT}"
 mkdir -p "${CACHE_ROOT}"
 
 if [[ -d "${READER}/node_modules" ]]; then
-  echo "vercel-build: reusing cache reader ${OSRS_CACHE_READER_COMMIT}"
+  echo "build: reusing cache reader ${OSRS_CACHE_READER_COMMIT}"
 else
-  echo "vercel-build: installing cache reader ${OSRS_CACHE_READER_REPO} at ${OSRS_CACHE_READER_COMMIT}"
+  echo "build: installing cache reader ${OSRS_CACHE_READER_REPO} at ${OSRS_CACHE_READER_COMMIT}"
   rm -rf "${READER}"
   git init --quiet "${READER}"
   git -C "${READER}" fetch --quiet --depth 1 "${OSRS_CACHE_READER_REPO}" "${OSRS_CACHE_READER_COMMIT}"

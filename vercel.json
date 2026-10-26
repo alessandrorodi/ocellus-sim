@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "echo 'the sim is hosted on Cloudflare Pages; Vercel only redirects'",
-  "buildCommand": "mkdir -p dist",
+  "buildCommand": "mkdir -p dist && echo '<a href=\"https://ocellus-sim.pages.dev\">ocellus-sim.pages.dev</a>' > dist/index.html",
   "outputDirectory": "dist",
   "redirects": [{ "source": "/:path*", "destination": "https://ocellus-sim.pages.dev/:path*", "permanent": true }]
 }

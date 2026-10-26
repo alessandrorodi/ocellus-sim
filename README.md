@@ -151,9 +151,17 @@ src/FightApp.tsx  the page: HUD, chatbox, sidebar, loading splash, result panel
 
 ### Deploying
 
-The site is a static `dist/` on Vercel, built from this repository: every push to `main` goes live.
-`scripts/vercel-build.sh` installs the pinned beta SDK and cache reader, downloads the cache, extracts the assets and
-runs webpack (about four minutes). The hashed model files are served as immutable.
+The site is a static `dist/` hosted on [Cloudflare Pages](https://pages.cloudflare.com) at
+[ocellus-sim.pages.dev](https://ocellus-sim.pages.dev). `npm run deploy` builds it and uploads it with Wrangler (log in
+once with `npx wrangler login`):
+
+- `scripts/build.sh` installs the pinned beta SDK and cache reader, downloads the cache, extracts the assets and runs
+  webpack (about four minutes).
+- `scripts/pages-postbuild.mjs` splits any asset over Pages' 25 MiB file limit (phase 3's body is ~33 MB) into parts
+  that `src/splitAssets.ts` joins back in the browser, and writes `_headers` so the hashed model files are cached as
+  immutable.
+
+The old address, `ocellus-sim.vercel.app`, permanently redirects to Pages (`vercel.json`).
 
 ## Credits
 
