@@ -166,7 +166,9 @@ The old address, `ocellus-sim.vercel.app`, permanently redirects to Pages (`verc
 ## Credits
 
 - **Julian-Dasilva**: [ArchiveOcellusTrainer](https://github.com/Julian-Dasilva/ArchiveOcellusTrainer), the phase 4
-  trainer this grew from, and the cache reader fork.
+  trainer this grew from (play it at
+  [archive-ocellus-trainer.raid-sims.workers.dev](https://archive-ocellus-trainer.raid-sims.workers.dev)), and the
+  cache reader fork.
 - **ShadowStalkerTM**: [Duo The Fractured Archive | OSRS Raid 4](https://www.youtube.com/watch?v=HAgq_qg0OIY), the
   reference fight.
 - **MRobertEvers**: the RSProx tick analysis in

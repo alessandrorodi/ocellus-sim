@@ -27,6 +27,7 @@ const FOLLOW_URL = "https://x.com/alrodi";
 
 const CREDITS: readonly Readonly<{ who: string; what: string; href: string }>[] = [
   { who: "Julian-Dasilva", what: "ArchiveOcellusTrainer, the phase 4 trainer this grew from", href: "https://github.com/Julian-Dasilva/ArchiveOcellusTrainer" },
+  { who: "Julian-Dasilva", what: "play his phase 4 trainer", href: "https://archive-ocellus-trainer.raid-sims.workers.dev" },
   { who: "ShadowStalkerTM", what: "Duo The Fractured Archive, the reference fight", href: "https://www.youtube.com/watch?v=HAgq_qg0OIY" },
   { who: "MRobertEvers", what: "RSProx tick analysis of the fight", href: "https://github.com/MRobertEvers/oldschool-clientc" },
   { who: "OldSchoolSDK", what: "osrs-sdk, the engine", href: "https://github.com/OldSchoolSDK/osrs-sdk" },
