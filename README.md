@@ -151,8 +151,9 @@ src/FightApp.tsx  the page: HUD, chatbox, sidebar, loading splash, result panel
 ### Deploying
 
 The site is a static `dist/` hosted on [Cloudflare Pages](https://pages.cloudflare.com) at
-[ocellus-sim.pages.dev](https://ocellus-sim.pages.dev). `npm run deploy` builds it and uploads it with Wrangler (log in
-once with `npx wrangler login`):
+[ocellus-sim.pages.dev](https://ocellus-sim.pages.dev), built from this repository: every push to `main` goes live.
+Pages runs `bash scripts/build.sh && node scripts/pages-postbuild.mjs && rm -f dist/main.js.map` and publishes `dist`.
+`npm run deploy` does the same from your machine and uploads it with Wrangler (log in once with `npx wrangler login`):
 
 - `scripts/build.sh` installs the pinned beta SDK and cache reader, downloads the cache, extracts the assets and runs
   webpack (about four minutes).
