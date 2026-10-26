@@ -4,5 +4,8 @@
   "installCommand": "echo 'the sim is hosted on Cloudflare Pages; Vercel only redirects'",
   "buildCommand": "mkdir -p dist && echo '<a href=\"https://ocellus-sim.pages.dev\">ocellus-sim.pages.dev</a>' > dist/index.html",
   "outputDirectory": "dist",
-  "redirects": [{ "source": "/:path*", "destination": "https://ocellus-sim.pages.dev/:path*", "permanent": true }]
+  "redirects": [
+    { "source": "/", "destination": "https://ocellus-sim.pages.dev/", "permanent": true },
+    { "source": "/:path+", "destination": "https://ocellus-sim.pages.dev/:path+", "permanent": true }
+  ]
 }
