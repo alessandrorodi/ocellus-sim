@@ -137,7 +137,7 @@ export class Fight implements BossHooks, PlayerHooks {
     this.skipTiles = options.skipMarkers;
     this.makePhase = makePhase;
     player.hooks = this;
-    for (const q of QUADRANTS) this.censers.set(q, { tile: CENSERS[q].tile, god: CENSERS[q].god, lit: false });
+    for (const q of QUADRANTS) this.censers.set(q, { tile: CENSERS[q].tile, god: CENSERS[q].god, litAt: null });
     this.setFloor(roomFloor());
   }
 
@@ -364,7 +364,7 @@ export class Fight implements BossHooks, PlayerHooks {
 
   lightCenser(q: Quadrant): void {
     const censer = this.censers.get(q);
-    if (censer) this.censers.set(q, { ...censer, lit: true });
+    if (censer) this.censers.set(q, { ...censer, litAt: this.tick });
     this.floorKey++;
   }
 

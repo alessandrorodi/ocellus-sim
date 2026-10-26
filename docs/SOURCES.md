@@ -140,6 +140,9 @@ Where every timing, damage number and id in the full-fight simulator comes from.
   shot per 24 meter, as [R]'s engine guesses.
 - What Deflect Melee / Deflect Range send back.
 - The censers: [W] reads the Bandosian and Armadylean ones as style-specific max hits; the sim gives any style one.
+- The scenery's spawn rotations: [R] has none for the stepping stones or censers. The sim turns the south and west
+  arms' stones half a turn from the north and east ones and leaves the censers unturned. Whether a fallen quadrant
+  takes its brazier and censer with it is not recorded either; the sim hides both, as it did the drawn torches.
 - [K] shows a hit on every raider 1 tick into each spin, all zeros through Protect from Melee. Its unprotected damage
   is unknown, so the sim leaves it out.
 - Where phase 4's orbs and explosion marks sit: no floor graphic in [K]; NPC 16668 is an invisible controller.

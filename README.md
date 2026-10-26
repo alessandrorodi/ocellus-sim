@@ -25,7 +25,7 @@ fight.
 
 - **All four phases in one fight**, with the transformations between them, or start at any phase.
 - **Game assets**: cache models and animations for every body he takes, the phase 2 portals, rifts, the vine, his
-  spells, and the sounds each animation plays.
+  spells, the room's braziers, censers and stepping stones, and the sounds each animation plays.
 - **Prayer that matters**: shots are checked against your overhead when they land, his own overheads block your
   style, and turning on a protection prayer as he starts to spin gets you "injured".
 - **Practice tools**: danger-tile highlighting, community tile markers, phase 2 skip tiles, a no-death practice mode,
@@ -140,7 +140,8 @@ src/content/ocellus/fight/
   geometry.ts     arena coordinates (x east, z north from the middle) and the octagonal room
   Fight.ts        the director: tick scheduler, hits checked against prayer on landing, floor, chat
   phase1.ts .. phase4.ts   one script per phase
-  arena.ts        the room: engraved floor, cliffs, stepping stones, censers, torches
+  arena.ts        the room: engraved floor, cliffs, parapet
+  props.ts        the room's cache scenery: braziers, censers, stepping stones
   effects.ts      cache spotanims on tiles, danger-tile overlay, void floor
   portals.ts      phase 2's portals, the game's own objects
   units.ts        Ocellus's bodies, the vine and rifts, the player

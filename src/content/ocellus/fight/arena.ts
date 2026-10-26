@@ -2,10 +2,11 @@ import * as THREE from "three";
 import { CollisionType, Entity, LineOfSightMask, Settings } from "osrs-sdk";
 import type { Location3, Model, Region } from "osrs-sdk";
 import type { ATile, Quadrant } from "./geometry";
-import { C, GRID, ROOM_DIAGONAL, ROOM_HALF, at, inRoom, key, toSdk } from "./geometry";
+import { C, GRID, ROOM_DIAGONAL, ROOM_HALF, at, inRoom, toSdk } from "./geometry";
 import { borderOf, edgeOf } from "./effects";
 
-export type CenserLook = Readonly<{ tile: ATile; god: "bandos" | "saradomin" | "armadyl" | "zaros"; lit: boolean }>;
+/** A censer, and the fight tick it was lit on (null until then). */
+export type CenserLook = Readonly<{ tile: ATile; god: "bandos" | "saradomin" | "armadyl" | "zaros"; litAt: number | null }>;
 
 export type FloorState = Readonly<{
   /** Changes whenever the floor's shape changes, so the mesh is only rebuilt then. */
@@ -15,19 +16,13 @@ export type FloorState = Readonly<{
   censers: readonly CenserLook[];
   /** Quadrants currently crumbling (drawn shaking and darkening before they drop). */
   crumbling: readonly Quadrant[];
-  /** Quadrants that fell: their parapet, torches and censer go with them. */
+  /** Quadrants that fell: their parapet, brazier and censer go with them. */
   destroyed: readonly Quadrant[];
 }>;
 
 const FLOOR_Y = -0.5;
 const CLIFF_DEPTH = 5;
 const PX = 64;
-const GOD_COLOUR: Readonly<Record<CenserLook["god"], number>> = {
-  bandos: 0xd9a441,
-  saradomin: 0x66b7ff,
-  armadyl: 0xf1f1e0,
-  zaros: 0xa05bdc,
-};
 
 function hash(x: number, z: number): number {
   let h = Math.imul(x * 374761393 + z * 668265263, 1274126177);
@@ -171,10 +166,8 @@ class ArenaModel implements Model {
   private readonly texture = roomTexture();
   private readonly floorMaterial = new THREE.MeshLambertMaterial({ map: this.texture });
   private readonly cliffMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
-  private readonly stoneMaterial = new THREE.MeshLambertMaterial({ color: 0x8c8a74 });
   private readonly wallMaterial = new THREE.MeshLambertMaterial({ color: 0xb4b49c });
-  private readonly flames = new Map<string, THREE.Mesh>();
-  /** Parapet pieces and torches, with the quadrants they stand over; hidden once all of those have fallen. */
+  /** Parapet pieces, with the quadrants they stand over; hidden once all of those have fallen. */
   private readonly rim: { object: THREE.Object3D; quadrants: readonly Quadrant[] }[] = [];
   private readonly crumbleMaterial = new THREE.MeshBasicMaterial({ color: 0x3a0612, transparent: true, opacity: 0.3, depthWrite: false });
   private built: string | null = null;
@@ -188,10 +181,10 @@ class ArenaModel implements Model {
     abyss.position.set(GRID / 2, FLOOR_Y - CLIFF_DEPTH, GRID / 2);
     this.group.add(abyss);
     this.group.add(this.dynamic);
-    this.addParapetAndTorches();
+    this.addParapet();
   }
 
-  private addParapetAndTorches(): void {
+  private addParapet(): void {
     const corners = octagon();
     const wallHeight = 0.55;
     const thickness = 0.35;
@@ -213,16 +206,6 @@ class ArenaModel implements Model {
       wall.position.z += (outZ / outLength) * thickness / 2;
       this.group.add(wall);
       this.rim.push({ object: wall, quadrants: edgeQuadrants });
-
-      const torch = new THREE.Group();
-      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 1.6, 8), this.wallMaterial);
-      pillar.position.set(ax, FLOOR_Y + 0.8, az);
-      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.42, 7), new THREE.MeshBasicMaterial({ color: 0xffa630 }));
-      flame.position.set(ax, FLOOR_Y + 1.85, az);
-      this.flames.set(`torch${i}`, flame);
-      torch.add(pillar, flame);
-      this.group.add(torch);
-      this.rim.push({ object: torch, quadrants: [corners[i].quadrant] });
     }
   }
 
@@ -231,10 +214,6 @@ class ArenaModel implements Model {
     this.time += clockDelta;
     const state = this.state();
     if (state.key !== this.built) this.rebuild(state);
-    for (const [name, flame] of this.flames) {
-      const wobble = 1 + 0.12 * Math.sin(this.time * 9 + name.length * 3.1);
-      flame.scale.set(1, wobble, 1);
-    }
     this.crumbleMaterial.opacity = 0.25 + 0.2 * (0.5 + 0.5 * Math.sin(this.time * 6));
     this.group.visible = visible;
   }
@@ -245,7 +224,6 @@ class ArenaModel implements Model {
       if (child instanceof THREE.Mesh) child.geometry.dispose();
     });
     this.dynamic.clear();
-    for (const [name] of this.flames) if (name.startsWith("censer")) this.flames.delete(name);
     const fallen = new Set(state.destroyed);
     for (const { object, quadrants } of this.rim) object.visible = quadrants.some((q) => !fallen.has(q));
 
@@ -311,33 +289,7 @@ class ArenaModel implements Model {
     cliffs.computeVertexNormals();
     this.dynamic.add(new THREE.Mesh(cliffs, this.cliffMaterial));
 
-    // Stepping stones: flat-topped rocks floating in the chasm, a little below the banks.
-    for (const stone of state.stones) {
-      const s = toSdk(stone);
-      const rock = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.18, 0.9, 7), this.stoneMaterial);
-      rock.position.set(s.x + 0.5, FLOOR_Y - 0.5, s.y - 0.5);
-      rock.rotation.y = hash(stone.x, stone.z) * Math.PI;
-      this.dynamic.add(rock);
-    }
-
-    // Censers: a bowl on a plinth, its fire lit in the god's colour once used.
-    for (const censer of state.censers) {
-      const q = quadrantAt(censer.tile.x, censer.tile.z);
-      if (fallen.has(q)) continue;
-      const s = toSdk(censer.tile);
-      const plinth = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.45, 1.1, 8), this.wallMaterial);
-      plinth.position.set(s.x + 0.5, FLOOR_Y + 0.55, s.y - 0.5);
-      const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.25, 0.3, 10), new THREE.MeshLambertMaterial({ color: 0x6d5a3a }));
-      bowl.position.set(s.x + 0.5, FLOOR_Y + 1.25, s.y - 0.5);
-      this.dynamic.add(plinth, bowl);
-      const flame = new THREE.Mesh(
-        new THREE.ConeGeometry(censer.lit ? 0.3 : 0.12, censer.lit ? 0.8 : 0.25, 8),
-        new THREE.MeshBasicMaterial({ color: censer.lit ? GOD_COLOUR[censer.god] : 0x3a3328 }),
-      );
-      flame.position.set(s.x + 0.5, FLOOR_Y + 1.65, s.y - 0.5);
-      this.flames.set(`censer${key(censer.tile)}`, flame);
-      this.dynamic.add(flame);
-    }
+    // Stepping stones, braziers and censers are the game's own models: see props.ts.
   }
 
   destroy(scene: THREE.Scene): void {
