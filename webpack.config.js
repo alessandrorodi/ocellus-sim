@@ -27,6 +27,9 @@ module.exports = {
       patterns: [
         { from: "public/osrs-assets", to: "osrs-assets", noErrorOnMissing: true },
         { from: "index.html", to: "", context: "src/" },
+        { from: "robots.txt", to: "", context: "src/" },
+        { from: "sitemap.xml", to: "", context: "src/" },
+        { from: "docs/screenshots/phase2-portals.jpg", to: "og-image.jpg" },
         { from: "*.png", to: "", context: "node_modules/osrs-sdk/_bundles/", noErrorOnMissing: true },
         { from: "*.gif", to: "", context: "node_modules/osrs-sdk/_bundles/", noErrorOnMissing: true },
         { from: "*.ogg", to: "", context: "node_modules/osrs-sdk/_bundles/", noErrorOnMissing: true },

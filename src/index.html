@@ -3,8 +3,42 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, user-scalable=no" />
-    <title>Ocellus Simulator · The Fractured Archive</title>
-    <meta name="description" content="A practice simulator for Ocellus, the final boss of The Fractured Archive, covering all four phases." />
+    <title>Ocellus Simulator · The Fractured Archive (OSRS Raid 4) Practice</title>
+    <meta name="description" content="Free browser simulator for Ocellus, the final boss of The Fractured Archive (OSRS Raid 4). Practise all four phases with the game's own models, tick-accurate attacks, danger-tile highlights and a no-death practice mode. No download, no account." />
+    <meta name="keywords" content="Ocellus, Ocellus simulator, Ocellus trainer, The Fractured Archive, TFA, OSRS Raid 4, Old School RuneScape, boss practice" />
+    <meta name="author" content="Alessandro Rodi (@alrodi)" />
+    <meta name="theme-color" content="#1a1024" />
+    <link rel="canonical" href="https://ocellus-sim.pages.dev/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Ocellus Simulator" />
+    <meta property="og:url" content="https://ocellus-sim.pages.dev/" />
+    <meta property="og:title" content="Ocellus Simulator · The Fractured Archive (OSRS Raid 4)" />
+    <meta property="og:description" content="Practise the whole Ocellus fight, all four phases, free in your browser." />
+    <meta property="og:image" content="https://ocellus-sim.pages.dev/og-image.jpg" />
+    <meta property="og:image:width" content="1600" />
+    <meta property="og:image:height" content="900" />
+    <meta property="og:image:alt" content="Ocellus phase 2: the portals lit purple, the player running to the gap" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:creator" content="@alrodi" />
+    <meta name="twitter:title" content="Ocellus Simulator · The Fractured Archive (OSRS Raid 4)" />
+    <meta name="twitter:description" content="Practise the whole Ocellus fight, all four phases, free in your browser." />
+    <meta name="twitter:image" content="https://ocellus-sim.pages.dev/og-image.jpg" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Ocellus Simulator",
+        "url": "https://ocellus-sim.pages.dev/",
+        "description": "Free browser simulator for Ocellus, the final boss of The Fractured Archive (Old School RuneScape Raid 4), covering all four phases.",
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Any (web browser)",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "image": "https://ocellus-sim.pages.dev/og-image.jpg",
+        "author": { "@type": "Person", "name": "Alessandro Rodi", "url": "https://x.com/alrodi" },
+        "isBasedOn": "https://github.com/Julian-Dasilva/ArchiveOcellusTrainer",
+        "codeRepository": "https://github.com/alessandrorodi/ocellus-sim"
+      }
+    </script>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M2 16C8 7 24 7 30 16C24 25 8 25 2 16Z' fill='%231a1024' stroke='%23b455ff' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='5.5' fill='%23b455ff'/%3E%3Ccircle cx='16' cy='16' r='2.2' fill='%23120818'/%3E%3C/svg%3E" />
     <style>
       body {
@@ -329,7 +363,28 @@
     </style>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- What crawlers read; React replaces it as soon as the sim starts. -->
+    <div id="root">
+      <main style="max-width: 60ch; margin: 2em auto; font-family: sans-serif; line-height: 1.5">
+        <h1>Ocellus Simulator: The Fractured Archive (OSRS Raid 4)</h1>
+        <p>
+          A free practice simulator for Ocellus, the final boss of The Fractured Archive, Old School RuneScape's fourth
+          raid. Fight all four phases in your browser with the game's own models, animations and sounds, and attacks timed
+          tick by tick from recorded kills.
+        </p>
+        <ul>
+          <li>Start at any phase: Corners, The Blade, Quadrants or the last quadrant</li>
+          <li>Practice mode (you can't die, prayer stays up) and danger-tile highlights</li>
+          <li>Ranged or melee setups, replayable seeds, no download and no account</li>
+        </ul>
+        <p>
+          Built on Julian-Dasilva's phase 4 trainer
+          (<a href="https://archive-ocellus-trainer.raid-sims.workers.dev">archive-ocellus-trainer.raid-sims.workers.dev</a>).
+          Open source on <a href="https://github.com/alessandrorodi/ocellus-sim">GitHub</a>. Made by
+          <a href="https://x.com/alrodi">@alrodi</a>.
+        </p>
+      </main>
+    </div>
     <script src="./main.js"></script>
   </body>
 </html>
