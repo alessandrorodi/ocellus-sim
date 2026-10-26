@@ -2,7 +2,7 @@
 
 # Ocellus Simulator
 
-**Practise the whole Ocellus fight from The Fractured Archive (Raid 4), all four phases, in your browser.**
+**Practise the whole Ocellus fight from The Fractured Archive (OSRS Raid 4), all four phases, in your browser.**
 
 [**▶ Play it at ocellus-sim.pages.dev**](https://ocellus-sim.pages.dev)
 
@@ -29,7 +29,7 @@ fight.
 - **Prayer that matters**: shots are checked against your overhead when they land, his own overheads block your
   style, and turning on a protection prayer as he starts to spin gets you "injured".
 - **Practice tools**: danger-tile highlighting, community tile markers, phase 2 skip tiles, a no-death practice mode,
-  HP scaling for 1-5 raiders, ranged and melee setups, seeds you can replay, and F-key bindings for the side-panel
+  ranged and melee setups, seeds you can replay, and F-key bindings for the side-panel
   tabs (saved in your browser).
 - **Phase 4 drills**: Julian-Dasilva's original phase 4 trainer, kept as `?mode=p4drill`.
 
@@ -87,7 +87,7 @@ tile and your attack timer resets: move, attack, move for 2-tick Tbow or Scythe.
 </tr>
 </table>
 
-<p align="center"><img src="docs/screenshots/sidebar.jpg" alt="The sidebar: start phase, team size, setup, practice options and phase tips" width="80%"></p>
+<p align="center"><img src="docs/screenshots/sidebar.jpg" alt="The sidebar: start phase, setup, practice options and phase tips" width="80%"></p>
 
 ## Options
 
@@ -96,7 +96,6 @@ Everything is in the sidebar, and each option is also a URL parameter, so a setu
 | Parameter | Values | |
 |---|---|---|
 | `phase` | `1`-`4` | where the fight starts |
-| `party` | `1`-`5` | scales his HP (1 and 2 raiders share the same HP) |
 | `setup` | `ranged`, `melee` | your gear |
 | `tiles` | `0`, `1` | highlight danger and safe tiles |
 | `markers` | `0`, `1` | community tile markers |

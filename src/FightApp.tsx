@@ -43,7 +43,6 @@ function readParams(): Params {
   const url = new URL(window.location.href);
   const get = (name: string) => url.searchParams.get(name);
   const phase = Number(get("phase") ?? "1");
-  const party = Number(get("party") ?? "1");
   const rawSeed = get("seed");
   const seed = rawSeed !== null && /^\d{1,10}$/.test(rawSeed) ? Number(rawSeed) % 4294967296 : crypto.getRandomValues(new Uint32Array(1))[0];
   const flag = (name: string, fallback: boolean) => {
@@ -52,7 +51,7 @@ function readParams(): Params {
   };
   return {
     seed,
-    party: party >= 1 && party <= 5 ? Math.floor(party) : 1,
+    party: 1,
     startPhase: phase === 2 || phase === 3 || phase === 4 ? phase : 1,
     hazardTiles: flag("tiles", true),
     videoMarkers: flag("markers", false),
@@ -73,7 +72,7 @@ function rememberFlag(name: string, on: boolean): void {
 function writeParams(params: Params, fresh = true): void {
   const url = new URL(window.location.href);
   url.searchParams.set("phase", String(params.startPhase));
-  url.searchParams.set("party", String(params.party));
+  url.searchParams.delete("party");
   url.searchParams.set("setup", params.setup);
   url.searchParams.set("tiles", params.hazardTiles ? "1" : "0");
   url.searchParams.set("markers", params.videoMarkers ? "1" : "0");
@@ -416,6 +415,8 @@ function Sidebar({ params, fight, region }: Readonly<{ params: Params; fight: Fi
   const [credits, setCredits] = useState(false);
   const set = (patch: Partial<Params>) => setDraft((current) => ({ ...current, ...patch }));
   const phaseNow: StartPhase = fight?.label() === "Phase 2" ? 2 : fight?.label() === "Phase 3" ? 3 : fight?.label() === "Phase 4" ? 4 : 1;
+  // Restart replays the current fight; if a setting that only applies at load changed, it relaunches with it instead.
+  const changedAtLoad = (["startPhase", "setup", "hazardTiles", "videoMarkers", "soloVine"] as const).some((key) => draft[key] !== params[key]);
   useFightVersion(fight);
   return (
     <div className="fight-sidebar">
@@ -428,15 +429,6 @@ function Sidebar({ params, fight, region }: Readonly<{ params: Params; fight: Fi
           <option value={2}>Phase 2 · The Blade</option>
           <option value={3}>Phase 3 · Quadrants</option>
           <option value={4}>Phase 4 · Last quadrant</option>
-        </select>
-      </label>
-      <label>
-        Team size (HP scale)
-        <select value={draft.party} onChange={(event) => set({ party: Number(event.target.value) })}>
-          <option value={1}>Solo / duo</option>
-          <option value={3}>3 raiders</option>
-          <option value={4}>4 raiders</option>
-          <option value={5}>5 raiders</option>
         </select>
       </label>
       <label>
@@ -486,7 +478,7 @@ function Sidebar({ params, fight, region }: Readonly<{ params: Params; fight: Fi
       </label>
       <SoundToggle />
       <RuneScapeButton type="button" style={{ width: "100%" }} onClick={() => writeParams(draft)}>Start fight</RuneScapeButton>
-      <RuneScapeButton type="button" style={{ width: "100%" }} onClick={() => Trainer.reset()}>Restart</RuneScapeButton>
+      <RuneScapeButton type="button" style={{ width: "100%" }} onClick={() => (changedAtLoad ? writeParams(draft, false) : Trainer.reset())}>Restart</RuneScapeButton>
       <hr />
       <TileIndicators />
       <hr />

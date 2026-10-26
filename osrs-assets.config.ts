@@ -21,7 +21,8 @@ export default defineConfig({
   cache: { openrs2: 2746 },
   assets: {
     npcs: { ocellus: DRILL_OCELLUS, ...FIGHT_ASSETS.npcs },
-    models: FIGHT_MODELS,
+    // The drill's brazier and floor-hole models as well as the fight's; without them ?mode=p4drill fails to load.
+    models: { ...ARCHIVE_OCELLUS_ASSETS.models, ...FIGHT_MODELS },
     items: ARCHIVE_OCELLUS_ASSETS.items,
     spotAnims: { ...ARCHIVE_OCELLUS_ASSETS.spotAnims, ...FIGHT_ASSETS.spotAnims },
     sounds: { ...ARCHIVE_OCELLUS_ASSETS.sounds, ...FIGHT_ASSETS.sounds },
