@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit && node scripts/check-types.mjs",
     "assets": "bash scripts/assets.sh",
     "item-icons": "tsx src/itemIcons/build.ts",
-    "deploy": "vercel deploy --prod"
+    "deploy": "bash scripts/vercel-build.sh && node scripts/pages-postbuild.mjs && npx -y wrangler@4.45.0 pages deploy dist --project-name ocellus-sim --branch main"
   },
   "devDependencies": {
     "@types/jest": "^27.4.1",

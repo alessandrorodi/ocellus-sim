@@ -24,15 +24,13 @@ for (const name of await readdir(assets)) {
 }
 await writeFile(join(assets, "split-assets.json"), JSON.stringify(splits));
 
+// Pages allows one * per rule, so each part gets its own exact rule.
+const immutable = [
+  "/osrs-assets/*.bin",
+  "/osrs-assets/*.soundpack",
+  ...Object.entries(splits).flatMap(([name, parts]) => Array.from({ length: parts }, (_, i) => `/osrs-assets/${name}.part${i}`)),
+];
 await writeFile(
   join("dist", "_headers"),
-  [
-    "/osrs-assets/*.bin",
-    "  Cache-Control: public, max-age=31536000, immutable",
-    "/osrs-assets/*.soundpack",
-    "  Cache-Control: public, max-age=31536000, immutable",
-    "/osrs-assets/*.part*",
-    "  Cache-Control: public, max-age=31536000, immutable",
-    "",
-  ].join("\n"),
+  immutable.map((path) => `${path}\n  Cache-Control: public, max-age=31536000, immutable\n`).join(""),
 );

@@ -4,9 +4,9 @@
 
 **Practise the whole Ocellus fight from The Fractured Archive (Raid 4), all four phases, in your browser.**
 
-[**▶ Play it at ocellus-sim.vercel.app**](https://ocellus-sim.vercel.app)
+[**▶ Play it at ocellus-sim.pages.dev**](https://ocellus-sim.pages.dev)
 
-[![Play](https://img.shields.io/badge/play-ocellus--sim.vercel.app-1fb5a8)](https://ocellus-sim.vercel.app)
+[![Play](https://img.shields.io/badge/play-ocellus--sim.pages.dev-1fb5a8)](https://ocellus-sim.pages.dev)
 [![Licence: GPL-3.0](https://img.shields.io/badge/licence-GPL--3.0-blue)](LICENSE)
 [![Follow @alrodi on X](https://img.shields.io/badge/follow-%40alrodi-000000?logo=x)](https://x.com/alrodi)
 
