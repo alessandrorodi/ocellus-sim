@@ -67,6 +67,34 @@
         pointer-events: none;
       }
 
+      /* In the gap between the chatbox (bottom left) and the inventory tabs (bottom right). */
+      #site_footer {
+        position: absolute;
+        bottom: 6px;
+        left: calc(min(500px, 46vw) + 24px);
+        right: 210px;
+        font-size: 12px;
+        text-align: center;
+        color: rgba(255, 255, 255, 0.8);
+        text-shadow: 1px 1px 0 black;
+        pointer-events: none;
+      }
+
+      #site_footer p {
+        margin: 0;
+      }
+
+      #site_footer a {
+        color: #ff981f;
+        pointer-events: auto;
+      }
+
+      #site_footer .site-footer-legal {
+        margin-top: 2px;
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.55);
+      }
+
       #drill_controls {
         position: absolute;
         bottom: 48px;
@@ -344,9 +372,18 @@
           font-size: 12px;
         }
 
-        #credit_line {
+        #credit_line,
+        #site_footer .site-footer-legal {
           font-size: 8px;
+        }
+
+        #credit_line {
           max-width: 40ch;
+        }
+
+        #site_footer {
+          left: calc(min(300px, 55vw) + 16px);
+          font-size: 10px;
         }
       }
       #game_chat {

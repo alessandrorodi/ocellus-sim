@@ -24,10 +24,12 @@ export const CREDIT_LINE =
   "Created using intellectual property belonging to Jagex Limited under the terms of Jagex's Fan Content Policy. This content is not endorsed by or affiliated with Jagex.";
 
 const FOLLOW_URL = "https://x.com/alrodi";
+const JULIAN_X_URL = "https://x.com/ShadowJdas";
+const JULIAN_SIM_URL = "https://archive-ocellus-trainer.raid-sims.workers.dev";
 
 const CREDITS: readonly Readonly<{ who: string; what: string; href: string }>[] = [
   { who: "Julian-Dasilva", what: "ArchiveOcellusTrainer, the phase 4 trainer this grew from", href: "https://github.com/Julian-Dasilva/ArchiveOcellusTrainer" },
-  { who: "Julian-Dasilva", what: "play his phase 4 trainer", href: "https://archive-ocellus-trainer.raid-sims.workers.dev" },
+  { who: "Julian-Dasilva", what: "play his phase 4 trainer", href: JULIAN_SIM_URL },
   { who: "ShadowStalkerTM", what: "Duo The Fractured Archive, the reference fight", href: "https://www.youtube.com/watch?v=HAgq_qg0OIY" },
   { who: "MRobertEvers", what: "RSProx tick analysis of the fight", href: "https://github.com/MRobertEvers/oldschool-clientc" },
   { who: "OldSchoolSDK", what: "osrs-sdk, the engine", href: "https://github.com/OldSchoolSDK/osrs-sdk" },
@@ -586,7 +588,14 @@ export function FightApp() {
         {fight && <Hud fight={fight} />}
         {fight && <Chatbox fight={fight} />}
         {fight && <Result fight={fight} params={params} />}
-        <p id="credit_line">{CREDIT_LINE}</p>
+        <footer id="site_footer">
+          <p>
+            Made by <a href={FOLLOW_URL} target="_blank" rel="noreferrer">@alrodi</a> · built on{" "}
+            <a href={JULIAN_X_URL} target="_blank" rel="noreferrer">@ShadowJdas</a>'s{" "}
+            <a href={JULIAN_SIM_URL} target="_blank" rel="noreferrer">phase 4 trainer</a>
+          </p>
+          <p className="site-footer-legal">{CREDIT_LINE}</p>
+        </footer>
       </GameOverlay>
       <DefaultSidebar>
         <Sidebar params={params} fight={fight} region={region} />
