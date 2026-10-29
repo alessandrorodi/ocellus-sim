@@ -2,7 +2,7 @@
 import { CacheRenderModel, CacheRenderReferences, EmptyModel, ImageLoader, MagicWeapon, MeleeWeapon, Mob, Player, Random, RangedWeapon } from "osrs-sdk";
 import type { CacheRenderReference, CacheRenderSpotAnim, IncomingAttackRoll, IncomingAttackRollModifiers, Location, Model, Projectile, Region, Unit, UnitBonuses, UnitStats } from "osrs-sdk";
 import type { BossOverhead } from "./data";
-import { LOWEST_DEFENCE_FRACTION, NPC, P1, P2, P3, SEQ, SPOT } from "./data";
+import { LOWEST_DEFENCE_FRACTION, NPC, P1, P2, P3, RIFT_SEQ, SEQ, SPOT } from "./data";
 import type { ATile } from "./geometry";
 import { fromSdk, toSdk } from "./geometry";
 import SoulSplitIcon from "../../../assets/overheads/Soul_Split_overhead.png";
@@ -320,10 +320,26 @@ export class VoidAdd extends Mob {
   /** Phase 4's rifts: standard ranged attacks always max hit them. */
   rangedAlwaysMaxHits = false;
 
+  private detonated = false;
+
   constructor(region: Region, tile: ATile, readonly kind: AddKind, private readonly onKilled: (add: VoidAdd) => void) {
     super(region, toSdk(tile));
     this.stats = { attack: 1, strength: 1, defence: kind === "vine" ? 1 : 175, range: 1, magic: 300, hitpoint: P3.riftHp };
     this.currentStats = { ...this.stats };
+    if (kind !== "vine") this.playAnimation(RIFT_SEQ[kind].spawn);
+  }
+
+  /** A rift's model is an effect that only takes shape under its own animations; the vine has none. */
+  override get idlePoseId(): number {
+    return this.kind === "vine" ? super.idlePoseId : RIFT_SEQ[this.kind].idle;
+  }
+
+  override get walkingPoseId(): number {
+    return this.idlePoseId;
+  }
+
+  override get deathAnimationId(): number | null {
+    return this.kind === "vine" || this.detonated ? super.deathAnimationId : RIFT_SEQ[this.kind].despawn;
   }
 
   override setStats(): void {
@@ -389,6 +405,14 @@ export class VoidAdd extends Mob {
   remove(): void {
     this.killed = true;
     this.dying = 0;
+  }
+
+  /** Left alive, a rift releases its charge: the 2-tick detonate animation, then it is gone. [K] */
+  detonate(): void {
+    this.killed = true;
+    this.detonated = true;
+    if (this.kind !== "vine") this.playAnimation(RIFT_SEQ[this.kind].detonate);
+    this.dying = 3;
   }
 }
 

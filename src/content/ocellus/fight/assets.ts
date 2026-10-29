@@ -1,5 +1,5 @@
 import type { CacheAssets } from "osrs-sdk/asset-manifest";
-import { NPC, PORTAL, SEQ, SOUND, SPOT, VOID_LOC } from "./data";
+import { NPC, PORTAL, RIFT_SEQ, SEQ, SOUND, SPOT, VOID_LOC } from "./data";
 
 const p1Seqs = {
   idle: SEQ.p1Idle,
@@ -63,9 +63,9 @@ export const FIGHT_ASSETS = {
     fightOcellusP1: { id: NPC.p1, animations: p1Seqs },
     fightOcellusP2: { id: NPC.p2, animations: { idle: SEQ.p2Idle, transformation: SEQ.p2Transformation, toP3Part1: SEQ.p2ToP3Part1, toP3Part2: SEQ.p2ToP3Part2 } },
     fightOcellusP3: { id: NPC.p3, animations: p3Seqs },
-    fightVoidRift: { id: NPC.riftBasic, animations: {} },
-    fightHealingRift: { id: NPC.riftHeal, animations: {} },
-    fightVoidAugmenter: { id: NPC.riftBuff, animations: {} },
+    fightVoidRift: { id: NPC.riftBasic, animations: RIFT_SEQ["rift-basic"] },
+    fightHealingRift: { id: NPC.riftHeal, animations: RIFT_SEQ["rift-heal"] },
+    fightVoidAugmenter: { id: NPC.riftBuff, animations: RIFT_SEQ["rift-buff"] },
     fightVoidVine: { id: NPC.vine, animations: {} },
   },
   spotAnims: spots(),

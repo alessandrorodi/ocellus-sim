@@ -28,6 +28,17 @@ export const NPC = {
   vine: 16681,
 } as const;
 
+/**
+ * Each rift's own four sequences, in the cache's order after its stand animation (npc 16678-16680 stand on 14895, 14899
+ * and 14903): idle, spawn (1 tick), despawn (1 tick) and detonate (2 ticks). The rift models are effects, so without
+ * them they sit in their bind pose, a thin sliver. [G] cache 2746 npc and seq configs
+ */
+export const RIFT_SEQ = {
+  "rift-basic": { idle: 14895, spawn: 14896, despawn: 14897, detonate: 14898 },
+  "rift-heal": { idle: 14899, spawn: 14900, despawn: 14901, detonate: 14902 },
+  "rift-buff": { idle: 14903, spawn: 14904, despawn: 14905, detonate: 14906 },
+} as const;
+
 /** [G] AnimationID (seq) */
 export const SEQ = {
   p1Idle: 14804,
@@ -417,6 +428,8 @@ export const P3 = {
   riftDetonationDamage: range(39, 41),
   /** Killing a Void Augmenter: Attack and Strength to 116, Magic and Ranged to 112, from 99s. [W] Void Augmenter */
   augmenterBoost: { melee: 17, rangedMagic: 13 },
+  /** Killing a Void Siphon gives its killer 22 health, half its 44. [W] Void Siphon */
+  siphonHeal: 22,
   healRiftEvery: 4,
   healRiftHeal: [12, 14],
   /** Untether, from U. [R] [W] [K] */

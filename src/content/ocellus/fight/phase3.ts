@@ -552,7 +552,7 @@ export class Phase3 implements PhaseScript {
     fight.after(P3.riftDetonatesAfter, () => {
       if (rift.killed || !this.rifts.includes(rift)) return;
       this.rifts = this.rifts.filter((r) => r !== rift);
-      rift.remove();
+      rift.detonate();
       fight.spot(tile, SPOT.voidChainExplosion, { maxTicks: 3 });
       fight.hit({ amount: () => fight.rng.roll(P3.riftDetonationDamage) });
     });
@@ -571,7 +571,11 @@ export class Phase3 implements PhaseScript {
   private riftKilled(add: VoidAdd): void {
     const { fight } = this;
     this.rifts = this.rifts.filter((r) => r !== add);
-    if (add.kind === "rift-heal") return;
+    if (add.kind === "rift-heal") {
+      // "When killed, it gives the attacker 22 health." [W] Void Siphon
+      fight.healPlayer(P3.siphonHeal);
+      return;
+    }
     const name = add.kind === "rift-buff" ? "void augmenter" : "void rift";
     fight.message(`Destroying the ${name} empowers you!`, CHAT.purple);
     fight.player.addSpotAnim({ id: add.kind === "rift-buff" ? SPOT.glowZaros : SPOT.glowArmadyl, channel: "empower" });
