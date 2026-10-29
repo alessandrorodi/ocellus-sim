@@ -327,8 +327,9 @@ export class Phase3 implements PhaseScript {
   }
 
   /**
-   * The charged blade: one saw per quadrant he has destroyed, plus one. Saw i cuts at P+5+3i, on the tick his loop
-   * animation (the last saw's: the end animation) plays [K]. An overhead up on the tick before is severed and locked
+   * The charged blade: one saw per quadrant he has destroyed, plus one. It opens with a melee hit at P+1. Saw i cuts at
+   * P+5+3i, on the tick his loop animation (the last saw's: the end animation) plays, and its spotanim shows 2 ticks
+   * before, at P+3+3i [K]. An overhead up on the tick before is severed and locked
    * for P3.severTicks; Protect from Melee up as it cuts blocks it. So prayer off on P+4+3i, on for the cut, off again
    * before the next. [K] [V] duo 18:52-18:56 and 21:33-21:36, Love's melee flick guide [W]
    */
@@ -344,10 +345,17 @@ export class Phase3 implements PhaseScript {
     fight.after(this.segment === 0 ? P3.debrisIntoSpin.first : P3.debrisIntoSpin.later, () => {
       if (still()) this.debris();
     });
+    fight.after(P3.spinOpens, () => {
+      if (!still() || reach(fight.playerTile, this.boss.tile) > 8) return;
+      fight.hit({ style: "melee", amount: (prayer) => (prayer === "melee" ? 0 : fight.rng.roll(P3.spinOpeningDamage)) });
+    });
     const loops = this.fight.destroyed.size;
     for (let i = 0; i <= loops; i++) {
       const last = i === loops;
       const cut = P3.sawFirstCut + P3.sawEvery * i;
+      fight.after(cut - P3.sawShowsBefore, () => {
+        if (still()) boss.addSpotAnim({ id: last ? SPOT.meleePrayerOut : SPOT.meleePrayer, channel: "spin" });
+      });
       fight.after(cut - 1, () => {
         if (!still() || fight.player.protection === null) return;
         fight.player.prayerController.disableProtectionPrayersForTicks(P3.severTicks);
@@ -357,7 +365,6 @@ export class Phase3 implements PhaseScript {
       fight.after(cut, () => {
         if (!still()) return;
         boss.playAnimation(last ? SEQ.p3PrayerOut : SEQ.p3PrayerLoop);
-        boss.addSpotAnim({ id: last ? SPOT.meleePrayerOut : SPOT.meleePrayer, channel: "spin" });
         if (last) this.stationary = false;
         if (reach(fight.playerTile, this.boss.tile) > 8) return;
         fight.hit({ style: "melee", amount: (prayer) => (prayer === "melee" ? 0 : fight.rng.roll(P3.spinDamage)) });

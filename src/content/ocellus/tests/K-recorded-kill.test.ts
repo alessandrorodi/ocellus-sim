@@ -69,6 +69,12 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
       messages.push([fight.tick, text]);
       message(text, colour);
     });
+    const bossSpots: (readonly [number, number])[] = [];
+    const addSpotAnim = BossForm.prototype.addSpotAnim;
+    jest.spyOn(BossForm.prototype, "addSpotAnim").mockImplementation(function (this: BossForm, spotAnim: Parameters<BossForm["addSpotAnim"]>[0]) {
+      bossSpots.push([fight.tick, spotAnim.id]);
+      addSpotAnim.call(this, spotAnim);
+    });
     const spots: (readonly [number, number, ATile])[] = [];
     const spot = fight.spot.bind(fight);
     jest.spyOn(fight, "spot").mockImplementation((tile: ATile, id: number, options?: SpotOptions) => {
@@ -102,7 +108,7 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
     /** His HP at a whole-number percentage of the pool. */
     const bossAt = (percent: number) => (boss().currentStats.hitpoint = Math.ceil((fight.poolMax * percent) / 100));
     const said = (text: string, start: number) => shouts.filter(([, s]) => s === text).map(([t]) => t - start);
-    return { fight, boss, body, tick, tickTo, stayInReach, anims, shouts, hits, messages, spots, from, bossAt, said };
+    return { fight, boss, body, tick, tickTo, stayInReach, anims, shouts, hits, messages, spots, bossSpots, from, bossAt, said };
   }
 
   /** Phase 3 begins on tick 0 and he lands in his first corner P3.jumpToCornerAfter later: the segment start S. */
@@ -246,7 +252,7 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
     expect(f.hits.filter((h) => h.style === "magic").map((h) => h.tick - S)).toEqual([4]);
   });
 
-  test("the spin: each saw cuts on its loop animation, 5 + 3i in; an overhead up the tick before is severed", () => {
+  test("the spin: a melee hit 1 in, each saw shows 2 ticks before it cuts on its loop animation, 5 + 3i in; an overhead up the tick before is severed", () => {
     const f = recorded(3);
     // Two quadrants down: three saws, as in [K]'s third quadrant.
     f.fight.destroyed.add("NW");
@@ -262,7 +268,11 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
     ]);
     const severed = f.messages.filter(([, text]) => text.includes("severing your prayer")).map(([t]) => t - P);
     expect(severed[0]).toBe(4);
-    expect(f.hits.filter((h) => h.style === "melee" && h.tick > P && h.tick < P + 12).map((h) => h.tick - P)).toEqual([5, 8, 11]);
+    expect(f.hits.filter((h) => h.style === "melee" && h.tick > P && h.tick < P + 12).map((h) => h.tick - P)).toEqual([1, 5, 8, 11]);
+    // [K]: 4325 with the start, then each saw's 4326 (the last one's 4327) 2 ticks before its cut.
+    expect(f.bossSpots.filter(([t, id]) => t >= P && t < P + 12 && [SPOT.meleePrayerIn, SPOT.meleePrayer, SPOT.meleePrayerOut].some((spin) => spin === id)).map(([t, id]) => [t - P, id])).toEqual([
+      [0, SPOT.meleePrayerIn], [3, SPOT.meleePrayer], [6, SPOT.meleePrayer], [9, SPOT.meleePrayerOut],
+    ]);
   });
 
   describe("Untether: under his 3x3 by U+28, one tile out on U+29", () => {
