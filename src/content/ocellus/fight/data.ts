@@ -296,7 +296,20 @@ export const P2 = {
   skipRunOut: 4,
   skipMarkerColour: "#FF3DE0",
   poolDamage: range(3, 5),
+  /**
+   * A round's six gaps are one of three fixed sequences, each wave's (north or south arm, east or west arm) gap 1..6
+   * out, mirrored into every quadrant. The first round's sequence is random, then orange, red, green in turn (39/39
+   * rounds in 13 fights). [R]
+   */
+  gapSequences: {
+    orange: [[2, 2], [4, 2], [2, 4], [2, 2], [3, 3], [5, 2]],
+    red: [[3, 3], [3, 4], [2, 5], [3, 3], [3, 5], [4, 4]],
+    green: [[2, 1], [2, 4], [2, 6], [4, 4], [3, 3], [4, 1]],
+  },
+  gapOrder: ["orange", "red", "green"],
 } as const;
+
+export type GapSequence = (typeof P2.gapOrder)[number];
 
 const NO_TICKS: readonly number[] = [];
 

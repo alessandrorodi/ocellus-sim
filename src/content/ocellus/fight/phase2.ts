@@ -2,9 +2,10 @@ import type { Unit } from "osrs-sdk";
 import type { TileMark } from "./effects";
 import type { Fight, PhaseScript } from "./Fight";
 import { CHAT } from "./Fight";
+import type { GapSequence } from "./data";
 import { P2, SEQ, SOUND, SPOT } from "./data";
 import type { ATile, Arm, Quadrant } from "./geometry";
-import { ARM_DIR, MIDDLE, QUADRANT_SIGN, ROOM_DIAGONAL, TileSet, at, armsOf, clockwise, inRoom, key, quadrantOf, same, sideOf } from "./geometry";
+import { ARM_DIR, MIDDLE, QUADRANT_SIGN, TileSet, at, armsOf, clockwise, inRoom, key, quadrantOf, same, sideOf } from "./geometry";
 import type { PortalView } from "./portals";
 import { PortalCross } from "./portals";
 import type { Style } from "./units";
@@ -19,6 +20,8 @@ type Portal = Readonly<{ arm: Arm; index: number; tiles: readonly [ATile, ATile]
 type Round = {
   q: Quadrant;
   start: number;
+  sequence: GapSequence;
+  waves: number;
   gaps: Map<Arm, number>;
   lit: boolean;
   allLit: boolean;
@@ -68,6 +71,7 @@ export class Phase2 implements PhaseScript {
   private round: Round | null = null;
   private roundsRun = 0;
   private firstQuadrant: Quadrant | null = null;
+  private firstSequence: number | null = null;
   private walls = new TileSet();
   private cross: PortalCross | null = null;
   private ended = false;
@@ -147,8 +151,10 @@ export class Phase2 implements PhaseScript {
     const here = quadrantOf(fight.playerTile) ?? sideOf(fight.playerTile);
     const q = this.firstQuadrant === null ? here : clockwise(this.firstQuadrant, this.roundsRun);
     if (this.firstQuadrant === null) this.firstQuadrant = q;
+    this.firstSequence ??= fight.rng.int(0, P2.gapOrder.length - 1);
+    const sequence = P2.gapOrder[(this.firstSequence + this.roundsRun) % P2.gapOrder.length];
     this.roundsRun++;
-    const round: Round = { q, start: fight.tick, gaps: new Map(), lit: false, allLit: false, pools: [], safePortal: null, escaped: false };
+    const round: Round = { q, start: fight.tick, sequence, waves: 0, gaps: new Map(), lit: false, allLit: false, pools: [], safePortal: null, escaped: false };
     this.round = round;
     const lastRound = this.roundsRun === P2.rounds.length;
     for (let k = 0; k < P2.lightTimes; k++) {
@@ -175,18 +181,13 @@ export class Phase2 implements PhaseScript {
   }
 
   /**
-   * Ten of the twelve portals light, a gap on each arm; the gaps' rows and columns cross on the safe 2x2. Gaps g and h
-   * put its inner tile at (2h + 1, 2g + 1), which the octagon's cut corners only keep in the room while g + h <= 7.
+   * Ten of the twelve portals light, a gap on each arm; the gaps' rows and columns cross on the safe 2x2. The gaps are
+   * the round's sequence, wave by wave.
    */
   private light(round: Round): void {
-    const { rng } = this.fight;
-    const pick = (previous: number | undefined, max: number) =>
-      previous === undefined ? rng.int(0, max) : Math.max(0, Math.min(max, previous + rng.int(-2, 2)));
-    const arms = armsOf(round.q);
-    const [first, second] = rng.chance(0.5) ? arms : [arms[1], arms[0]];
-    const gap = pick(round.gaps.get(first), PORTALS_PER_ARM - 1);
-    round.gaps.set(first, gap);
-    round.gaps.set(second, pick(round.gaps.get(second), Math.min(PORTALS_PER_ARM - 1, (ROOM_DIAGONAL - 2) / 2 - gap)));
+    const [northSouth, eastWest] = P2.gapSequences[round.sequence][round.waves];
+    round.waves++;
+    for (const arm of armsOf(round.q)) round.gaps.set(arm, (arm === "N" || arm === "S" ? northSouth : eastWest) - 1);
     round.lit = true;
   }
 

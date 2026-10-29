@@ -54,8 +54,8 @@ he explodes. At 66% and 25% he teleports to the middle for diagonal cracks and a
 **Phase 2 · The Blade** (5,250 HP pool, green bar)
 
 A fixed 131-tick script. Twenty-four portals form a "+". Every five ticks ten of the twelve portals around your
-quadrant light purple; the one orange portal left on each arm marks the safe spot, where their two lines cross. Then
-pools, an orange floor portal to the next quadrant, and all twelve fire at once.
+quadrant light purple; the one orange portal left on each arm marks the safe spot, where their two lines cross. The gaps
+follow the game's three fixed patterns, in the game's order, so the rounds can be learnt. Then pools, an orange floor portal to the next quadrant, and all twelve fire at once.
 
 </td>
 <td><img src="docs/screenshots/phase2-escape.jpg" alt="Phase 2: all twelve portals lit, pools on the floor, the player stepping onto the escape portal"></td>

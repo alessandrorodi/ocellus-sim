@@ -290,6 +290,7 @@ const TIPS: Readonly<Record<StartPhase, readonly string[]>> = {
   ],
   2: [
     "Attack The Blade. Purple portals fire across their rows 4 ticks after lighting; stand where the two orange gaps cross (green tiles).",
+    "The gaps aren't random: each round runs one of three set patterns (orange, red, green), and after the first they come in that order. Learn each pattern's first gap and you know the round.",
     "When pools appear, step on the orange floor portal before all twelve fire.",
     "The skip (\"Phase 2 skip tiles\"): wait on the outer pink tile, 6 out diagonally, and click the inner one, 4 out, one tick before each volley. Running through the wave dodges it.",
   ],
