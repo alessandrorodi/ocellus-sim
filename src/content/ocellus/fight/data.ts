@@ -356,8 +356,13 @@ export const P3 = {
    */
   sawFirstCut: 5,
   sawEvery: 3,
+  /** Each saw's spotanim (4326, the last saw's 4327) shows on him 2 ticks before its cut: the cue to flick off. [K] */
+  sawShowsBefore: 2,
   afterSpin: 4,
   spinDamage: range(15, 27),
+  /** A melee hit on everyone 1 tick into the spin, 0 through Protect from Melee. [K] every spin */
+  spinOpens: 1,
+  spinOpeningDamage: range(0, 18),
   /** "Severing your prayer!" locks protection prayers this long: back on 3 ticks later in [V] duo 18:53-18:55. */
   severTicks: 3,
   panicLands: 2,
