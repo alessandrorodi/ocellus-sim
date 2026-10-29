@@ -115,6 +115,12 @@ export class FightRegion extends Region {
     this.fight?.setSkipMarkers(on);
   }
 
+  /** The sidebar's phase 2 pattern tiles, the same way. */
+  setPatternMarkers(on: boolean): void {
+    this.options = { ...this.options, patternMarkers: on };
+    this.fight?.setPatternMarkers(on);
+  }
+
   initialiseRegion(): { player: Player } {
     const spawn = this.options.startPhase === 1 ? at(0, -9) : this.options.startPhase === 4 ? at(4, -2) : at(5, -3);
     const player = new FightPlayer(this, spawn);

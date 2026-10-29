@@ -100,6 +100,7 @@ Everything is in the sidebar, and each option is also a URL parameter, so a setu
 | `tiles` | `0`, `1` | highlight danger and safe tiles |
 | `markers` | `0`, `1` | community tile markers |
 | `skip` | `0`, `1` | mark phase 2's skip tiles (stand 6 out diagonally, run to 4 out) |
+| `pattern` | `0`, `1` | number phase 2's safe spots, wave 1 to 6, in each pattern's colour (orange, red, green) |
 | `vine` | `0`, `1` | solo rule: attack your own vine |
 | `practice` | `0`, `1` | you can't die |
 | `seed` | a number | replay the same fight |

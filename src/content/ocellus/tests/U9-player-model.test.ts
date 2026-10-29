@@ -13,7 +13,7 @@ function spotsOf(model: Model): readonly number[] | undefined {
 describe("U9 player model", () => {
   test("builds meshes for the player's spotanims only, and adds one the first time it is attached", () => {
     Settings.readFromStorage();
-    const options = { seed: 1, party: 1, startPhase: 1, hazardTiles: true, videoMarkers: false, skipMarkers: false, soloVine: true, invincible: true } as const;
+    const options = { seed: 1, party: 1, startPhase: 1, hazardTiles: true, videoMarkers: false, skipMarkers: false, patternMarkers: false, soloVine: true, invincible: true } as const;
     const region = new FightRegion(options, () => {});
     const trainer = new TrainerInstance(region, { force2d: true });
     trainer.mount(document.createElement("canvas"), document.createElement("div"));
