@@ -4,9 +4,10 @@ import type { CenserLook, FloorState } from "./arena";
 import type { BossOverhead, Range } from "./data";
 import { P1, P2, SOUND, scaledHp } from "./data";
 import type { SpotOptions, TileMark } from "./effects";
-import { GroundSpot } from "./effects";
+import { GroundSpot, LabelledTiles } from "./effects";
 import type { ATile, Quadrant } from "./geometry";
 import { CENSERS, GRID, QUADRANTS, QUADRANT_SIGN, TileSet, at, fromSdk, inRoom, key, quadrantOf, toSdk } from "./geometry";
+import { patternTiles } from "./pattern";
 import { Rng } from "./rng";
 import type { BossHooks, Form, PlayerHooks, Style } from "./units";
 import { BossForm, FightPlayer } from "./units";
@@ -21,6 +22,8 @@ export type FightOptions = Readonly<{
   videoMarkers: boolean;
   /** Mark J R V's phase 2 skip tiles. */
   skipMarkers: boolean;
+  /** Mark the community's phase 2 pattern tiles: each wave's safe spot, numbered, in its pattern's colour. */
+  patternMarkers: boolean;
   soloVine: boolean;
   invincible: boolean;
 }>;
@@ -125,6 +128,8 @@ export class Fight implements BossHooks, PlayerHooks {
   private markerEntities: Entity[] = [];
   private skipEntities: Entity[] = [];
   private skipTiles: boolean;
+  private patternEntity: Entity | null = null;
+  private patternOn: boolean;
   private voidLayers = new Map<string, readonly ATile[]>();
   private voidVersion = 0;
   private voidCache: Readonly<{ key: string; tiles: readonly ATile[] }> = { key: "0", tiles: [] };
@@ -135,6 +140,7 @@ export class Fight implements BossHooks, PlayerHooks {
     this.poolMax = scaledHp(P2.hp, options.party);
     this.practice = options.invincible;
     this.skipTiles = options.skipMarkers;
+    this.patternOn = options.patternMarkers;
     this.makePhase = makePhase;
     player.hooks = this;
     for (const q of QUADRANTS) this.censers.set(q, { tile: CENSERS[q].tile, god: CENSERS[q].god, lit: false });
@@ -154,6 +160,7 @@ export class Fight implements BossHooks, PlayerHooks {
     this.phase = this.makePhase(n, this);
     this.phase.begin();
     this.refreshSkipMarkers();
+    this.refreshPatternMarkers();
     this.changed();
   }
 
@@ -470,6 +477,24 @@ export class Fight implements BossHooks, PlayerHooks {
         this.region.addEntity(marker);
       }
     }
+  }
+
+  get patternMarkers(): boolean {
+    return this.patternOn;
+  }
+
+  /** The sidebar's phase 2 pattern tiles: switchable mid-fight, shown while phase 2 runs. */
+  setPatternMarkers(on: boolean): void {
+    this.patternOn = on;
+    this.refreshPatternMarkers();
+  }
+
+  private refreshPatternMarkers(): void {
+    const show = this.patternOn && this.phase?.label === "Phase 2";
+    if (show === (this.patternEntity !== null)) return;
+    if (this.patternEntity) this.region.removeEntity(this.patternEntity);
+    this.patternEntity = show ? new LabelledTiles(this.region, patternTiles()) : null;
+    if (this.patternEntity) this.region.addEntity(this.patternEntity);
   }
 
   /** The reference video's tile markers (ShadowStalkerTM), converted from region 16472 local tiles to arena offsets. */

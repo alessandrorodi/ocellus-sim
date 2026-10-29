@@ -33,7 +33,7 @@ describe("phase 3 and 4 follow the recorded kill [K]", () => {
   /** A fight that records his animations, shouts, hits on you and chat by tick; `setup` dresses you as the app does. */
   function recorded(startPhase: 3 | 4, overrides: Partial<FightOptions> = {}, setup: "ranged" | null = null) {
     Settings.readFromStorage();
-    const options: FightOptions = { seed: 1, party: 1, startPhase, hazardTiles: true, videoMarkers: false, skipMarkers: false, soloVine: true, invincible: true, ...overrides };
+    const options: FightOptions = { seed: 1, party: 1, startPhase, hazardTiles: true, videoMarkers: false, skipMarkers: false, patternMarkers: false, soloVine: true, invincible: true, ...overrides };
     const choices = setup ? resolveDrill({ seed: seed(1), selection: { setup } }).choices : null;
     const region = new FightRegion(options, (player) => {
       if (choices) dress(player, choices.setup);

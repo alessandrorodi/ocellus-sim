@@ -58,6 +58,7 @@ function readParams(): Params {
     hazardTiles: flag("tiles", true),
     videoMarkers: flag("markers", false),
     skipMarkers: flag("skip", false),
+    patternMarkers: flag("pattern", false),
     soloVine: flag("vine", true),
     invincible: flag("practice", false),
     setup: get("setup") === "melee" ? "melee" : "ranged",
@@ -79,6 +80,7 @@ function writeParams(params: Params, fresh = true): void {
   url.searchParams.set("tiles", params.hazardTiles ? "1" : "0");
   url.searchParams.set("markers", params.videoMarkers ? "1" : "0");
   url.searchParams.set("skip", params.skipMarkers ? "1" : "0");
+  url.searchParams.set("pattern", params.patternMarkers ? "1" : "0");
   url.searchParams.set("vine", params.soloVine ? "1" : "0");
   url.searchParams.set("practice", params.invincible ? "1" : "0");
   if (fresh) url.searchParams.delete("seed");
@@ -271,8 +273,8 @@ function Result({ fight, params }: Readonly<{ fight: Fight; params: Params }>) {
         {outcome.kind === "won" ? "Challenge complete" : "You fell"} after <b>{formatTicks(outcome.ticks)}</b> ({outcome.ticks} ticks), in {fight.label().toLowerCase()}.
       </p>
       <div className="fight-result-buttons">
-        <RuneScapeButton type="button" onClick={() => writeParams({ ...params, invincible: fight.practice, skipMarkers: fight.skipMarkers })}>Try again</RuneScapeButton>
-        <RuneScapeButton type="button" onClick={() => writeParams({ ...params, invincible: fight.practice, skipMarkers: fight.skipMarkers }, false)}>Same seed</RuneScapeButton>
+        <RuneScapeButton type="button" onClick={() => writeParams({ ...params, invincible: fight.practice, skipMarkers: fight.skipMarkers, patternMarkers: fight.patternMarkers })}>Try again</RuneScapeButton>
+        <RuneScapeButton type="button" onClick={() => writeParams({ ...params, invincible: fight.practice, skipMarkers: fight.skipMarkers, patternMarkers: fight.patternMarkers }, false)}>Same seed</RuneScapeButton>
       </div>
       <p className="fight-result-follow">
         Updates and new sims: <a href={FOLLOW_URL} target="_blank" rel="noreferrer">@alrodi on X</a>
@@ -290,7 +292,7 @@ const TIPS: Readonly<Record<StartPhase, readonly string[]>> = {
   ],
   2: [
     "Attack The Blade. Purple portals fire across their rows 4 ticks after lighting; stand where the two orange gaps cross (green tiles).",
-    "The gaps aren't random: each round runs one of three set patterns (orange, red, green), and after the first they come in that order. Learn each pattern's first gap and you know the round.",
+    "The gaps aren't random: each round runs one of three set patterns (orange, red, green), and after the first they come in that order. Learn each pattern's first gap and you know the round; \"Phase 2 pattern tiles\" numbers every wave's safe spot in its pattern's colour.",
     "When pools appear, step on the orange floor portal before all twelve fire.",
     "The skip (\"Phase 2 skip tiles\"): wait on the outer pink tile, 6 out diagonally, and click the inner one, 4 out, one tick before each volley. Running through the wave dodges it.",
   ],
@@ -461,6 +463,19 @@ function Sidebar({ params, fight, region }: Readonly<{ params: Params; fight: Fi
           }}
         />
         Phase 2 skip tiles
+      </label>
+      <label className="fight-check">
+        <input
+          type="checkbox"
+          checked={draft.patternMarkers}
+          onChange={(event) => {
+            const on = event.target.checked;
+            set({ patternMarkers: on });
+            region.setPatternMarkers(on);
+            rememberFlag("pattern", on);
+          }}
+        />
+        Phase 2 pattern tiles
       </label>
       <label className="fight-check">
         <input type="checkbox" checked={draft.soloVine} onChange={(event) => set({ soloVine: event.target.checked })} />
