@@ -339,7 +339,7 @@ export class Phase4 implements PhaseScript {
       fight.after(P3.riftDetonatesAfter, () => {
         if (rift.killed || !this.rifts.includes(rift)) return;
         this.rifts = this.rifts.filter((r) => r !== rift);
-        rift.remove();
+        rift.detonate();
         fight.spot(tile, SPOT.voidChainExplosion, { maxTicks: 3 });
         for (const amount of P4.riftDetonationHits) fight.hit({ amount: () => amount });
       });
