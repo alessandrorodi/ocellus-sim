@@ -14,6 +14,12 @@
 
 </div>
 
+> [!IMPORTANT]
+> **This simulator is deprecated.** I'm joining forces with Julian-Dasilva: his
+> [Archive Ocellus Trainer](https://archive-ocellus-trainer.raid-sims.workers.dev)
+> ([source](https://github.com/Julian-Dasilva/ArchiveOcellusTrainer)) now covers the whole fight, and that's where new
+> work goes. ocellus-sim.pages.dev stays up for now but won't get updates.
+
 Ocellus is drawn from the game's own models, animations, effects and sounds, extracted from the OSRS cache at build
 time. His attacks follow a tick-by-tick analysis of recorded kills. No download and no account: open the link and
 fight.

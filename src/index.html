@@ -397,6 +397,92 @@
         text-shadow: 1px 1px 0 black;
         pointer-events: none;
       }
+      #deprecation_notice {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        background: rgba(0, 0, 0, 0.7);
+      }
+
+      #deprecation_notice[hidden] {
+        display: none;
+      }
+
+      .deprecation-card {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 440px;
+        padding: 20px 22px;
+        background: #2b2418;
+        border: 2px solid #4a3c26;
+        box-shadow: inset 0 0 0 1px #8a7650, 0 12px 40px rgba(0, 0, 0, 0.6);
+        font-family: "OSRS", sans-serif;
+        color: #c8b88a;
+        text-shadow: 1px 1px 0 black;
+      }
+
+      .deprecation-card h2 {
+        margin: 0 0 12px;
+        font-size: 24px;
+        font-weight: normal;
+        color: #ff981f;
+      }
+
+      .deprecation-card p {
+        margin: 0 0 10px;
+        font-size: 16px;
+        line-height: 1.4;
+      }
+
+      .deprecation-card strong {
+        font-weight: normal;
+        color: #ffcf8a;
+      }
+
+      .deprecation-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .deprecation-actions a,
+      .deprecation-actions button {
+        flex: 1 1 160px;
+        padding: 10px 12px;
+        border: 1px solid #6b5b3e;
+        font: inherit;
+        font-size: 16px;
+        text-align: center;
+        text-decoration: none;
+        text-shadow: 1px 1px 0 black;
+        cursor: pointer;
+      }
+
+      .deprecation-actions a {
+        background: #6b4a12;
+        border-color: #ff981f;
+        color: #ffff00;
+      }
+
+      .deprecation-actions a:hover,
+      .deprecation-actions a:focus-visible {
+        background: #85601a;
+      }
+
+      .deprecation-actions button {
+        background: #1d1810;
+        color: #c8b88a;
+      }
+
+      .deprecation-actions button:hover,
+      .deprecation-actions button:focus-visible {
+        color: #ff981f;
+      }
     </style>
   </head>
   <body>
@@ -415,6 +501,11 @@
           <li>Ranged or melee setups, replayable seeds, no download and no account</li>
         </ul>
         <p>
+          <strong>Deprecated:</strong> this simulator no longer gets updates. Julian-Dasilva's
+          <a href="https://archive-ocellus-trainer.raid-sims.workers.dev">Archive Ocellus Trainer</a> now covers the whole
+          fight, and that's where new work goes.
+        </p>
+        <p>
           Built on Julian-Dasilva's phase 4 trainer
           (<a href="https://archive-ocellus-trainer.raid-sims.workers.dev">archive-ocellus-trainer.raid-sims.workers.dev</a>).
           Open source on <a href="https://github.com/alessandrorodi/ocellus-sim">GitHub</a>. Made by
@@ -423,5 +514,45 @@
       </main>
     </div>
     <script src="./main.js"></script>
+    <!-- Shown on every visit; "Keep playing here" hides it for the rest of the tab's session. -->
+    <div id="deprecation_notice" role="dialog" aria-modal="true" aria-labelledby="deprecation_title" hidden>
+      <div class="deprecation-card">
+        <h2 id="deprecation_title">This simulator is deprecated</h2>
+        <p>
+          I'm joining forces with <strong>Julian-Dasilva</strong>. His Archive Ocellus Trainer, the one this simulator
+          grew from, now covers the whole fight, and that's where all new work goes.
+        </p>
+        <p>This site stays up for now, but it won't get any more updates.</p>
+        <div class="deprecation-actions">
+          <a id="deprecation_go" href="https://archive-ocellus-trainer.raid-sims.workers.dev">Go to Julian's trainer</a>
+          <button id="deprecation_stay" type="button">Keep playing here</button>
+        </div>
+      </div>
+    </div>
+    <script>
+      (function () {
+        var notice = document.getElementById("deprecation_notice");
+        var key = "ocellus-sim.deprecationDismissed";
+        try {
+          if (sessionStorage.getItem(key)) return;
+        } catch (e) {}
+        notice.hidden = false;
+        document.getElementById("deprecation_go").focus();
+        function dismiss() {
+          notice.hidden = true;
+          try {
+            sessionStorage.setItem(key, "1");
+          } catch (e) {}
+        }
+        document.getElementById("deprecation_stay").addEventListener("click", dismiss);
+        notice.addEventListener("keydown", function (event) {
+          if (event.key === "Escape") dismiss();
+          event.stopPropagation();
+        });
+        notice.addEventListener("click", function (event) {
+          if (event.target === notice) dismiss();
+        });
+      })();
+    </script>
   </body>
 </html>
