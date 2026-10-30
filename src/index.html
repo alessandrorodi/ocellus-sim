@@ -443,6 +443,15 @@
         color: #ffcf8a;
       }
 
+      .deprecation-follow a {
+        color: #ff981f;
+      }
+
+      .deprecation-follow a:hover,
+      .deprecation-follow a:focus-visible {
+        color: #ffff00;
+      }
+
       .deprecation-actions {
         display: flex;
         flex-wrap: wrap;
@@ -523,6 +532,11 @@
           grew from, now covers the whole fight, and that's where all new work goes.
         </p>
         <p>This site stays up for now, but it won't get any more updates.</p>
+        <p class="deprecation-follow">
+          Feature requests? Follow us on X:
+          <a href="https://x.com/ShadowJdas" target="_blank" rel="noopener">@ShadowJdas</a> and
+          <a href="https://x.com/alrodi" target="_blank" rel="noopener">@alrodi</a>.
+        </p>
         <div class="deprecation-actions">
           <a id="deprecation_go" href="https://archive-ocellus-trainer.raid-sims.workers.dev">Go to Julian's trainer</a>
           <button id="deprecation_stay" type="button">Keep playing here</button>
